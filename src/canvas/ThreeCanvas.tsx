@@ -3,7 +3,16 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { computeStrokePath } from './drawing'
 import { snapDrawing } from './snap'
-import { createElementMesh, PALETTE } from './materials'
+import {
+  createElementMesh,
+  createRectGeometry,
+  createCircleGeometry,
+  createLineGeometry,
+  createToonMaterial,
+  updateEdgeResolutions,
+  PALETTE,
+  type GeoPair,
+} from './materials'
 
 type InputPoint = [number, number] | [number, number, number]
 import { useChoanStore } from '../store/useChoanStore'
@@ -29,13 +38,9 @@ export default function ThreeCanvas() {
   const meshMapRef = useRef<Map<string, MeshRecord>>(new Map())
   const canvasSizeRef = useRef({ w: 1, h: 1 })
   const isPointerDownRef = useRef(false)
-  const pointerStartRef = useRef<[number, number]>([0, 0])
-  const isDraggingRef = useRef(false)
   const currentPointsRef = useRef<InputPoint[]>([])
   const svgOverlayRef = useRef<SVGSVGElement | null>(null)
   const [drawPath, setDrawPath] = useState('')
-
-  const CLICK_THRESHOLD = 8 // px 이동 이하 → 클릭(선택), 이상 → 드래그(그리기)
 
   const {
     elements,
@@ -70,12 +75,17 @@ export default function ThreeCanvas() {
     grid.rotation.x = Math.PI / 2
     scene.add(grid)
 
-    // 조명 (ToonMaterial은 directional light 필요)
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6)
+    // 조명 — ambient 낮추고 directional 강화해서 툰쉐이딩 명암 단계 강조
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35)
     scene.add(ambient)
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
-    dirLight.position.set(5, 10, 5)
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0)
+    dirLight.position.set(3, 5, 8)
+    dirLight.castShadow = true
     scene.add(dirLight)
+    // 보조 필 라이트 (반대편에서 약하게)
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3)
+    fillLight.position.set(-4, -2, 6)
+    scene.add(fillLight)
 
     // OrthographicCamera
     const aspect = w / h
@@ -124,6 +134,7 @@ export default function ThreeCanvas() {
       const nh = mount.clientHeight
       canvasSizeRef.current = { w: nw, h: nh }
       renderer.setSize(nw, nh)
+      updateEdgeResolutions(scene, nw, nh)
       const asp = nw / nh
       ortho.left = -FRUSTUM * asp
       ortho.right = FRUSTUM * asp
@@ -181,29 +192,25 @@ export default function ThreeCanvas() {
         const rec = meshMap.get(el.id)!
         rec.group.position.set(wx, wy, el.z * 0.1)
         rec.group.scale.set(ww, wh, 1)
-        // 선택 강조
-        const mainMesh = rec.group.children[1] as THREE.Mesh
-        mainMesh.material = new THREE.MeshToonMaterial({
-          color: rec.color,
-          opacity: el.opacity,
-          transparent: el.opacity < 1,
-          wireframe: selectedId === el.id,
-        })
+        // 선택 강조 — children[0] = main mesh, children[1] = edge lines
+        const mainMesh = rec.group.children[0] as THREE.Mesh
+        const mat = createToonMaterial(rec.color)
+        mat.opacity = el.opacity
+        mat.transparent = el.opacity < 1
+        mat.wireframe = selectedId === el.id
+        mainMesh.material = mat
       } else {
-        // 새 메쉬 생성
+        // 새 메쉬 생성 — ExtrudeGeometry + flat normals + edge lines
         const color = PALETTE[meshMap.size % PALETTE.length]
-        let group: THREE.Group
-
+        let pair: GeoPair
         if (el.type === 'circle') {
-          const geo = new THREE.CircleGeometry(0.5, 32)
-          group = createElementMesh(geo, color)
+          pair = createCircleGeometry()
         } else if (el.type === 'line') {
-          const geo = new THREE.PlaneGeometry(1, 0.05)
-          group = createElementMesh(geo, color)
+          pair = createLineGeometry()
         } else {
-          const geo = new THREE.PlaneGeometry(1, 1)
-          group = createElementMesh(geo, color)
+          pair = createRectGeometry()
         }
+        const group = createElementMesh(pair, color)
 
         group.position.set(wx, wy, el.z * 0.1)
         group.scale.set(ww, wh, 1)

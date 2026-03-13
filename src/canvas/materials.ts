@@ -1,16 +1,24 @@
 import * as THREE from 'three'
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js'
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 
-// 파스텔 팔레트
+// 이미지 레퍼런스 기반 파스텔 팔레트
 export const PALETTE = [
-  0xffb3ba, // pastel red
-  0xffdfba, // pastel orange
-  0xffffba, // pastel yellow
-  0xbaffc9, // pastel green
-  0xbae1ff, // pastel blue
-  0xe8baff, // pastel purple
-  0xffd6e0, // pastel pink
-  0xd4f1f4, // pastel cyan
+  0xa8d8a8, // mint green
+  0x8cb369, // olive green
+  0xb5c99a, // sage
+  0xc4ddb2, // light lime
+  0x9b8ec4, // muted lavender
+  0xb8b8d8, // periwinkle
+  0xd4929a, // dusty rose
+  0xc9a0c9, // soft mauve
+  0xb0adb8, // warm gray
+  0x88c0d0, // soft teal
 ]
+
+const OUTLINE_COLOR = 0x222222
+const EXTRUDE_DEPTH = 0.15
 
 let paletteIndex = 0
 
@@ -18,39 +26,149 @@ export function nextColor(): number {
   return PALETTE[paletteIndex++ % PALETTE.length]
 }
 
+// 3-tone gradientMap — CanvasTexture로 생성 (WebGL2 호환 보장)
+// shadow 60% / mid 85% / highlight 100% → 파스텔톤에서 자연스러운 명암 단계
+function createGradientMap(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas')
+  canvas.width = 3
+  canvas.height = 1
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#555'  // shadow (~60%)
+  ctx.fillRect(0, 0, 1, 1)
+  ctx.fillStyle = '#bbb'  // mid (~85%)
+  ctx.fillRect(1, 0, 1, 1)
+  ctx.fillStyle = '#fff'  // highlight (100%)
+  ctx.fillRect(2, 0, 1, 1)
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.minFilter = THREE.NearestFilter
+  texture.magFilter = THREE.NearestFilter
+  return texture
+}
+
+export const gradientMap = createGradientMap()
+
 export function createToonMaterial(color?: number): THREE.MeshToonMaterial {
   return new THREE.MeshToonMaterial({
     color: color ?? nextColor(),
+    gradientMap,
     side: THREE.DoubleSide,
   })
 }
 
-export function createOutlineMaterial(): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
-    color: 0x1a1a2e,
-    side: THREE.BackSide,
+// ExtrudeGeometry의 삼각형 분할 아티팩트를 제거하기 위해
+// 면별 노멀을 균일하게 재계산 (flat shading 효과)
+export function flattenNormals(geo: THREE.BufferGeometry): void {
+  geo.deleteAttribute('normal')
+  geo.computeVertexNormals()
+  // 스무딩된 노멀 대신 face-normal 적용
+  const pos = geo.getAttribute('position')
+  const normal = geo.getAttribute('normal')
+  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3()
+  const faceNormal = new THREE.Vector3()
+
+  for (let i = 0; i < pos.count; i += 3) {
+    vA.fromBufferAttribute(pos, i)
+    vB.fromBufferAttribute(pos, i + 1)
+    vC.fromBufferAttribute(pos, i + 2)
+    faceNormal.crossVectors(
+      vB.clone().sub(vA),
+      vC.clone().sub(vA)
+    ).normalize()
+    normal.setXYZ(i, faceNormal.x, faceNormal.y, faceNormal.z)
+    normal.setXYZ(i + 1, faceNormal.x, faceNormal.y, faceNormal.z)
+    normal.setXYZ(i + 2, faceNormal.x, faceNormal.y, faceNormal.z)
+  }
+  normal.needsUpdate = true
+}
+
+// ── Geometry 팩토리 (얇은 합판 두께) ──
+
+export interface GeoPair {
+  renderGeo: THREE.BufferGeometry  // non-indexed, flat normals → 렌더링용
+  edgeGeo: THREE.BufferGeometry    // indexed 원본 → EdgesGeometry용
+}
+
+function extrudeAndFlatten(shape: THREE.Shape, depth: number): GeoPair {
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false })
+  geo.translate(0, 0, -depth / 2)
+  // non-indexed + flat normals → 삼각분할 아티팩트 제거
+  const nonIndexed = geo.toNonIndexed()
+  flattenNormals(nonIndexed)
+  return { renderGeo: nonIndexed, edgeGeo: geo }
+}
+
+export function createRectGeometry(): GeoPair {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.5, -0.5)
+  shape.lineTo(0.5, -0.5)
+  shape.lineTo(0.5, 0.5)
+  shape.lineTo(-0.5, 0.5)
+  shape.closePath()
+  return extrudeAndFlatten(shape, EXTRUDE_DEPTH)
+}
+
+export function createCircleGeometry(segments = 32): GeoPair {
+  const shape = new THREE.Shape()
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2
+    const x = Math.cos(angle) * 0.5
+    const y = Math.sin(angle) * 0.5
+    if (i === 0) shape.moveTo(x, y)
+    else shape.lineTo(x, y)
+  }
+  shape.closePath()
+  return extrudeAndFlatten(shape, EXTRUDE_DEPTH)
+}
+
+export function createLineGeometry(): GeoPair {
+  const shape = new THREE.Shape()
+  shape.moveTo(-0.5, -0.025)
+  shape.lineTo(0.5, -0.025)
+  shape.lineTo(0.5, 0.025)
+  shape.lineTo(-0.5, 0.025)
+  shape.closePath()
+  return extrudeAndFlatten(shape, EXTRUDE_DEPTH * 0.5)
+}
+
+const EDGE_LINE_WIDTH = 3 // px (screen-space)
+
+// LineMaterial은 resolution을 수동으로 설정해야 함 — 리사이즈 시 호출
+export function updateEdgeResolutions(scene: THREE.Scene, w: number, h: number): void {
+  scene.traverse((obj) => {
+    if ((obj as LineSegments2).isLineSegments2) {
+      const mat = (obj as LineSegments2).material as LineMaterial
+      mat.resolution.set(w, h)
+    }
   })
 }
 
-const OUTLINE_SCALE = 1.06
-
 export function createElementMesh(
-  geometry: THREE.BufferGeometry,
+  pair: GeoPair,
   color?: number
 ): THREE.Group {
   const group = new THREE.Group()
 
-  // 메인 툰 메쉬
-  const mainMesh = new THREE.Mesh(geometry, createToonMaterial(color))
+  // children[0]: 메인 툰 메쉬 (non-indexed, flat normals)
+  const mainMesh = new THREE.Mesh(pair.renderGeo, createToonMaterial(color))
+  mainMesh.castShadow = true
   mainMesh.receiveShadow = true
-
-  // 아웃라인 메쉬 (BackSide scale trick)
-  const outlineGeo = geometry.clone()
-  const outlineMesh = new THREE.Mesh(outlineGeo, createOutlineMaterial())
-  outlineMesh.scale.set(OUTLINE_SCALE, OUTLINE_SCALE, OUTLINE_SCALE)
-
-  group.add(outlineMesh)
   group.add(mainMesh)
+
+  // children[1]: 굵은 엣지 라인 (Line2 — screen-space 두께 지원)
+  const edges = new THREE.EdgesGeometry(pair.edgeGeo, 15)
+  const edgePos = edges.getAttribute('position')
+  const lineGeo = new LineSegmentsGeometry()
+  lineGeo.setPositions(edgePos.array as Float32Array)
+
+  const lineMat = new LineMaterial({
+    color: OUTLINE_COLOR,
+    linewidth: EDGE_LINE_WIDTH,
+  })
+  lineMat.resolution.set(window.innerWidth, window.innerHeight)
+
+  const edgeLines = new LineSegments2(lineGeo, lineMat)
+  edgeLines.computeLineDistances()
+  group.add(edgeLines)
 
   return group
 }
