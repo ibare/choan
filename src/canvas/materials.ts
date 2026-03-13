@@ -26,74 +26,17 @@ export const PALETTE = THEME_COLORS.map((c) => c.hex)
 const OUTLINE_COLOR = 0x222222
 const EXTRUDE_DEPTH = 0.15
 
-// 3-tone gradientMap — CanvasTexture로 생성 (WebGL2 호환 보장)
-// shadow 70% / mid 88% / highlight 100% → 밝은 파스텔톤에서도 색감 유지
-function createGradientMap(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas')
-  canvas.width = 3
-  canvas.height = 1
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#b3b3b3'  // shadow (~70%)
-  ctx.fillRect(0, 0, 1, 1)
-  ctx.fillStyle = '#e0e0e0'  // mid (~88%)
-  ctx.fillRect(1, 0, 1, 1)
-  ctx.fillStyle = '#ffffff'  // highlight (100%)
-  ctx.fillRect(2, 0, 1, 1)
-  const texture = new THREE.CanvasTexture(canvas)
-  texture.minFilter = THREE.NearestFilter
-  texture.magFilter = THREE.NearestFilter
-  return texture
-}
-
-export const gradientMap = createGradientMap()
-
-export function createToonMaterial(color: number): THREE.MeshToonMaterial {
-  return new THREE.MeshToonMaterial({
-    color,
-    gradientMap,
-    side: THREE.DoubleSide,
-  })
-}
-
-// ExtrudeGeometry의 삼각형 분할 아티팩트를 제거하기 위해
-// 면별 노멀을 균일하게 재계산 (flat shading 효과)
-export function flattenNormals(geo: THREE.BufferGeometry): void {
-  geo.deleteAttribute('normal')
-  geo.computeVertexNormals()
-  // 스무딩된 노멀 대신 face-normal 적용
-  const pos = geo.getAttribute('position')
-  const normal = geo.getAttribute('normal')
-  const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3()
-  const faceNormal = new THREE.Vector3()
-
-  for (let i = 0; i < pos.count; i += 3) {
-    vA.fromBufferAttribute(pos, i)
-    vB.fromBufferAttribute(pos, i + 1)
-    vC.fromBufferAttribute(pos, i + 2)
-    faceNormal.crossVectors(
-      vB.clone().sub(vA),
-      vC.clone().sub(vA)
-    ).normalize()
-    normal.setXYZ(i, faceNormal.x, faceNormal.y, faceNormal.z)
-    normal.setXYZ(i + 1, faceNormal.x, faceNormal.y, faceNormal.z)
-    normal.setXYZ(i + 2, faceNormal.x, faceNormal.y, faceNormal.z)
-  }
-  normal.needsUpdate = true
-}
-
 // ── Geometry 팩토리 (얇은 합판 두께) ──
 
 export interface GeoPair {
-  renderGeo: THREE.BufferGeometry  // non-indexed, flat normals → 렌더링용
+  renderGeo: THREE.BufferGeometry  // non-indexed → 렌더링용
   edgeGeo: THREE.BufferGeometry    // indexed 원본 → EdgesGeometry용
 }
 
-function extrudeAndFlatten(shape: THREE.Shape, depth: number): GeoPair {
+function extrudeShape(shape: THREE.Shape, depth: number): GeoPair {
   const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false })
   geo.translate(0, 0, -depth / 2)
-  // non-indexed + flat normals → 삼각분할 아티팩트 제거
   const nonIndexed = geo.toNonIndexed()
-  flattenNormals(nonIndexed)
   return { renderGeo: nonIndexed, edgeGeo: geo }
 }
 
@@ -104,7 +47,7 @@ export function createRectGeometry(): GeoPair {
   shape.lineTo(0.5, 0.5)
   shape.lineTo(-0.5, 0.5)
   shape.closePath()
-  return extrudeAndFlatten(shape, EXTRUDE_DEPTH)
+  return extrudeShape(shape, EXTRUDE_DEPTH)
 }
 
 export function createCircleGeometry(segments = 32): GeoPair {
@@ -117,7 +60,7 @@ export function createCircleGeometry(segments = 32): GeoPair {
     else shape.lineTo(x, y)
   }
   shape.closePath()
-  return extrudeAndFlatten(shape, EXTRUDE_DEPTH)
+  return extrudeShape(shape, EXTRUDE_DEPTH)
 }
 
 export function createLineGeometry(): GeoPair {
@@ -127,7 +70,7 @@ export function createLineGeometry(): GeoPair {
   shape.lineTo(0.5, 0.025)
   shape.lineTo(-0.5, 0.025)
   shape.closePath()
-  return extrudeAndFlatten(shape, EXTRUDE_DEPTH * 0.5)
+  return extrudeShape(shape, EXTRUDE_DEPTH * 0.5)
 }
 
 const EDGE_LINE_WIDTH = 3 // px (screen-space)
@@ -155,12 +98,11 @@ export function createElementMesh(
 ): THREE.Group {
   const group = new THREE.Group()
 
-  // children[0]: 메인 메쉬 — 전면/후면(group 0) 원색, 측면(group 1) 어둡게
-  const frontMat = createToonMaterial(color)
-  const sideMat = createToonMaterial(darkenColor(color, 0.72))
+  // children[0]: 메인 메쉬 — MeshBasicMaterial (비조명)
+  // 전면/후면(group 0) 원색 100%, 측면(group 1) 82% 어둡게
+  const frontMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
+  const sideMat = new THREE.MeshBasicMaterial({ color: darkenColor(color, 0.82), side: THREE.DoubleSide })
   const mainMesh = new THREE.Mesh(pair.renderGeo, [frontMat, sideMat])
-  mainMesh.castShadow = true
-  mainMesh.receiveShadow = true
   group.add(mainMesh)
 
   // children[1]: 굵은 엣지 라인 (Line2 — screen-space 두께 지원)

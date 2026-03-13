@@ -19,6 +19,8 @@ import { nanoid } from './nanoid'
 const FRUSTUM = 10
 
 const SELECT_COLOR = 0x4a90d9
+const HANDLE_HIT_RADIUS = 10 // 코너 핸들 클릭 판정 반경 (px)
+const MIN_ELEMENT_SIZE = 10  // 최소 요소 크기 (px)
 
 // 클릭 배치 시 기본 크기 (픽셀)
 const DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
@@ -64,6 +66,12 @@ export default function ThreeCanvas() {
   const dragStartRef = useRef({ px: 0, py: 0 })
   const dragElStartRef = useRef({ x: 0, y: 0 })
 
+  // 리사이즈 상태
+  const isResizingRef = useRef(false)
+  const resizeStartRef = useRef({ px: 0, py: 0 })
+  const resizeCornerStartRef = useRef({ x: 0, y: 0 }) // 드래그 중인 코너의 초기 픽셀 위치
+  const resizeAnchorRef = useRef({ x: 0, y: 0 })      // 고정된 반대 코너의 픽셀 위치
+
   // animate 클로저에서 최신 값을 읽기 위해 init effect 전에 선언
   const isZViewRef = useRef(isZViewMode)
   useEffect(() => { isZViewRef.current = isZViewMode }, [isZViewMode])
@@ -85,13 +93,6 @@ export default function ThreeCanvas() {
     const grid = new THREE.GridHelper(20, 40, 0xd4c9bc, 0xe8e0d8)
     grid.rotation.x = Math.PI / 2
     scene.add(grid)
-
-    // 조명 — 정면 directional로 전면 균일 하이라이트, 측면(두께)에만 명암
-    const ambient = new THREE.AmbientLight(0xffffff, 0.45)
-    scene.add(ambient)
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9)
-    dirLight.position.set(0, 0, 10) // 카메라 정면 → 위치 무관 균일 조명
-    scene.add(dirLight)
 
     // OrthographicCamera
     const aspect = w / h
@@ -198,14 +199,13 @@ export default function ThreeCanvas() {
         const rec = meshMap.get(el.id)!
         rec.group.position.set(wx, wy, el.z * 0.1)
         rec.group.scale.set(ww, wh, 1)
-        // opacity 반영 (multi-material)
+        // opacity 반영
         const mainMesh = rec.group.children[0] as THREE.Mesh
         const mats = Array.isArray(mainMesh.material) ? mainMesh.material : [mainMesh.material]
-        for (const mat of mats) {
-          if (mat.opacity !== el.opacity) {
-            mat.opacity = el.opacity
-            mat.transparent = el.opacity < 1
-            mat.needsUpdate = true
+        for (const m of mats) {
+          if (m.opacity !== el.opacity) {
+            m.opacity = el.opacity
+            m.transparent = el.opacity < 1
           }
         }
       } else {
@@ -279,17 +279,19 @@ export default function ThreeCanvas() {
       box.computeLineDistances()
       helper.add(box)
 
-      // 코너 핸들 (4개 작은 사각형)
-      const handleSize = 0.04
+      // 코너 핸들 (4개 사각형 — 리사이즈 핸들)
+      const handleSize = 0.10
       const handleGeo = new THREE.PlaneGeometry(handleSize, handleSize)
       const handleMat = new THREE.MeshBasicMaterial({ color: SELECT_COLOR })
+      // 0:BL, 1:BR, 2:TR, 3:TL (월드 좌표 기준)
       const corners = [
         [-(hw + pad), -(hh + pad)],
         [ (hw + pad), -(hh + pad)],
         [ (hw + pad),  (hh + pad)],
         [-(hw + pad),  (hh + pad)],
       ]
-      for (const [cx, cy] of corners) {
+      for (let i = 0; i < corners.length; i++) {
+        const [cx, cy] = corners[i]
         const handle = new THREE.Mesh(handleGeo, handleMat)
         handle.position.set(cx, cy, 0)
         helper.add(handle)
@@ -358,15 +360,64 @@ export default function ThreeCanvas() {
     [drawColor, addElement, selectElement, setTool]
   )
 
-  // Select 모드: 클릭으로 선택/해제, 선택된 요소 드래그 이동
+  // 코너 핸들 히트 테스트 (픽셀 공간)
+  // 코너 순서: 0=BL, 1=BR, 2=TR, 3=TL (픽셀 좌표 — Y↓)
+  const hitTestCorner = useCallback(
+    (canvasX: number, canvasY: number): number => {
+      if (!selectedId) return -1
+      const el = elements.find((e) => e.id === selectedId)
+      if (!el) return -1
+      const corners = [
+        { x: el.x, y: el.y + el.height },             // 0: BL
+        { x: el.x + el.width, y: el.y + el.height },   // 1: BR
+        { x: el.x + el.width, y: el.y },               // 2: TR
+        { x: el.x, y: el.y },                           // 3: TL
+      ]
+      for (let i = 0; i < corners.length; i++) {
+        const dx = canvasX - corners[i].x
+        const dy = canvasY - corners[i].y
+        if (dx * dx + dy * dy <= HANDLE_HIT_RADIUS * HANDLE_HIT_RADIUS) return i
+      }
+      return -1
+    },
+    [selectedId, elements]
+  )
+
+  // Select 모드: 클릭으로 선택/해제, 드래그 이동, 코너 리사이즈
   // Shape 모드: 클릭으로 도형 배치
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (isZViewMode) return
       if (tool === 'select') {
+        const mount = mountRef.current
+        if (!mount) return
+        const rect = mount.getBoundingClientRect()
+        const canvasX = e.clientX - rect.left
+        const canvasY = e.clientY - rect.top
+
+        // 1. 리사이즈 핸들 체크
+        if (selectedId) {
+          const corner = hitTestCorner(canvasX, canvasY)
+          if (corner >= 0) {
+            const el = elements.find((e) => e.id === selectedId)!
+            const cornerPositions = [
+              { x: el.x, y: el.y + el.height },
+              { x: el.x + el.width, y: el.y + el.height },
+              { x: el.x + el.width, y: el.y },
+              { x: el.x, y: el.y },
+            ]
+            isResizingRef.current = true
+            resizeStartRef.current = { px: e.clientX, py: e.clientY }
+            resizeCornerStartRef.current = cornerPositions[corner]
+            resizeAnchorRef.current = cornerPositions[(corner + 2) % 4]
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
+        }
+
+        // 2. 요소 선택/드래그
         const hitId = raycastElement(e.clientX, e.clientY)
         if (hitId && hitId === selectedId) {
-          // 이미 선택된 요소 위에서 드래그 시작
           isDraggingRef.current = true
           dragStartRef.current = { px: e.clientX, py: e.clientY }
           const el = elements.find((el) => el.id === selectedId)
@@ -380,11 +431,27 @@ export default function ThreeCanvas() {
       // 도형 배치 모드
       placeShape(tool, e.nativeEvent.offsetX, e.nativeEvent.offsetY)
     },
-    [isZViewMode, tool, raycastElement, selectElement, selectedId, elements, placeShape]
+    [isZViewMode, tool, raycastElement, selectElement, selectedId, elements, placeShape, hitTestCorner]
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      // 리사이즈
+      if (isResizingRef.current && selectedId) {
+        const dx = e.clientX - resizeStartRef.current.px
+        const dy = e.clientY - resizeStartRef.current.py
+        const anchor = resizeAnchorRef.current
+        const newCornerX = resizeCornerStartRef.current.x + dx
+        const newCornerY = resizeCornerStartRef.current.y + dy
+        updateElement(selectedId, {
+          x: Math.min(anchor.x, newCornerX),
+          y: Math.min(anchor.y, newCornerY),
+          width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - newCornerX)),
+          height: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - newCornerY)),
+        })
+        return
+      }
+      // 드래그 이동
       if (isDraggingRef.current && tool === 'select' && selectedId) {
         const dx = e.clientX - dragStartRef.current.px
         const dy = e.clientY - dragStartRef.current.py
@@ -398,6 +465,10 @@ export default function ThreeCanvas() {
   )
 
   const handlePointerUp = useCallback(() => {
+    if (isResizingRef.current) {
+      isResizingRef.current = false
+      return
+    }
     if (isDraggingRef.current) {
       isDraggingRef.current = false
     }
