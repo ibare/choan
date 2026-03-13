@@ -26,31 +26,47 @@ function getBoundingBox(points: InputPoint[]) {
   return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY }
 }
 
+// 날카로운 방향 전환(코너) 횟수 계산
+// 사각형 ≈ 4개, 원 ≈ 0개
+function countCorners(points: InputPoint[], angleThresholdDeg = 45): number {
+  // 노이즈 제거를 위해 약 30개 포인트로 다운샘플
+  const step = Math.max(1, Math.floor(points.length / 30))
+  const s = (points as [number, number][]).filter((_, i) => i % step === 0)
+  if (s.length < 5) return 0
+
+  let corners = 0
+  for (let i = 1; i < s.length - 1; i++) {
+    const v1x = s[i][0] - s[i - 1][0]
+    const v1y = s[i][1] - s[i - 1][1]
+    const v2x = s[i + 1][0] - s[i][0]
+    const v2y = s[i + 1][1] - s[i][1]
+    const len1 = Math.hypot(v1x, v1y)
+    const len2 = Math.hypot(v2x, v2y)
+    if (len1 < 1 || len2 < 1) continue
+    const cos = (v1x * v2x + v1y * v2y) / (len1 * len2)
+    const angleDeg = Math.acos(Math.max(-1, Math.min(1, cos))) * (180 / Math.PI)
+    if (angleDeg > angleThresholdDeg) corners++
+  }
+  return corners
+}
+
 function isCircle(points: InputPoint[]): boolean {
-  const { minX, minY, maxX, maxY, w, h } = getBoundingBox(points)
+  const { w, h } = getBoundingBox(points)
+
+  // 가로세로 비율이 너무 치우치면 원이 아님
   const aspectRatio = w / h
+  if (aspectRatio < 0.5 || aspectRatio > 2.0) return false
 
-  // 가로세로 비율이 0.6~1.4 사이이면 원으로 간주
-  if (aspectRatio < 0.6 || aspectRatio > 1.4) return false
+  // 코너가 3개 이상이면 사각형 — 닫힌 경로여도 원으로 오판하지 않음
+  if (countCorners(points) >= 3) return false
 
-  // 시작점과 끝점이 가까우면 닫힌 도형(원)
+  // 시작-끝점이 가까운 닫힌 경로여야 원
   const first = points[0] as [number, number]
   const last = points[points.length - 1] as [number, number]
   const startEndDist = Math.hypot(last[0] - first[0], last[1] - first[1])
   const diagonal = Math.hypot(w, h)
 
-  // 끝점이 시작점 근처로 돌아오면 원
-  if (startEndDist < diagonal * 0.3) return true
-
-  // 중심에서 점들의 거리 분산이 낮으면 원
-  const cx = (minX + maxX) / 2
-  const cy = (minY + maxY) / 2
-  const r = (w + h) / 4
-  const dists = (points as [number, number][]).map((p) => Math.hypot(p[0] - cx, p[1] - cy))
-  const avgDist = dists.reduce((a, b) => a + b, 0) / dists.length
-  const variance = dists.reduce((a, b) => a + (b - avgDist) ** 2, 0) / dists.length
-
-  return variance < r * r * 0.15
+  return startEndDist < diagonal * 0.4
 }
 
 function isLine(points: InputPoint[]): boolean {
