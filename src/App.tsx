@@ -1,0 +1,125 @@
+import { useRef, useState } from 'react'
+import ThreeCanvas from './canvas/ThreeCanvas'
+import PropertiesPanel from './panels/PropertiesPanel'
+import StatePanel from './panels/StatePanel'
+import { useChoanStore } from './store/useChoanStore'
+import { toMarkdown } from './export/toMarkdown'
+import { serialize, deserialize } from './export/toYaml'
+import type { DeserializedFile } from './export/toYaml'
+import type { Tool } from './store/useChoanStore'
+
+const TOOLS: { id: Tool; label: string; shortcut: string }[] = [
+  { id: 'select', label: 'Select', shortcut: 'V' },
+  { id: 'draw', label: 'Draw', shortcut: 'D' },
+  { id: 'zview', label: 'Z-View', shortcut: 'Z' },
+]
+
+export default function App() {
+  const { tool, setTool, elements, globalStates, interactions, loadFile, reset } = useChoanStore()
+  const [projectName, setProjectName] = useState('My UI')
+  const [exportMsg, setExportMsg] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleExport = async () => {
+    const md = toMarkdown(elements, globalStates, interactions)
+    try {
+      await navigator.clipboard.writeText(md)
+      setExportMsg('클립보드에 복사됨!')
+    } catch {
+      setExportMsg('복사 실패')
+    }
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${projectName}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+    setTimeout(() => setExportMsg(''), 3000)
+  }
+
+  const handleSave = () => {
+    const content = serialize(projectName, elements, globalStates, interactions)
+    const blob = new Blob([content], { type: 'text/yaml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${projectName}.choan`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const handleOpen = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const result: DeserializedFile = deserialize(ev.target?.result as string)
+        setProjectName(result.name)
+        loadFile({
+          elements: result.elements,
+          globalStates: result.globalStates,
+          interactions: result.interactions,
+        })
+      } catch (err) {
+        alert('파일을 불러올 수 없습니다.')
+        console.error(err)
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  return (
+    <div className="app">
+      <div className="toolbar">
+        <span className="app-logo">초안</span>
+        <input
+          className="project-name"
+          value={projectName}
+          onChange={(e) => setProjectName(e.target.value)}
+        />
+        <div className="tool-group">
+          {TOOLS.map((t) => (
+            <button
+              key={t.id}
+              className={`tool-btn ${tool === t.id ? 'active' : ''}`}
+              onClick={() => setTool(t.id)}
+              title={`${t.label} (${t.shortcut})`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="toolbar-spacer" />
+        <div className="action-group">
+          <button className="btn" onClick={() => fileInputRef.current?.click()}>Open</button>
+          <button className="btn" onClick={handleSave}>Save</button>
+          <button className="btn btn-primary" onClick={handleExport}>Export MD</button>
+          <button className="btn btn-ghost" onClick={() => { if (confirm('초기화할까요?')) reset() }}>Reset</button>
+        </div>
+        {exportMsg && <span className="export-msg">{exportMsg}</span>}
+      </div>
+
+      <div className="main">
+        <div className="canvas-area">
+          <ThreeCanvas />
+        </div>
+        <div className="right-panel">
+          <PropertiesPanel />
+          <div className="panel-divider" />
+          <StatePanel />
+        </div>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".choan"
+        style={{ display: 'none' }}
+        onChange={handleOpen}
+      />
+    </div>
+  )
+}
