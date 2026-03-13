@@ -1,8 +1,6 @@
-import { useEffect, useRef, useCallback, useState } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { computeStrokePath } from './drawing'
-import { snapDrawing } from './snap'
 import {
   createElementMesh,
   createRectGeometry,
@@ -14,14 +12,20 @@ import {
   type GeoPair,
 } from './materials'
 
-type InputPoint = [number, number] | [number, number, number]
 import { useChoanStore } from '../store/useChoanStore'
-import type { ChoanElement } from '../store/useChoanStore'
+import type { ChoanElement, Tool } from '../store/useChoanStore'
 import { nanoid } from './nanoid'
 
 const FRUSTUM = 10
 
 const SELECT_COLOR = 0x4a90d9
+
+// 클릭 배치 시 기본 크기 (픽셀)
+const DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
+  rectangle: { w: 120, h: 90 },
+  circle: { w: 100, h: 100 },
+  line: { w: 160, h: 6 },
+}
 
 interface MeshRecord {
   id: string
@@ -40,10 +44,6 @@ export default function ThreeCanvas() {
   const meshMapRef = useRef<Map<string, MeshRecord>>(new Map())
   const selectHelperRef = useRef<THREE.Group | null>(null)
   const canvasSizeRef = useRef({ w: 1, h: 1 })
-  const isPointerDownRef = useRef(false)
-  const currentPointsRef = useRef<InputPoint[]>([])
-  const svgOverlayRef = useRef<SVGSVGElement | null>(null)
-  const [drawPath, setDrawPath] = useState('')
 
   const {
     elements,
@@ -61,8 +61,8 @@ export default function ThreeCanvas() {
 
   // 드래그 이동 상태
   const isDraggingRef = useRef(false)
-  const dragStartRef = useRef({ px: 0, py: 0 })  // 드래그 시작 시 포인터 픽셀 좌표
-  const dragElStartRef = useRef({ x: 0, y: 0 })   // 드래그 시작 시 요소 위치
+  const dragStartRef = useRef({ px: 0, py: 0 })
+  const dragElStartRef = useRef({ x: 0, y: 0 })
 
   // animate 클로저에서 최신 값을 읽기 위해 init effect 전에 선언
   const isZViewRef = useRef(isZViewMode)
@@ -86,17 +86,12 @@ export default function ThreeCanvas() {
     grid.rotation.x = Math.PI / 2
     scene.add(grid)
 
-    // 조명 — ambient 낮추고 directional 강화해서 툰쉐이딩 명암 단계 강조
-    const ambient = new THREE.AmbientLight(0xffffff, 0.35)
+    // 조명 — 정면 directional로 전면 균일 하이라이트, 측면(두께)에만 명암
+    const ambient = new THREE.AmbientLight(0xffffff, 0.45)
     scene.add(ambient)
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.0)
-    dirLight.position.set(3, 5, 8)
-    dirLight.castShadow = true
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9)
+    dirLight.position.set(0, 0, 10) // 카메라 정면 → 위치 무관 균일 조명
     scene.add(dirLight)
-    // 보조 필 라이트 (반대편에서 약하게)
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3)
-    fillLight.position.set(-4, -2, 6)
-    scene.add(fillLight)
 
     // OrthographicCamera
     const aspect = w / h
@@ -203,13 +198,15 @@ export default function ThreeCanvas() {
         const rec = meshMap.get(el.id)!
         rec.group.position.set(wx, wy, el.z * 0.1)
         rec.group.scale.set(ww, wh, 1)
-        // opacity 반영
+        // opacity 반영 (multi-material)
         const mainMesh = rec.group.children[0] as THREE.Mesh
-        const mat = mainMesh.material as THREE.MeshToonMaterial
-        if (mat.opacity !== el.opacity) {
-          mat.opacity = el.opacity
-          mat.transparent = el.opacity < 1
-          mat.needsUpdate = true
+        const mats = Array.isArray(mainMesh.material) ? mainMesh.material : [mainMesh.material]
+        for (const mat of mats) {
+          if (mat.opacity !== el.opacity) {
+            mat.opacity = el.opacity
+            mat.transparent = el.opacity < 1
+            mat.needsUpdate = true
+          }
         }
       } else {
         // 새 메쉬 생성 — ExtrudeGeometry + flat normals + edge lines
@@ -336,8 +333,33 @@ export default function ThreeCanvas() {
     []
   )
 
+  // 도형 배치: 클릭 위치 중심에 기본 크기로 생성
+  const placeShape = useCallback(
+    (shapeType: 'rectangle' | 'circle' | 'line', offsetX: number, offsetY: number) => {
+      const size = DEFAULT_SIZE[shapeType]
+      const id = nanoid()
+      const el: ChoanElement = {
+        id,
+        type: shapeType,
+        label: shapeType === 'rectangle' ? 'Box' : shapeType === 'circle' ? 'Circle' : 'Line',
+        role: shapeType === 'rectangle' ? 'container' : undefined,
+        color: drawColor,
+        x: offsetX - size.w / 2,
+        y: offsetY - size.h / 2,
+        z: 0,
+        width: size.w,
+        height: size.h,
+        opacity: 1,
+      }
+      addElement(el)
+      selectElement(id)
+      setTool('select')
+    },
+    [drawColor, addElement, selectElement, setTool]
+  )
+
   // Select 모드: 클릭으로 선택/해제, 선택된 요소 드래그 이동
-  // Draw 모드: 드래그로 프리핸드 드로잉 → 스냅
+  // Shape 모드: 클릭으로 도형 배치
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (isZViewMode) return
@@ -355,19 +377,14 @@ export default function ThreeCanvas() {
         }
         return
       }
-      // draw 모드
-      isPointerDownRef.current = true
-      const ox = e.nativeEvent.offsetX
-      const oy = e.nativeEvent.offsetY
-      currentPointsRef.current = [[ox, oy, e.pressure]]
-      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      // 도형 배치 모드
+      placeShape(tool, e.nativeEvent.offsetX, e.nativeEvent.offsetY)
     },
-    [isZViewMode, tool, raycastElement, selectElement, selectedId, elements]
+    [isZViewMode, tool, raycastElement, selectElement, selectedId, elements, placeShape]
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      // 선택 모드 드래그 이동
       if (isDraggingRef.current && tool === 'select' && selectedId) {
         const dx = e.clientX - dragStartRef.current.px
         const dy = e.clientY - dragStartRef.current.py
@@ -375,59 +392,18 @@ export default function ThreeCanvas() {
           x: dragElStartRef.current.x + dx,
           y: dragElStartRef.current.y + dy,
         })
-        return
       }
-      // 드로잉 모드
-      if (!isPointerDownRef.current || tool !== 'draw') return
-      const ox = e.nativeEvent.offsetX
-      const oy = e.nativeEvent.offsetY
-      currentPointsRef.current = [
-        ...currentPointsRef.current,
-        [ox, oy, e.pressure],
-      ]
-      setDrawPath(computeStrokePath(currentPointsRef.current))
     },
     [tool, selectedId, updateElement]
   )
 
   const handlePointerUp = useCallback(() => {
-    // 드래그 이동 종료
     if (isDraggingRef.current) {
       isDraggingRef.current = false
-      return
     }
-    if (!isPointerDownRef.current || tool !== 'draw') return
-    isPointerDownRef.current = false
-    const points = currentPointsRef.current
-    currentPointsRef.current = []
-    setDrawPath('')
+  }, [])
 
-    if (points.length < 3) return
-
-    const result = snapDrawing(points)
-    if (result.width < 5 && result.height < 5) return
-
-    const id = nanoid()
-    const el: ChoanElement = {
-      id,
-      type: result.type,
-      label: result.type === 'rectangle' ? 'Box' : result.type === 'circle' ? 'Circle' : 'Line',
-      role: result.type === 'rectangle' ? 'container' : undefined,
-      color: drawColor,
-      x: result.x,
-      y: result.y,
-      z: 0,
-      width: result.width,
-      height: result.height,
-      opacity: 1,
-      lineStyle: result.lineStyle,
-      lineDirection: result.lineDirection,
-    }
-    addElement(el)
-    selectElement(id)
-  }, [tool, drawColor, addElement, selectElement])
-
-  // 키보드 단축키: V=Select, D=Draw, Delete=삭제
+  // 키보드 단축키: V=Select, R=Rectangle, C=Circle, L=Line, Delete=삭제
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
@@ -438,15 +414,20 @@ export default function ThreeCanvas() {
         if (selectedId) removeElement(selectedId)
       } else if (e.key === 'v' || e.key === 'V') {
         setTool('select')
-      } else if (e.key === 'd' || e.key === 'D') {
-        setTool('draw')
+      } else if (e.key === 'r' || e.key === 'R') {
+        setTool('rectangle')
+      } else if (e.key === 'c' || e.key === 'C') {
+        setTool('circle')
+      } else if (e.key === 'l' || e.key === 'L') {
+        setTool('line')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [removeElement, setTool])
 
-  const cursor = isZViewMode ? 'grab' : tool === 'draw' ? 'crosshair' : isDraggingRef.current ? 'grabbing' : 'default'
+  const isShapeTool = tool !== 'select'
+  const cursor = isZViewMode ? 'grab' : isShapeTool ? 'crosshair' : 'default'
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -469,12 +450,30 @@ export default function ThreeCanvas() {
           </svg>
         </button>
         <button
-          className={`canvas-tool ${tool === 'draw' ? 'active' : ''}`}
-          onClick={() => setTool('draw')}
-          title="Draw (D)"
+          className={`canvas-tool ${tool === 'rectangle' ? 'active' : ''}`}
+          onClick={() => setTool('rectangle')}
+          title="Rectangle (R)"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M12.1 1.3L14.7 3.9L5.1 13.5L1 15L2.5 10.9L12.1 1.3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+            <rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+        </button>
+        <button
+          className={`canvas-tool ${tool === 'circle' ? 'active' : ''}`}
+          onClick={() => setTool('circle')}
+          title="Circle (C)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
+          </svg>
+        </button>
+        <button
+          className={`canvas-tool ${tool === 'line' ? 'active' : ''}`}
+          onClick={() => setTool('line')}
+          title="Line (L)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </button>
       </div>
@@ -490,22 +489,6 @@ export default function ThreeCanvas() {
           />
         ))}
       </div>
-      {/* 드로잉 오버레이 SVG */}
-      <svg
-        ref={svgOverlayRef}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-        }}
-      >
-        {drawPath && (
-          <path d={drawPath} fill="rgba(80,80,200,0.25)" stroke="rgba(80,80,200,0.6)" strokeWidth={1} />
-        )}
-      </svg>
       {isZViewMode && (
         <div style={{
           position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',

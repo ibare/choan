@@ -27,17 +27,17 @@ const OUTLINE_COLOR = 0x222222
 const EXTRUDE_DEPTH = 0.15
 
 // 3-tone gradientMap — CanvasTexture로 생성 (WebGL2 호환 보장)
-// shadow 60% / mid 85% / highlight 100% → 파스텔톤에서 자연스러운 명암 단계
+// shadow 70% / mid 88% / highlight 100% → 밝은 파스텔톤에서도 색감 유지
 function createGradientMap(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas')
   canvas.width = 3
   canvas.height = 1
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#555'  // shadow (~60%)
+  ctx.fillStyle = '#b3b3b3'  // shadow (~70%)
   ctx.fillRect(0, 0, 1, 1)
-  ctx.fillStyle = '#bbb'  // mid (~85%)
+  ctx.fillStyle = '#e0e0e0'  // mid (~88%)
   ctx.fillRect(1, 0, 1, 1)
-  ctx.fillStyle = '#fff'  // highlight (100%)
+  ctx.fillStyle = '#ffffff'  // highlight (100%)
   ctx.fillRect(2, 0, 1, 1)
   const texture = new THREE.CanvasTexture(canvas)
   texture.minFilter = THREE.NearestFilter
@@ -142,14 +142,23 @@ export function updateEdgeResolutions(scene: THREE.Scene, w: number, h: number):
   })
 }
 
+function darkenColor(hex: number, factor: number): number {
+  const r = Math.floor(((hex >> 16) & 0xff) * factor)
+  const g = Math.floor(((hex >> 8) & 0xff) * factor)
+  const b = Math.floor((hex & 0xff) * factor)
+  return (r << 16) | (g << 8) | b
+}
+
 export function createElementMesh(
   pair: GeoPair,
-  color?: number
+  color: number
 ): THREE.Group {
   const group = new THREE.Group()
 
-  // children[0]: 메인 툰 메쉬 (non-indexed, flat normals)
-  const mainMesh = new THREE.Mesh(pair.renderGeo, createToonMaterial(color))
+  // children[0]: 메인 메쉬 — 전면/후면(group 0) 원색, 측면(group 1) 어둡게
+  const frontMat = createToonMaterial(color)
+  const sideMat = createToonMaterial(darkenColor(color, 0.72))
+  const mainMesh = new THREE.Mesh(pair.renderGeo, [frontMat, sideMat])
   mainMesh.castShadow = true
   mainMesh.receiveShadow = true
   group.add(mainMesh)

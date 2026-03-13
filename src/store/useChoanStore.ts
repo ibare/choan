@@ -58,7 +58,7 @@ export interface Interaction {
   reaction: Reaction
 }
 
-export type Tool = 'select' | 'draw'
+export type Tool = 'select' | 'rectangle' | 'circle' | 'line'
 
 interface ChoanStore {
   // canvas state
