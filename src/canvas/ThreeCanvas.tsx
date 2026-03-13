@@ -10,12 +10,7 @@ import { useChoanStore } from '../store/useChoanStore'
 import type { ChoanElement } from '../store/useChoanStore'
 import { nanoid } from './nanoid'
 
-// Three.js 단위 ↔ 캔버스 픽셀 변환 스케일
-const WORLD_SCALE = 0.01
-
-function canvasToWorld(x: number, y: number): [number, number] {
-  return [x * WORLD_SCALE, -y * WORLD_SCALE]
-}
+const FRUSTUM = 10
 
 interface MeshRecord {
   id: string
@@ -32,6 +27,7 @@ export default function ThreeCanvas() {
   const controlsRef = useRef<OrbitControls | null>(null)
   const frameRef = useRef<number>(0)
   const meshMapRef = useRef<Map<string, MeshRecord>>(new Map())
+  const canvasSizeRef = useRef({ w: 1, h: 1 })
   const isPointerDownRef = useRef(false)
   const currentPointsRef = useRef<InputPoint[]>([])
   const svgOverlayRef = useRef<SVGSVGElement | null>(null)
@@ -47,12 +43,17 @@ export default function ThreeCanvas() {
     removeElement,
   } = useChoanStore()
 
+  // animate 클로저에서 최신 값을 읽기 위해 init effect 전에 선언
+  const isZViewRef = useRef(isZViewMode)
+  useEffect(() => { isZViewRef.current = isZViewMode }, [isZViewMode])
+
   // Three.js 초기화
   useEffect(() => {
     if (!mountRef.current) return
     const mount = mountRef.current
     const w = mount.clientWidth
     const h = mount.clientHeight
+    canvasSizeRef.current = { w, h }
 
     // Scene
     const scene = new THREE.Scene()
@@ -73,12 +74,11 @@ export default function ThreeCanvas() {
 
     // OrthographicCamera
     const aspect = w / h
-    const frustum = 10
     const ortho = new THREE.OrthographicCamera(
-      -frustum * aspect,
-      frustum * aspect,
-      frustum,
-      -frustum,
+      -FRUSTUM * aspect,
+      FRUSTUM * aspect,
+      FRUSTUM,
+      -FRUSTUM,
       0.1,
       1000
     )
@@ -103,11 +103,12 @@ export default function ThreeCanvas() {
     controls.enabled = false
     controlsRef.current = controls
 
-    // 렌더 루프
+    // 렌더 루프 — isZViewRef.current 로 최신 상태 읽기 (클로저 stale 방지)
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate)
-      const cam = isZViewMode ? persp : ortho
-      if (isZViewMode && controls) controls.update()
+      const zview = isZViewRef.current
+      const cam = zview ? persp : ortho
+      if (zview) controls.update()
       renderer.render(scene, cam)
     }
     animate()
@@ -116,10 +117,11 @@ export default function ThreeCanvas() {
     const onResize = () => {
       const nw = mount.clientWidth
       const nh = mount.clientHeight
+      canvasSizeRef.current = { w: nw, h: nh }
       renderer.setSize(nw, nh)
       const asp = nw / nh
-      ortho.left = -frustum * asp
-      ortho.right = frustum * asp
+      ortho.left = -FRUSTUM * asp
+      ortho.right = FRUSTUM * asp
       ortho.updateProjectionMatrix()
       persp.aspect = asp
       persp.updateProjectionMatrix()
@@ -142,11 +144,6 @@ export default function ThreeCanvas() {
     controlsRef.current.enabled = isZViewMode
   }, [isZViewMode])
 
-  // 렌더 루프에서 카메라 업데이트를 위해 isZViewMode를 ref로 추적
-  // (animate 클로저 문제 우회 — scene과 cameras는 ref로 직접 접근)
-  const isZViewRef = useRef(isZViewMode)
-  useEffect(() => { isZViewRef.current = isZViewMode }, [isZViewMode])
-
   // elements → Three.js 메쉬 동기화
   useEffect(() => {
     const scene = sceneRef.current
@@ -164,9 +161,15 @@ export default function ThreeCanvas() {
 
     // 추가/업데이트
     for (const el of elements) {
-      const [wx, wy] = canvasToWorld(el.x + el.width / 2, el.y + el.height / 2)
-      const ww = el.width * WORLD_SCALE
-      const wh = el.height * WORLD_SCALE
+      const { w, h } = canvasSizeRef.current
+      const aspect = w / h
+      // 픽셀 → 월드 좌표: 캔버스 좌상단(0,0)이 월드(-frustum*aspect, frustum)에 대응
+      const cx = el.x + el.width / 2
+      const cy = el.y + el.height / 2
+      const wx = -FRUSTUM * aspect + (cx / w) * 2 * FRUSTUM * aspect
+      const wy = FRUSTUM - (cy / h) * 2 * FRUSTUM
+      const ww = (el.width / w) * 2 * FRUSTUM * aspect
+      const wh = (el.height / h) * 2 * FRUSTUM
 
       if (meshMap.has(el.id)) {
         // 위치/크기 업데이트
