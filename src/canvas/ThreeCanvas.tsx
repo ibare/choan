@@ -29,15 +29,20 @@ export default function ThreeCanvas() {
   const meshMapRef = useRef<Map<string, MeshRecord>>(new Map())
   const canvasSizeRef = useRef({ w: 1, h: 1 })
   const isPointerDownRef = useRef(false)
+  const pointerStartRef = useRef<[number, number]>([0, 0])
+  const isDraggingRef = useRef(false)
   const currentPointsRef = useRef<InputPoint[]>([])
   const svgOverlayRef = useRef<SVGSVGElement | null>(null)
   const [drawPath, setDrawPath] = useState('')
+
+  const CLICK_THRESHOLD = 8 // px 이동 이하 → 클릭(선택), 이상 → 드래그(그리기)
 
   const {
     elements,
     selectedId,
     tool,
     isZViewMode,
+    setTool,
     addElement,
     selectElement,
     removeElement,
@@ -208,23 +213,68 @@ export default function ThreeCanvas() {
     }
   }, [elements, selectedId])
 
-  // 드로잉 이벤트
+  // 레이캐스트로 요소 히트 테스트
+  const raycastElement = useCallback(
+    (clientX: number, clientY: number): string | null => {
+      const mount = mountRef.current
+      const ortho = cameraOrthoRef.current
+      if (!mount || !ortho) return null
+
+      const rect = mount.getBoundingClientRect()
+      const ndcX = ((clientX - rect.left) / mount.clientWidth) * 2 - 1
+      const ndcY = -((clientY - rect.top) / mount.clientHeight) * 2 + 1
+
+      const raycaster = new THREE.Raycaster()
+      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), ortho)
+
+      const meshObjects: THREE.Object3D[] = []
+      for (const rec of meshMapRef.current.values()) {
+        rec.group.traverse((obj) => { if ((obj as THREE.Mesh).isMesh) meshObjects.push(obj) })
+      }
+
+      const hits = raycaster.intersectObjects(meshObjects, false)
+      if (hits.length === 0) return null
+
+      const hitObj = hits[0].object
+      for (const [id, rec] of meshMapRef.current) {
+        if (rec.group === hitObj.parent || rec.group === hitObj.parent?.parent) {
+          return id
+        }
+      }
+      return null
+    },
+    []
+  )
+
+  // Select 모드: 클릭으로 선택/해제
+  // Draw 모드: 드래그로 프리핸드 드로잉 → 스냅
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (tool !== 'draw' || isZViewMode) return
+      if (isZViewMode) return
+      if (tool === 'select') {
+        // 클릭 즉시 레이캐스트
+        const hitId = raycastElement(e.clientX, e.clientY)
+        selectElement(hitId)
+        return
+      }
+      // draw 모드
       isPointerDownRef.current = true
-      currentPointsRef.current = [[e.nativeEvent.offsetX, e.nativeEvent.offsetY, e.pressure]]
+      const ox = e.nativeEvent.offsetX
+      const oy = e.nativeEvent.offsetY
+      currentPointsRef.current = [[ox, oy, e.pressure]]
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [tool, isZViewMode]
+    [isZViewMode, tool, raycastElement, selectElement]
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (!isPointerDownRef.current || tool !== 'draw') return
+      const ox = e.nativeEvent.offsetX
+      const oy = e.nativeEvent.offsetY
       currentPointsRef.current = [
         ...currentPointsRef.current,
-        [e.nativeEvent.offsetX, e.nativeEvent.offsetY, e.pressure],
+        [ox, oy, e.pressure],
       ]
       setDrawPath(computeStrokePath(currentPointsRef.current))
     },
@@ -241,6 +291,8 @@ export default function ThreeCanvas() {
     if (points.length < 3) return
 
     const result = snapDrawing(points)
+    if (result.width < 5 && result.height < 5) return
+
     const id = nanoid()
     const el: ChoanElement = {
       id,
@@ -260,67 +312,57 @@ export default function ThreeCanvas() {
     selectElement(id)
   }, [tool, addElement, selectElement])
 
-  // 클릭으로 요소 선택 (select 모드)
-  const handleClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (tool !== 'select' || isZViewMode) return
-      const mount = mountRef.current
-      const ortho = cameraOrthoRef.current
-      const scene = sceneRef.current
-      if (!mount || !ortho || !scene) return
-
-      const rect = mount.getBoundingClientRect()
-      const ndcX = ((e.clientX - rect.left) / mount.clientWidth) * 2 - 1
-      const ndcY = -((e.clientY - rect.top) / mount.clientHeight) * 2 + 1
-
-      const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), ortho)
-
-      const meshObjects: THREE.Object3D[] = []
-      for (const rec of meshMapRef.current.values()) {
-        rec.group.traverse((obj) => { if ((obj as THREE.Mesh).isMesh) meshObjects.push(obj) })
-      }
-
-      const hits = raycaster.intersectObjects(meshObjects, false)
-      if (hits.length === 0) {
-        selectElement(null)
-        return
-      }
-
-      // 히트된 메쉬의 부모 group을 찾아 id 매핑
-      const hitObj = hits[0].object
-      for (const [id, rec] of meshMapRef.current) {
-        if (rec.group === hitObj.parent || rec.group === hitObj.parent?.parent) {
-          selectElement(id)
-          return
-        }
-      }
-    },
-    [tool, isZViewMode, selectElement]
-  )
-
-  // Delete 키로 선택 요소 삭제
+  // 키보드 단축키: V=Select, D=Draw, Delete=삭제
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { selectedId } = useChoanStore.getState()
         if (selectedId) removeElement(selectedId)
+      } else if (e.key === 'v' || e.key === 'V') {
+        setTool('select')
+      } else if (e.key === 'd' || e.key === 'D') {
+        setTool('draw')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [removeElement])
+  }, [removeElement, setTool])
+
+  const cursor = isZViewMode ? 'grab' : tool === 'draw' ? 'crosshair' : 'default'
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div
         ref={mountRef}
-        style={{ width: '100%', height: '100%', cursor: tool === 'draw' ? 'crosshair' : 'default' }}
+        style={{ width: '100%', height: '100%', cursor }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
-        onClick={handleClick}
       />
+      {/* 캔버스 플로팅 툴바 */}
+      <div className="canvas-toolbar">
+        <button
+          className={`canvas-tool ${tool === 'select' ? 'active' : ''}`}
+          onClick={() => setTool('select')}
+          title="Select (V)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 1L3 13L6.5 9.5L10 14L12 13L8.5 8.5L13 8L3 1Z" fill="currentColor"/>
+          </svg>
+        </button>
+        <button
+          className={`canvas-tool ${tool === 'draw' ? 'active' : ''}`}
+          onClick={() => setTool('draw')}
+          title="Draw (D)"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M12.1 1.3L14.7 3.9L5.1 13.5L1 15L2.5 10.9L12.1 1.3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </div>
       {/* 드로잉 오버레이 SVG */}
       <svg
         ref={svgOverlayRef}

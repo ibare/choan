@@ -6,16 +6,9 @@ import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
 import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
-import type { Tool } from './store/useChoanStore'
-
-const TOOLS: { id: Tool; label: string; shortcut: string }[] = [
-  { id: 'select', label: 'Select', shortcut: 'V' },
-  { id: 'draw', label: 'Draw', shortcut: 'D' },
-  { id: 'zview', label: 'Z-View', shortcut: 'Z' },
-]
 
 export default function App() {
-  const { tool, setTool, elements, globalStates, interactions, loadFile, reset } = useChoanStore()
+  const { isZViewMode, toggleZView, elements, globalStates, interactions, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -80,18 +73,13 @@ export default function App() {
           value={projectName}
           onChange={(e) => setProjectName(e.target.value)}
         />
-        <div className="tool-group">
-          {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              className={`tool-btn ${tool === t.id ? 'active' : ''}`}
-              onClick={() => setTool(t.id)}
-              title={`${t.label} (${t.shortcut})`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <button
+          className={`tool-btn ${isZViewMode ? 'active' : ''}`}
+          onClick={toggleZView}
+          title="Z-View (Z)"
+        >
+          Z-View
+        </button>
         <div className="toolbar-spacer" />
         <div className="action-group">
           <button className="btn" onClick={() => fileInputRef.current?.click()}>Open</button>

@@ -57,7 +57,7 @@ export interface Interaction {
   reaction: Reaction
 }
 
-export type Tool = 'select' | 'draw' | 'zview'
+export type Tool = 'select' | 'draw'
 
 interface ChoanStore {
   // canvas state
@@ -76,7 +76,7 @@ interface ChoanStore {
   removeElement: (id: string) => void
   selectElement: (id: string | null) => void
 
-  // tool
+  // tool & view
   setTool: (tool: Tool) => void
   toggleZView: () => void
 
@@ -94,12 +94,12 @@ interface ChoanStore {
 }
 
 const initialState = {
-  elements: [],
-  selectedId: null,
+  elements: [] as ChoanElement[],
+  selectedId: null as string | null,
   tool: 'select' as Tool,
   isZViewMode: false,
-  globalStates: [],
-  interactions: [],
+  globalStates: [] as GlobalState[],
+  interactions: [] as Interaction[],
 }
 
 export const useChoanStore = create<ChoanStore>((set) => ({
@@ -121,13 +121,10 @@ export const useChoanStore = create<ChoanStore>((set) => ({
 
   selectElement: (id) => set({ selectedId: id }),
 
-  setTool: (tool) => set({ tool, isZViewMode: tool === 'zview' }),
+  setTool: (tool) => set({ tool }),
 
   toggleZView: () =>
-    set((s) => ({
-      isZViewMode: !s.isZViewMode,
-      tool: !s.isZViewMode ? 'zview' : 'select',
-    })),
+    set((s) => ({ isZViewMode: !s.isZViewMode })),
 
   addGlobalState: (state) =>
     set((s) => ({ globalStates: [...s.globalStates, state] })),

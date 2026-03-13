@@ -220,3 +220,34 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 
 input[type="range"] { accent-color: var(--accent); }
 input[type="checkbox"] { accent-color: var(--accent); }
+
+/* ── Canvas floating toolbar ─────────────────── */
+.canvas-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 3px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  z-index: 5;
+}
+
+.canvas-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.canvas-tool:hover { background: var(--bg); color: var(--text); }
+.canvas-tool.active { background: var(--accent); color: #fff; }
