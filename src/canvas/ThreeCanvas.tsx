@@ -8,7 +8,6 @@ import {
   createRectGeometry,
   createCircleGeometry,
   createLineGeometry,
-  createToonMaterial,
   updateEdgeResolutions,
   PALETTE,
   type GeoPair,
@@ -20,6 +19,8 @@ import type { ChoanElement } from '../store/useChoanStore'
 import { nanoid } from './nanoid'
 
 const FRUSTUM = 10
+
+const SELECT_COLOR = 0x4a90d9
 
 interface MeshRecord {
   id: string
@@ -36,6 +37,7 @@ export default function ThreeCanvas() {
   const controlsRef = useRef<OrbitControls | null>(null)
   const frameRef = useRef<number>(0)
   const meshMapRef = useRef<Map<string, MeshRecord>>(new Map())
+  const selectHelperRef = useRef<THREE.Group | null>(null)
   const canvasSizeRef = useRef({ w: 1, h: 1 })
   const isPointerDownRef = useRef(false)
   const currentPointsRef = useRef<InputPoint[]>([])
@@ -49,9 +51,15 @@ export default function ThreeCanvas() {
     isZViewMode,
     setTool,
     addElement,
+    updateElement,
     selectElement,
     removeElement,
   } = useChoanStore()
+
+  // 드래그 이동 상태
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ px: 0, py: 0 })  // 드래그 시작 시 포인터 픽셀 좌표
+  const dragElStartRef = useRef({ x: 0, y: 0 })   // 드래그 시작 시 요소 위치
 
   // animate 클로저에서 최신 값을 읽기 위해 init effect 전에 선언
   const isZViewRef = useRef(isZViewMode)
@@ -192,13 +200,14 @@ export default function ThreeCanvas() {
         const rec = meshMap.get(el.id)!
         rec.group.position.set(wx, wy, el.z * 0.1)
         rec.group.scale.set(ww, wh, 1)
-        // 선택 강조 — children[0] = main mesh, children[1] = edge lines
+        // opacity 반영
         const mainMesh = rec.group.children[0] as THREE.Mesh
-        const mat = createToonMaterial(rec.color)
-        mat.opacity = el.opacity
-        mat.transparent = el.opacity < 1
-        mat.wireframe = selectedId === el.id
-        mainMesh.material = mat
+        const mat = mainMesh.material as THREE.MeshToonMaterial
+        if (mat.opacity !== el.opacity) {
+          mat.opacity = el.opacity
+          mat.transparent = el.opacity < 1
+          mat.needsUpdate = true
+        }
       } else {
         // 새 메쉬 생성 — ExtrudeGeometry + flat normals + edge lines
         const color = PALETTE[meshMap.size % PALETTE.length]
@@ -217,6 +226,77 @@ export default function ThreeCanvas() {
         scene.add(group)
         meshMap.set(el.id, { id: el.id, group, color })
       }
+    }
+
+    // 선택 헬퍼: 바운딩 박스 + 코너 핸들
+    if (selectHelperRef.current) {
+      scene.remove(selectHelperRef.current)
+      selectHelperRef.current = null
+    }
+
+    if (selectedId && meshMap.has(selectedId)) {
+      const rec = meshMap.get(selectedId)!
+      const pos = rec.group.position
+      const scl = rec.group.scale
+
+      const helper = new THREE.Group()
+      helper.position.copy(pos)
+      helper.position.z += 0.02 // 메쉬 앞에 살짝
+
+      const hw = scl.x / 2
+      const hh = scl.y / 2
+      const pad = 0.03 // 바운딩 박스 패딩
+
+      // 바운딩 박스 라인
+      const boxPts = [
+        -(hw + pad), -(hh + pad),
+         (hw + pad), -(hh + pad),
+         (hw + pad),  (hh + pad),
+        -(hw + pad),  (hh + pad),
+        -(hw + pad), -(hh + pad),
+      ]
+      const boxGeo = new THREE.BufferGeometry()
+      boxGeo.setAttribute('position', new THREE.Float32BufferAttribute(
+        boxPts.flatMap((v, i) => i % 2 === 0 ? [v, 0] : [0]).length ? [] : [],
+        3
+      ))
+      // 간단히 LineLoop로 박스 그리기
+      const vertices = new Float32Array([
+        -(hw + pad), -(hh + pad), 0,
+         (hw + pad), -(hh + pad), 0,
+         (hw + pad),  (hh + pad), 0,
+        -(hw + pad),  (hh + pad), 0,
+      ])
+      const lineGeo = new THREE.BufferGeometry()
+      lineGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
+      const lineMat = new THREE.LineDashedMaterial({
+        color: SELECT_COLOR,
+        dashSize: 0.06,
+        gapSize: 0.03,
+        linewidth: 1,
+      })
+      const box = new THREE.LineLoop(lineGeo, lineMat)
+      box.computeLineDistances()
+      helper.add(box)
+
+      // 코너 핸들 (4개 작은 사각형)
+      const handleSize = 0.04
+      const handleGeo = new THREE.PlaneGeometry(handleSize, handleSize)
+      const handleMat = new THREE.MeshBasicMaterial({ color: SELECT_COLOR })
+      const corners = [
+        [-(hw + pad), -(hh + pad)],
+        [ (hw + pad), -(hh + pad)],
+        [ (hw + pad),  (hh + pad)],
+        [-(hw + pad),  (hh + pad)],
+      ]
+      for (const [cx, cy] of corners) {
+        const handle = new THREE.Mesh(handleGeo, handleMat)
+        handle.position.set(cx, cy, 0)
+        helper.add(handle)
+      }
+
+      scene.add(helper)
+      selectHelperRef.current = helper
     }
   }, [elements, selectedId])
 
@@ -253,15 +333,23 @@ export default function ThreeCanvas() {
     []
   )
 
-  // Select 모드: 클릭으로 선택/해제
+  // Select 모드: 클릭으로 선택/해제, 선택된 요소 드래그 이동
   // Draw 모드: 드래그로 프리핸드 드로잉 → 스냅
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (isZViewMode) return
       if (tool === 'select') {
-        // 클릭 즉시 레이캐스트
         const hitId = raycastElement(e.clientX, e.clientY)
-        selectElement(hitId)
+        if (hitId && hitId === selectedId) {
+          // 이미 선택된 요소 위에서 드래그 시작
+          isDraggingRef.current = true
+          dragStartRef.current = { px: e.clientX, py: e.clientY }
+          const el = elements.find((el) => el.id === selectedId)
+          if (el) dragElStartRef.current = { x: el.x, y: el.y }
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+        } else {
+          selectElement(hitId)
+        }
         return
       }
       // draw 모드
@@ -271,11 +359,22 @@ export default function ThreeCanvas() {
       currentPointsRef.current = [[ox, oy, e.pressure]]
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [isZViewMode, tool, raycastElement, selectElement]
+    [isZViewMode, tool, raycastElement, selectElement, selectedId, elements]
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      // 선택 모드 드래그 이동
+      if (isDraggingRef.current && tool === 'select' && selectedId) {
+        const dx = e.clientX - dragStartRef.current.px
+        const dy = e.clientY - dragStartRef.current.py
+        updateElement(selectedId, {
+          x: dragElStartRef.current.x + dx,
+          y: dragElStartRef.current.y + dy,
+        })
+        return
+      }
+      // 드로잉 모드
       if (!isPointerDownRef.current || tool !== 'draw') return
       const ox = e.nativeEvent.offsetX
       const oy = e.nativeEvent.offsetY
@@ -285,10 +384,15 @@ export default function ThreeCanvas() {
       ]
       setDrawPath(computeStrokePath(currentPointsRef.current))
     },
-    [tool]
+    [tool, selectedId, updateElement]
   )
 
   const handlePointerUp = useCallback(() => {
+    // 드래그 이동 종료
+    if (isDraggingRef.current) {
+      isDraggingRef.current = false
+      return
+    }
     if (!isPointerDownRef.current || tool !== 'draw') return
     isPointerDownRef.current = false
     const points = currentPointsRef.current
@@ -338,7 +442,7 @@ export default function ThreeCanvas() {
     return () => window.removeEventListener('keydown', onKey)
   }, [removeElement, setTool])
 
-  const cursor = isZViewMode ? 'grab' : tool === 'draw' ? 'crosshair' : 'default'
+  const cursor = isZViewMode ? 'grab' : tool === 'draw' ? 'crosshair' : isDraggingRef.current ? 'grabbing' : 'default'
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
