@@ -3,28 +3,28 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js'
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 
-// 이미지 레퍼런스 기반 파스텔 팔레트
-export const PALETTE = [
-  0xa8d8a8, // mint green
-  0x8cb369, // olive green
-  0xb5c99a, // sage
-  0xc4ddb2, // light lime
-  0x9b8ec4, // muted lavender
-  0xb8b8d8, // periwinkle
-  0xd4929a, // dusty rose
-  0xc9a0c9, // soft mauve
-  0xb0adb8, // warm gray
-  0x88c0d0, // soft teal
+// 테마 컬러 팔레트 — 파스텔 + 뉴트럴
+export const THEME_COLORS: { name: string; hex: number }[] = [
+  // Pastels (medium)
+  { name: 'Mint',     hex: 0x7DDCAC },
+  { name: 'Sky',      hex: 0x7EC8F8 },
+  { name: 'Lavender', hex: 0xA98EF5 },
+  { name: 'Lilac',    hex: 0xC090FF },
+  { name: 'Rose',     hex: 0xFF8FAF },
+  { name: 'Peach',    hex: 0xFFA07A },
+  { name: 'Butter',   hex: 0xFFD84A },
+  // Neutrals (light)
+  { name: 'White',    hex: 0xFFFFFF },
+  { name: 'Ivory',    hex: 0xFDFBF5 },
+  { name: 'Sand',     hex: 0xF5EFE0 },
+  { name: 'Khaki',    hex: 0xEDE4D0 },
+  { name: 'Beige',    hex: 0xE4D8C0 },
 ]
+
+export const PALETTE = THEME_COLORS.map((c) => c.hex)
 
 const OUTLINE_COLOR = 0x222222
 const EXTRUDE_DEPTH = 0.15
-
-let paletteIndex = 0
-
-export function nextColor(): number {
-  return PALETTE[paletteIndex++ % PALETTE.length]
-}
 
 // 3-tone gradientMap — CanvasTexture로 생성 (WebGL2 호환 보장)
 // shadow 60% / mid 85% / highlight 100% → 파스텔톤에서 자연스러운 명암 단계
@@ -47,9 +47,9 @@ function createGradientMap(): THREE.CanvasTexture {
 
 export const gradientMap = createGradientMap()
 
-export function createToonMaterial(color?: number): THREE.MeshToonMaterial {
+export function createToonMaterial(color: number): THREE.MeshToonMaterial {
   return new THREE.MeshToonMaterial({
-    color: color ?? nextColor(),
+    color,
     gradientMap,
     side: THREE.DoubleSide,
   })

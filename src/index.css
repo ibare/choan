@@ -251,3 +251,19 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .canvas-tool:hover { background: var(--bg); color: var(--text); }
 .canvas-tool.active { background: var(--accent); color: #fff; }
+
+/* ── Color picker toolbar ───────────────────── */
+.color-picker-toolbar { top: 54px; gap: 3px; padding: 4px; }
+
+.color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.1s;
+}
+.color-swatch:hover { border-color: var(--text-muted); transform: scale(1.15); }
+.color-swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }

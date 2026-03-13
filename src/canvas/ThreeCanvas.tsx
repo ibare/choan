@@ -10,6 +10,7 @@ import {
   createLineGeometry,
   updateEdgeResolutions,
   PALETTE,
+  THEME_COLORS,
   type GeoPair,
 } from './materials'
 
@@ -48,8 +49,10 @@ export default function ThreeCanvas() {
     elements,
     selectedId,
     tool,
+    drawColor,
     isZViewMode,
     setTool,
+    setDrawColor,
     addElement,
     updateElement,
     selectElement,
@@ -210,7 +213,7 @@ export default function ThreeCanvas() {
         }
       } else {
         // 새 메쉬 생성 — ExtrudeGeometry + flat normals + edge lines
-        const color = PALETTE[meshMap.size % PALETTE.length]
+        const color = el.color ?? PALETTE[meshMap.size % PALETTE.length]
         let pair: GeoPair
         if (el.type === 'circle') {
           pair = createCircleGeometry()
@@ -410,6 +413,7 @@ export default function ThreeCanvas() {
       type: result.type,
       label: result.type === 'rectangle' ? 'Box' : result.type === 'circle' ? 'Circle' : 'Line',
       role: result.type === 'rectangle' ? 'container' : undefined,
+      color: drawColor,
       x: result.x,
       y: result.y,
       z: 0,
@@ -421,7 +425,7 @@ export default function ThreeCanvas() {
     }
     addElement(el)
     selectElement(id)
-  }, [tool, addElement, selectElement])
+  }, [tool, drawColor, addElement, selectElement])
 
   // 키보드 단축키: V=Select, D=Draw, Delete=삭제
   useEffect(() => {
@@ -473,6 +477,18 @@ export default function ThreeCanvas() {
             <path d="M12.1 1.3L14.7 3.9L5.1 13.5L1 15L2.5 10.9L12.1 1.3Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
           </svg>
         </button>
+      </div>
+      {/* 컬러 픽커 툴바 */}
+      <div className="canvas-toolbar color-picker-toolbar">
+        {THEME_COLORS.map(({ name, hex }) => (
+          <button
+            key={hex}
+            className={`color-swatch ${drawColor === hex ? 'active' : ''}`}
+            style={{ background: `#${hex.toString(16).padStart(6, '0')}` }}
+            onClick={() => setDrawColor(hex)}
+            title={name}
+          />
+        ))}
       </div>
       {/* 드로잉 오버레이 SVG */}
       <svg
