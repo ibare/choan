@@ -40,25 +40,30 @@ function extrudeShape(shape: THREE.Shape, depth: number): GeoPair {
   return { renderGeo: nonIndexed, edgeGeo: geo }
 }
 
-export function createRectGeometry(radius = 0): GeoPair {
+export function createRectGeometry(radius = 0, heightRatio = 1): GeoPair {
+  // heightRatio = element height / element width
+  // 지오메트리를 실제 종횡비로 생성 → 균등 스케일링 시 코너 아크가 원형 유지
+  const hw = 0.5
+  const hh = 0.5 * heightRatio
   const shape = new THREE.Shape()
-  const r = Math.min(Math.max(radius, 0), 1) * 0.5 // 0~1 → 0~0.5 geometry units
+  const maxR = Math.min(hw, hh)
+  const r = Math.min(Math.max(radius, 0), 1) * maxR
   if (r <= 0.001) {
-    shape.moveTo(-0.5, -0.5)
-    shape.lineTo(0.5, -0.5)
-    shape.lineTo(0.5, 0.5)
-    shape.lineTo(-0.5, 0.5)
+    shape.moveTo(-hw, -hh)
+    shape.lineTo(hw, -hh)
+    shape.lineTo(hw, hh)
+    shape.lineTo(-hw, hh)
     shape.closePath()
   } else {
-    shape.moveTo(-0.5 + r, -0.5)
-    shape.lineTo(0.5 - r, -0.5)
-    shape.absarc(0.5 - r, -0.5 + r, r, -Math.PI / 2, 0, false)
-    shape.lineTo(0.5, 0.5 - r)
-    shape.absarc(0.5 - r, 0.5 - r, r, 0, Math.PI / 2, false)
-    shape.lineTo(-0.5 + r, 0.5)
-    shape.absarc(-0.5 + r, 0.5 - r, r, Math.PI / 2, Math.PI, false)
-    shape.lineTo(-0.5, -0.5 + r)
-    shape.absarc(-0.5 + r, -0.5 + r, r, Math.PI, Math.PI * 1.5, false)
+    shape.moveTo(-hw + r, -hh)
+    shape.lineTo(hw - r, -hh)
+    shape.absarc(hw - r, -hh + r, r, -Math.PI / 2, 0, false)
+    shape.lineTo(hw, hh - r)
+    shape.absarc(hw - r, hh - r, r, 0, Math.PI / 2, false)
+    shape.lineTo(-hw + r, hh)
+    shape.absarc(-hw + r, hh - r, r, Math.PI / 2, Math.PI, false)
+    shape.lineTo(-hw, -hh + r)
+    shape.absarc(-hw + r, -hh + r, r, Math.PI, Math.PI * 1.5, false)
   }
   return extrudeShape(shape, EXTRUDE_DEPTH)
 }

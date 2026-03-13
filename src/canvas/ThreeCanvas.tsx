@@ -19,7 +19,7 @@ import { nanoid } from './nanoid'
 const FRUSTUM = 10
 
 const SELECT_COLOR = 0x4a90d9
-const HANDLE_HIT_RADIUS = 10 // 코너 핸들 클릭 판정 반경 (px)
+const HANDLE_HIT_RADIUS = 16 // 코너 핸들 클릭 판정 반경 (px)
 const MIN_ELEMENT_SIZE = 10  // 최소 요소 크기 (px)
 
 // 클릭 배치 시 기본 크기 (픽셀)
@@ -34,6 +34,7 @@ interface MeshRecord {
   group: THREE.Group
   color: number
   radius: number
+  aspect: number // height/width ratio (사각형 코너 아크 보정용)
 }
 
 // z=0 평면 (레이캐스트 대상)
@@ -129,7 +130,7 @@ export default function ThreeCanvas() {
     // PerspectiveCamera
     const aspect = w / h
     const camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000)
-    camera.position.set(0, -4, 16)
+    camera.position.set(0, 0, 20)
     camera.lookAt(0, 0, 0)
     cameraRef.current = camera
 
@@ -216,10 +217,12 @@ export default function ThreeCanvas() {
       const wh = (el.height / h) * 2 * FRUSTUM
 
       const elRadius = el.type === 'rectangle' ? (el.radius ?? 0) : 0
+      const elAspect = el.type === 'rectangle' ? el.height / el.width : 1
       let rec = meshMap.get(el.id)
 
-      // radius 변경 시 메쉬 재생성
-      if (rec && rec.radius !== elRadius) {
+      // radius 또는 종횡비 변경 시 메쉬 재생성 (둥근 사각형의 코너 아크 보정)
+      if (rec && (rec.radius !== elRadius ||
+          (el.type === 'rectangle' && Math.abs(rec.aspect - elAspect) > 0.01))) {
         scene.remove(rec.group)
         meshMap.delete(el.id)
         rec = undefined
@@ -228,7 +231,12 @@ export default function ThreeCanvas() {
       if (rec) {
         // 위치/크기 업데이트
         rec.group.position.set(wx, wy, el.z * 0.1)
-        rec.group.scale.set(ww, wh, 1)
+        // 사각형: 종횡비가 지오메트리에 내장되어 있으므로 균등 스케일링
+        if (el.type === 'rectangle') {
+          rec.group.scale.set(ww, ww, 1)
+        } else {
+          rec.group.scale.set(ww, wh, 1)
+        }
         // opacity 반영
         const mainMesh = rec.group.children[0] as THREE.Mesh
         const mats = Array.isArray(mainMesh.material) ? mainMesh.material : [mainMesh.material]
@@ -247,14 +255,18 @@ export default function ThreeCanvas() {
         } else if (el.type === 'line') {
           pair = createLineGeometry()
         } else {
-          pair = createRectGeometry(elRadius)
+          pair = createRectGeometry(elRadius, elAspect)
         }
         const group = createElementMesh(pair, color)
 
         group.position.set(wx, wy, el.z * 0.1)
-        group.scale.set(ww, wh, 1)
+        if (el.type === 'rectangle') {
+          group.scale.set(ww, ww, 1)
+        } else {
+          group.scale.set(ww, wh, 1)
+        }
         scene.add(group)
-        meshMap.set(el.id, { id: el.id, group, color, radius: elRadius })
+        meshMap.set(el.id, { id: el.id, group, color, radius: elRadius, aspect: elAspect })
       }
     }
 
@@ -266,15 +278,18 @@ export default function ThreeCanvas() {
 
     if (selectedId && meshMap.has(selectedId)) {
       const rec = meshMap.get(selectedId)!
+      const selEl = elements.find((e) => e.id === selectedId)!
       const pos = rec.group.position
-      const scl = rec.group.scale
 
       const helper = new THREE.Group()
       helper.position.copy(pos)
       helper.position.z += 0.02 // 메쉬 앞에 살짝
 
-      const hw = scl.x / 2
-      const hh = scl.y / 2
+      // 실제 월드 크기 계산 (스케일 방식에 의존하지 않음)
+      const { w: cw, h: ch } = canvasSizeRef.current
+      const cAspect = cw / ch
+      const hw = ((selEl.width / cw) * 2 * FRUSTUM * cAspect) / 2
+      const hh = ((selEl.height / ch) * 2 * FRUSTUM) / 2
       const pad = 0.03 // 바운딩 박스 패딩
 
       // 바운딩 박스 라인
