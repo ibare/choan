@@ -8,7 +8,7 @@ import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
 
 export default function App() {
-  const { isZViewMode, toggleZView, elements, globalStates, interactions, loadFile, reset } = useChoanStore()
+  const { elements, globalStates, interactions, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -73,13 +73,6 @@ export default function App() {
           value={projectName}
           onChange={(e) => setProjectName(e.target.value)}
         />
-        <button
-          className={`tool-btn ${isZViewMode ? 'active' : ''}`}
-          onClick={toggleZView}
-          title="Z-View (Z)"
-        >
-          Z-View
-        </button>
         <div className="toolbar-spacer" />
         <div className="action-group">
           <button className="btn" onClick={() => fileInputRef.current?.click()}>Open</button>

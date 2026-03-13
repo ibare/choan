@@ -44,6 +44,24 @@ export default function PropertiesPanel() {
         </>
       )}
 
+      {el.type === 'rectangle' && (
+        <>
+          <label className="field-label">Radius</label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={el.radius ?? 0}
+              style={{ flex: 1 }}
+              onChange={(e) => updateElement(el.id, { radius: Number(e.target.value) })}
+            />
+            <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round((el.radius ?? 0) * 100)}%</span>
+          </div>
+        </>
+      )}
+
       {el.type === 'line' && (
         <>
           <label className="field-label">Line Style</label>

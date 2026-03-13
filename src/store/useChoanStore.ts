@@ -20,6 +20,7 @@ export interface ChoanElement {
   label: string
   role?: ElementRole
   color?: number
+  radius?: number  // 0~1, rectangle only (0=sharp, 1=fully rounded)
   x: number
   y: number
   z: number
@@ -66,7 +67,6 @@ interface ChoanStore {
   selectedId: string | null
   tool: Tool
   drawColor: number
-  isZViewMode: boolean
 
   // state machine data
   globalStates: GlobalState[]
@@ -81,7 +81,6 @@ interface ChoanStore {
   // tool & view
   setTool: (tool: Tool) => void
   setDrawColor: (color: number) => void
-  toggleZView: () => void
 
   // state/interaction
   addGlobalState: (state: GlobalState) => void
@@ -101,7 +100,6 @@ const initialState = {
   selectedId: null as string | null,
   tool: 'select' as Tool,
   drawColor: 0x7DDCAC,
-  isZViewMode: false,
   globalStates: [] as GlobalState[],
   interactions: [] as Interaction[],
 }
@@ -128,9 +126,6 @@ export const useChoanStore = create<ChoanStore>((set) => ({
   setTool: (tool) => set({ tool }),
 
   setDrawColor: (color) => set({ drawColor: color }),
-
-  toggleZView: () =>
-    set((s) => ({ isZViewMode: !s.isZViewMode })),
 
   addGlobalState: (state) =>
     set((s) => ({ globalStates: [...s.globalStates, state] })),

@@ -33,13 +33,16 @@ interface MeshRecord {
   id: string
   group: THREE.Group
   color: number
+  radius: number
 }
+
+// z=0 평면 (레이캐스트 대상)
+const Z_PLANE = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
 
 export default function ThreeCanvas() {
   const mountRef = useRef<HTMLDivElement>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
-  const cameraOrthoRef = useRef<THREE.OrthographicCamera | null>(null)
-  const cameraPerspRef = useRef<THREE.PerspectiveCamera | null>(null)
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
   const frameRef = useRef<number>(0)
@@ -52,7 +55,6 @@ export default function ThreeCanvas() {
     selectedId,
     tool,
     drawColor,
-    isZViewMode,
     setTool,
     setDrawColor,
     addElement,
@@ -63,18 +65,48 @@ export default function ThreeCanvas() {
 
   // 드래그 이동 상태
   const isDraggingRef = useRef(false)
-  const dragStartRef = useRef({ px: 0, py: 0 })
+  const dragStartWorldRef = useRef(new THREE.Vector3())
   const dragElStartRef = useRef({ x: 0, y: 0 })
 
   // 리사이즈 상태
   const isResizingRef = useRef(false)
-  const resizeStartRef = useRef({ px: 0, py: 0 })
+  const resizeStartWorldRef = useRef(new THREE.Vector3())
   const resizeCornerStartRef = useRef({ x: 0, y: 0 }) // 드래그 중인 코너의 초기 픽셀 위치
   const resizeAnchorRef = useRef({ x: 0, y: 0 })      // 고정된 반대 코너의 픽셀 위치
 
-  // animate 클로저에서 최신 값을 읽기 위해 init effect 전에 선언
-  const isZViewRef = useRef(isZViewMode)
-  useEffect(() => { isZViewRef.current = isZViewMode }, [isZViewMode])
+  // ── 좌표 변환 헬퍼 ──
+
+  // 스크린 좌표 → z=0 평면 위 월드 좌표
+  const screenToWorld = useCallback((clientX: number, clientY: number): THREE.Vector3 | null => {
+    const mount = mountRef.current
+    const camera = cameraRef.current
+    if (!mount || !camera) return null
+    const rect = mount.getBoundingClientRect()
+    const ndcX = ((clientX - rect.left) / mount.clientWidth) * 2 - 1
+    const ndcY = -((clientY - rect.top) / mount.clientHeight) * 2 + 1
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera)
+    const target = new THREE.Vector3()
+    return raycaster.ray.intersectPlane(Z_PLANE, target)
+  }, [])
+
+  // 월드 좌표 → 요소 픽셀 좌표 (FRUSTUM 기반 고정 매핑)
+  const worldToPixel = useCallback((wx: number, wy: number): { x: number; y: number } => {
+    const { w, h } = canvasSizeRef.current
+    const aspect = w / h
+    const px = ((wx + FRUSTUM * aspect) / (2 * FRUSTUM * aspect)) * w
+    const py = ((FRUSTUM - wy) / (2 * FRUSTUM)) * h
+    return { x: px, y: py }
+  }, [])
+
+  // 월드 좌표 델타 → 픽셀 델타
+  const worldDeltaToPixel = useCallback((dwx: number, dwy: number): { dx: number; dy: number } => {
+    const { w, h } = canvasSizeRef.current
+    const aspect = w / h
+    const dx = (dwx / (2 * FRUSTUM * aspect)) * w
+    const dy = (-dwy / (2 * FRUSTUM)) * h
+    return { dx, dy }
+  }, [])
 
   // Three.js 초기화
   useEffect(() => {
@@ -94,44 +126,42 @@ export default function ThreeCanvas() {
     grid.rotation.x = Math.PI / 2
     scene.add(grid)
 
-    // OrthographicCamera
-    const aspect = w / h
-    const ortho = new THREE.OrthographicCamera(
-      -FRUSTUM * aspect,
-      FRUSTUM * aspect,
-      FRUSTUM,
-      -FRUSTUM,
-      0.1,
-      1000
-    )
-    ortho.position.set(0, 0, 10)
-    cameraOrthoRef.current = ortho
-
     // PerspectiveCamera
-    const persp = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000)
-    persp.position.set(0, -3, 8)
-    cameraPerspRef.current = persp
+    const aspect = w / h
+    const camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000)
+    camera.position.set(0, -4, 16)
+    camera.lookAt(0, 0, 0)
+    cameraRef.current = camera
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(window.devicePixelRatio)
     renderer.setSize(w, h)
-    renderer.shadowMap.enabled = true
     mount.appendChild(renderer.domElement)
     rendererRef.current = renderer
 
-    // OrbitControls (Z-view 전용)
-    const controls = new OrbitControls(persp, renderer.domElement)
-    controls.enabled = false
+    // OrbitControls — 우클릭 회전, 중클릭 팬, 스크롤 줌, 좌클릭은 앱에서 처리
+    const controls = new OrbitControls(camera, renderer.domElement)
+    controls.mouseButtons = {
+      LEFT: -1 as unknown as THREE.MOUSE,
+      MIDDLE: THREE.MOUSE.PAN,
+      RIGHT: THREE.MOUSE.ROTATE,
+    }
+    controls.touches = {
+      ONE: -1 as unknown as THREE.TOUCH,
+      TWO: THREE.TOUCH.DOLLY_PAN,
+    }
+    controls.enableDamping = true
+    controls.dampingFactor = 0.1
+    controls.screenSpacePanning = true
+    controls.target.set(0, 0, 0)
     controlsRef.current = controls
 
-    // 렌더 루프 — isZViewRef.current 로 최신 상태 읽기 (클로저 stale 방지)
+    // 렌더 루프
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate)
-      const zview = isZViewRef.current
-      const cam = zview ? persp : ortho
-      if (zview) controls.update()
-      renderer.render(scene, cam)
+      controls.update()
+      renderer.render(scene, camera)
     }
     animate()
 
@@ -142,12 +172,8 @@ export default function ThreeCanvas() {
       canvasSizeRef.current = { w: nw, h: nh }
       renderer.setSize(nw, nh)
       updateEdgeResolutions(scene, nw, nh)
-      const asp = nw / nh
-      ortho.left = -FRUSTUM * asp
-      ortho.right = FRUSTUM * asp
-      ortho.updateProjectionMatrix()
-      persp.aspect = asp
-      persp.updateProjectionMatrix()
+      camera.aspect = nw / nh
+      camera.updateProjectionMatrix()
     }
     const ro = new ResizeObserver(onResize)
     ro.observe(mount)
@@ -155,17 +181,12 @@ export default function ThreeCanvas() {
     return () => {
       cancelAnimationFrame(frameRef.current)
       ro.disconnect()
+      controls.dispose()
       renderer.dispose()
       mount.removeChild(renderer.domElement)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  // Z뷰 모드 전환
-  useEffect(() => {
-    if (!controlsRef.current) return
-    controlsRef.current.enabled = isZViewMode
-  }, [isZViewMode])
 
   // elements → Three.js 메쉬 동기화
   useEffect(() => {
@@ -194,9 +215,18 @@ export default function ThreeCanvas() {
       const ww = (el.width / w) * 2 * FRUSTUM * aspect
       const wh = (el.height / h) * 2 * FRUSTUM
 
-      if (meshMap.has(el.id)) {
+      const elRadius = el.type === 'rectangle' ? (el.radius ?? 0) : 0
+      let rec = meshMap.get(el.id)
+
+      // radius 변경 시 메쉬 재생성
+      if (rec && rec.radius !== elRadius) {
+        scene.remove(rec.group)
+        meshMap.delete(el.id)
+        rec = undefined
+      }
+
+      if (rec) {
         // 위치/크기 업데이트
-        const rec = meshMap.get(el.id)!
         rec.group.position.set(wx, wy, el.z * 0.1)
         rec.group.scale.set(ww, wh, 1)
         // opacity 반영
@@ -209,7 +239,7 @@ export default function ThreeCanvas() {
           }
         }
       } else {
-        // 새 메쉬 생성 — ExtrudeGeometry + flat normals + edge lines
+        // 새 메쉬 생성
         const color = el.color ?? PALETTE[meshMap.size % PALETTE.length]
         let pair: GeoPair
         if (el.type === 'circle') {
@@ -217,14 +247,14 @@ export default function ThreeCanvas() {
         } else if (el.type === 'line') {
           pair = createLineGeometry()
         } else {
-          pair = createRectGeometry()
+          pair = createRectGeometry(elRadius)
         }
         const group = createElementMesh(pair, color)
 
         group.position.set(wx, wy, el.z * 0.1)
         group.scale.set(ww, wh, 1)
         scene.add(group)
-        meshMap.set(el.id, { id: el.id, group, color })
+        meshMap.set(el.id, { id: el.id, group, color, radius: elRadius })
       }
     }
 
@@ -248,19 +278,6 @@ export default function ThreeCanvas() {
       const pad = 0.03 // 바운딩 박스 패딩
 
       // 바운딩 박스 라인
-      const boxPts = [
-        -(hw + pad), -(hh + pad),
-         (hw + pad), -(hh + pad),
-         (hw + pad),  (hh + pad),
-        -(hw + pad),  (hh + pad),
-        -(hw + pad), -(hh + pad),
-      ]
-      const boxGeo = new THREE.BufferGeometry()
-      boxGeo.setAttribute('position', new THREE.Float32BufferAttribute(
-        boxPts.flatMap((v, i) => i % 2 === 0 ? [v, 0] : [0]).length ? [] : [],
-        3
-      ))
-      // 간단히 LineLoop로 박스 그리기
       const vertices = new Float32Array([
         -(hw + pad), -(hh + pad), 0,
          (hw + pad), -(hh + pad), 0,
@@ -290,8 +307,7 @@ export default function ThreeCanvas() {
         [ (hw + pad),  (hh + pad)],
         [-(hw + pad),  (hh + pad)],
       ]
-      for (let i = 0; i < corners.length; i++) {
-        const [cx, cy] = corners[i]
+      for (const [cx, cy] of corners) {
         const handle = new THREE.Mesh(handleGeo, handleMat)
         handle.position.set(cx, cy, 0)
         helper.add(handle)
@@ -306,15 +322,15 @@ export default function ThreeCanvas() {
   const raycastElement = useCallback(
     (clientX: number, clientY: number): string | null => {
       const mount = mountRef.current
-      const ortho = cameraOrthoRef.current
-      if (!mount || !ortho) return null
+      const camera = cameraRef.current
+      if (!mount || !camera) return null
 
       const rect = mount.getBoundingClientRect()
       const ndcX = ((clientX - rect.left) / mount.clientWidth) * 2 - 1
       const ndcY = -((clientY - rect.top) / mount.clientHeight) * 2 + 1
 
       const raycaster = new THREE.Raycaster()
-      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), ortho)
+      raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera)
 
       const meshObjects: THREE.Object3D[] = []
       for (const rec of meshMapRef.current.values()) {
@@ -335,9 +351,12 @@ export default function ThreeCanvas() {
     []
   )
 
-  // 도형 배치: 클릭 위치 중심에 기본 크기로 생성
+  // 도형 배치: 클릭 위치에 기본 크기로 생성
   const placeShape = useCallback(
-    (shapeType: 'rectangle' | 'circle' | 'line', offsetX: number, offsetY: number) => {
+    (shapeType: 'rectangle' | 'circle' | 'line', clientX: number, clientY: number) => {
+      const worldPos = screenToWorld(clientX, clientY)
+      if (!worldPos) return
+      const pixel = worldToPixel(worldPos.x, worldPos.y)
       const size = DEFAULT_SIZE[shapeType]
       const id = nanoid()
       const el: ChoanElement = {
@@ -346,8 +365,8 @@ export default function ThreeCanvas() {
         label: shapeType === 'rectangle' ? 'Box' : shapeType === 'circle' ? 'Circle' : 'Line',
         role: shapeType === 'rectangle' ? 'container' : undefined,
         color: drawColor,
-        x: offsetX - size.w / 2,
-        y: offsetY - size.h / 2,
+        x: pixel.x - size.w / 2,
+        y: pixel.y - size.h / 2,
         z: 0,
         width: size.w,
         height: size.h,
@@ -357,16 +376,21 @@ export default function ThreeCanvas() {
       selectElement(id)
       setTool('select')
     },
-    [drawColor, addElement, selectElement, setTool]
+    [drawColor, addElement, selectElement, setTool, screenToWorld, worldToPixel]
   )
 
-  // 코너 핸들 히트 테스트 (픽셀 공간)
+  // 코너 핸들 히트 테스트 (스크린→월드→픽셀 변환)
   // 코너 순서: 0=BL, 1=BR, 2=TR, 3=TL (픽셀 좌표 — Y↓)
   const hitTestCorner = useCallback(
-    (canvasX: number, canvasY: number): number => {
+    (clientX: number, clientY: number): number => {
       if (!selectedId) return -1
       const el = elements.find((e) => e.id === selectedId)
       if (!el) return -1
+
+      const worldPos = screenToWorld(clientX, clientY)
+      if (!worldPos) return -1
+      const pixel = worldToPixel(worldPos.x, worldPos.y)
+
       const corners = [
         { x: el.x, y: el.y + el.height },             // 0: BL
         { x: el.x + el.width, y: el.y + el.height },   // 1: BR
@@ -374,30 +398,25 @@ export default function ThreeCanvas() {
         { x: el.x, y: el.y },                           // 3: TL
       ]
       for (let i = 0; i < corners.length; i++) {
-        const dx = canvasX - corners[i].x
-        const dy = canvasY - corners[i].y
+        const dx = pixel.x - corners[i].x
+        const dy = pixel.y - corners[i].y
         if (dx * dx + dy * dy <= HANDLE_HIT_RADIUS * HANDLE_HIT_RADIUS) return i
       }
       return -1
     },
-    [selectedId, elements]
+    [selectedId, elements, screenToWorld, worldToPixel]
   )
 
   // Select 모드: 클릭으로 선택/해제, 드래그 이동, 코너 리사이즈
   // Shape 모드: 클릭으로 도형 배치
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (isZViewMode) return
-      if (tool === 'select') {
-        const mount = mountRef.current
-        if (!mount) return
-        const rect = mount.getBoundingClientRect()
-        const canvasX = e.clientX - rect.left
-        const canvasY = e.clientY - rect.top
+      if (e.button !== 0) return // 좌클릭만 앱에서 처리
 
+      if (tool === 'select') {
         // 1. 리사이즈 핸들 체크
         if (selectedId) {
-          const corner = hitTestCorner(canvasX, canvasY)
+          const corner = hitTestCorner(e.clientX, e.clientY)
           if (corner >= 0) {
             const el = elements.find((e) => e.id === selectedId)!
             const cornerPositions = [
@@ -407,7 +426,8 @@ export default function ThreeCanvas() {
               { x: el.x, y: el.y },
             ]
             isResizingRef.current = true
-            resizeStartRef.current = { px: e.clientX, py: e.clientY }
+            const worldPos = screenToWorld(e.clientX, e.clientY)
+            if (worldPos) resizeStartWorldRef.current.copy(worldPos)
             resizeCornerStartRef.current = cornerPositions[corner]
             resizeAnchorRef.current = cornerPositions[(corner + 2) % 4]
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
@@ -419,7 +439,8 @@ export default function ThreeCanvas() {
         const hitId = raycastElement(e.clientX, e.clientY)
         if (hitId && hitId === selectedId) {
           isDraggingRef.current = true
-          dragStartRef.current = { px: e.clientX, py: e.clientY }
+          const worldPos = screenToWorld(e.clientX, e.clientY)
+          if (worldPos) dragStartWorldRef.current.copy(worldPos)
           const el = elements.find((el) => el.id === selectedId)
           if (el) dragElStartRef.current = { x: el.x, y: el.y }
           ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
@@ -429,20 +450,25 @@ export default function ThreeCanvas() {
         return
       }
       // 도형 배치 모드
-      placeShape(tool, e.nativeEvent.offsetX, e.nativeEvent.offsetY)
+      placeShape(tool, e.clientX, e.clientY)
     },
-    [isZViewMode, tool, raycastElement, selectElement, selectedId, elements, placeShape, hitTestCorner]
+    [tool, raycastElement, selectElement, selectedId, elements, placeShape, hitTestCorner, screenToWorld]
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       // 리사이즈
       if (isResizingRef.current && selectedId) {
-        const dx = e.clientX - resizeStartRef.current.px
-        const dy = e.clientY - resizeStartRef.current.py
+        const worldPos = screenToWorld(e.clientX, e.clientY)
+        if (!worldPos) return
+        const worldDelta = {
+          x: worldPos.x - resizeStartWorldRef.current.x,
+          y: worldPos.y - resizeStartWorldRef.current.y,
+        }
+        const pixelDelta = worldDeltaToPixel(worldDelta.x, worldDelta.y)
         const anchor = resizeAnchorRef.current
-        const newCornerX = resizeCornerStartRef.current.x + dx
-        const newCornerY = resizeCornerStartRef.current.y + dy
+        const newCornerX = resizeCornerStartRef.current.x + pixelDelta.dx
+        const newCornerY = resizeCornerStartRef.current.y + pixelDelta.dy
         updateElement(selectedId, {
           x: Math.min(anchor.x, newCornerX),
           y: Math.min(anchor.y, newCornerY),
@@ -453,15 +479,20 @@ export default function ThreeCanvas() {
       }
       // 드래그 이동
       if (isDraggingRef.current && tool === 'select' && selectedId) {
-        const dx = e.clientX - dragStartRef.current.px
-        const dy = e.clientY - dragStartRef.current.py
+        const worldPos = screenToWorld(e.clientX, e.clientY)
+        if (!worldPos) return
+        const worldDelta = {
+          x: worldPos.x - dragStartWorldRef.current.x,
+          y: worldPos.y - dragStartWorldRef.current.y,
+        }
+        const pixelDelta = worldDeltaToPixel(worldDelta.x, worldDelta.y)
         updateElement(selectedId, {
-          x: dragElStartRef.current.x + dx,
-          y: dragElStartRef.current.y + dy,
+          x: dragElStartRef.current.x + pixelDelta.dx,
+          y: dragElStartRef.current.y + pixelDelta.dy,
         })
       }
     },
-    [tool, selectedId, updateElement]
+    [tool, selectedId, updateElement, screenToWorld, worldDeltaToPixel]
   )
 
   const handlePointerUp = useCallback(() => {
@@ -498,7 +529,7 @@ export default function ThreeCanvas() {
   }, [removeElement, setTool])
 
   const isShapeTool = tool !== 'select'
-  const cursor = isZViewMode ? 'grab' : isShapeTool ? 'crosshair' : 'default'
+  const cursor = isShapeTool ? 'crosshair' : 'default'
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -508,6 +539,7 @@ export default function ThreeCanvas() {
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onContextMenu={(e) => e.preventDefault()}
       />
       {/* 캔버스 플로팅 툴바 */}
       <div className="canvas-toolbar">
@@ -560,15 +592,6 @@ export default function ThreeCanvas() {
           />
         ))}
       </div>
-      {isZViewMode && (
-        <div style={{
-          position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
-          background: 'rgba(26,26,46,0.75)', color: '#fff', padding: '4px 12px',
-          borderRadius: 8, fontSize: 12, pointerEvents: 'none',
-        }}>
-          Z-View 모드 — 마우스로 회전, 편집 불가
-        </div>
-      )}
     </div>
   )
 }

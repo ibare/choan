@@ -40,13 +40,26 @@ function extrudeShape(shape: THREE.Shape, depth: number): GeoPair {
   return { renderGeo: nonIndexed, edgeGeo: geo }
 }
 
-export function createRectGeometry(): GeoPair {
+export function createRectGeometry(radius = 0): GeoPair {
   const shape = new THREE.Shape()
-  shape.moveTo(-0.5, -0.5)
-  shape.lineTo(0.5, -0.5)
-  shape.lineTo(0.5, 0.5)
-  shape.lineTo(-0.5, 0.5)
-  shape.closePath()
+  const r = Math.min(Math.max(radius, 0), 1) * 0.5 // 0~1 → 0~0.5 geometry units
+  if (r <= 0.001) {
+    shape.moveTo(-0.5, -0.5)
+    shape.lineTo(0.5, -0.5)
+    shape.lineTo(0.5, 0.5)
+    shape.lineTo(-0.5, 0.5)
+    shape.closePath()
+  } else {
+    shape.moveTo(-0.5 + r, -0.5)
+    shape.lineTo(0.5 - r, -0.5)
+    shape.absarc(0.5 - r, -0.5 + r, r, -Math.PI / 2, 0, false)
+    shape.lineTo(0.5, 0.5 - r)
+    shape.absarc(0.5 - r, 0.5 - r, r, 0, Math.PI / 2, false)
+    shape.lineTo(-0.5 + r, 0.5)
+    shape.absarc(-0.5 + r, 0.5 - r, r, Math.PI / 2, Math.PI, false)
+    shape.lineTo(-0.5, -0.5 + r)
+    shape.absarc(-0.5 + r, -0.5 + r, r, Math.PI, Math.PI * 1.5, false)
+  }
   return extrudeShape(shape, EXTRUDE_DEPTH)
 }
 
