@@ -24,7 +24,7 @@ export const THEME_COLORS: { name: string; hex: number }[] = [
 export const PALETTE = THEME_COLORS.map((c) => c.hex)
 
 const OUTLINE_COLOR = 0x222222
-const EXTRUDE_DEPTH = 0.15
+export const EXTRUDE_DEPTH = 0.15
 
 // ── Geometry 팩토리 (얇은 합판 두께) ──
 

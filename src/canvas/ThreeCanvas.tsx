@@ -7,6 +7,7 @@ import {
   createCircleGeometry,
   createLineGeometry,
   updateEdgeResolutions,
+  EXTRUDE_DEPTH,
   PALETTE,
   THEME_COLORS,
   type GeoPair,
@@ -122,11 +123,6 @@ export default function ThreeCanvas() {
     scene.background = new THREE.Color(0xf7f3ee)
     sceneRef.current = scene
 
-    // 격자 helper
-    const grid = new THREE.GridHelper(20, 40, 0xd4c9bc, 0xe8e0d8)
-    grid.rotation.x = Math.PI / 2
-    scene.add(grid)
-
     // PerspectiveCamera
     const aspect = w / h
     const camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000)
@@ -230,7 +226,7 @@ export default function ThreeCanvas() {
 
       if (rec) {
         // 위치/크기 업데이트
-        rec.group.position.set(wx, wy, el.z * 0.1)
+        rec.group.position.set(wx, wy, el.z * EXTRUDE_DEPTH)
         // 사각형: 종횡비가 지오메트리에 내장되어 있으므로 균등 스케일링
         if (el.type === 'rectangle') {
           rec.group.scale.set(ww, ww, 1)
@@ -259,7 +255,7 @@ export default function ThreeCanvas() {
         }
         const group = createElementMesh(pair, color)
 
-        group.position.set(wx, wy, el.z * 0.1)
+        group.position.set(wx, wy, el.z * EXTRUDE_DEPTH)
         if (el.type === 'rectangle') {
           group.scale.set(ww, ww, 1)
         } else {
