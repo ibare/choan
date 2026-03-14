@@ -301,20 +301,23 @@ export default function ThreeCanvas() {
       ])
       const lineGeo = new THREE.BufferGeometry()
       lineGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3))
+      // depthTest: false → 다른 메시에 가려지지 않고 항상 최상위에 렌더링
       const lineMat = new THREE.LineDashedMaterial({
         color: SELECT_COLOR,
         dashSize: 0.06,
         gapSize: 0.03,
         linewidth: 1,
+        depthTest: false,
       })
       const box = new THREE.LineLoop(lineGeo, lineMat)
       box.computeLineDistances()
+      box.renderOrder = 999
       helper.add(box)
 
       // 코너 핸들 (4개 사각형 — 리사이즈 핸들)
       const handleSize = 0.10
       const handleGeo = new THREE.PlaneGeometry(handleSize, handleSize)
-      const handleMat = new THREE.MeshBasicMaterial({ color: SELECT_COLOR })
+      const handleMat = new THREE.MeshBasicMaterial({ color: SELECT_COLOR, depthTest: false })
       // 0:BL, 1:BR, 2:TR, 3:TL (월드 좌표 기준)
       const corners = [
         [-(hw + pad), -(hh + pad)],
@@ -325,6 +328,7 @@ export default function ThreeCanvas() {
       for (const [cx, cy] of corners) {
         const handle = new THREE.Mesh(handleGeo, handleMat)
         handle.position.set(cx, cy, 0)
+        handle.renderOrder = 999
         helper.add(handle)
       }
 
@@ -334,6 +338,7 @@ export default function ThreeCanvas() {
   }, [elements, selectedId])
 
   // 레이캐스트로 요소 히트 테스트
+  // 같은 z 레벨의 겹친 요소는 시각적으로 위에 보이는 것(z 값 높음 → elements 배열 뒤)을 선택
   const raycastElement = useCallback(
     (clientX: number, clientY: number): string | null => {
       const mount = mountRef.current
@@ -355,13 +360,29 @@ export default function ThreeCanvas() {
       const hits = raycaster.intersectObjects(meshObjects, false)
       if (hits.length === 0) return null
 
-      const hitObj = hits[0].object
-      for (const [id, rec] of meshMapRef.current) {
-        if (rec.group === hitObj.parent || rec.group === hitObj.parent?.parent) {
-          return id
+      // 히트된 요소 ID 전체 수집 (중복 제거)
+      const hitIds: string[] = []
+      for (const hit of hits) {
+        for (const [id, rec] of meshMapRef.current) {
+          if (!hitIds.includes(id) &&
+              (rec.group === hit.object.parent || rec.group === hit.object.parent?.parent)) {
+            hitIds.push(id)
+          }
         }
       }
-      return null
+      if (hitIds.length === 0) return null
+
+      // 시각적으로 가장 위: z 높을수록, z 같으면 elements 배열 뒤에 있을수록 위
+      const { elements: els } = useChoanStore.getState()
+      const topmost = hitIds.reduce((best, id) => {
+        const bestEl = els.find((e) => e.id === best)
+        const curEl = els.find((e) => e.id === id)
+        if (!bestEl || !curEl) return best
+        if (curEl.z !== bestEl.z) return curEl.z > bestEl.z ? id : best
+        // z 같으면 배열 상 더 뒤에 있는 것 (나중에 추가된 = 화면에서 위에 렌더링)
+        return els.indexOf(curEl) > els.indexOf(bestEl) ? id : best
+      })
+      return topmost
     },
     []
   )
