@@ -118,8 +118,9 @@ export function createElementMesh(
 
   // children[0]: 메인 메쉬 — MeshBasicMaterial (비조명)
   // 전면/후면(group 0) 원색 100%, 측면(group 1) 82% 어둡게
-  const frontMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide })
-  const sideMat = new THREE.MeshBasicMaterial({ color: darkenColor(color, 0.82), side: THREE.DoubleSide })
+  // polygonOffset: 필 페이스를 살짝 뒤로 밀어 엣지 라인이 항상 깊이 테스트에서 이기도록
+  const frontMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 4 })
+  const sideMat = new THREE.MeshBasicMaterial({ color: darkenColor(color, 0.82), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 4 })
   const mainMesh = new THREE.Mesh(pair.renderGeo, [frontMat, sideMat])
   group.add(mainMesh)
 
