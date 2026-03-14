@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import {
@@ -16,6 +16,10 @@ import {
 import { useChoanStore } from '../store/useChoanStore'
 import type { ChoanElement, Tool } from '../store/useChoanStore'
 import { nanoid } from './nanoid'
+import {
+  computeSnapMove, computeSnapResize, computeDistances,
+  type SnapLine, type DistanceMeasure,
+} from './snapUtils'
 
 const FRUSTUM = 10
 
@@ -50,7 +54,13 @@ export default function ThreeCanvas() {
   const frameRef = useRef<number>(0)
   const meshMapRef = useRef<Map<string, MeshRecord>>(new Map())
   const selectHelperRef = useRef<THREE.Group | null>(null)
+  const snapGroupRef = useRef<THREE.Group | null>(null)
+  const distanceGroupRef = useRef<THREE.Group | null>(null)
   const canvasSizeRef = useRef({ w: 1, h: 1 })
+  const copiedRef = useRef<ChoanElement | null>(null)
+
+  const [altPressed, setAltPressed] = useState(false)
+  const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
 
   const {
     elements,
@@ -110,6 +120,81 @@ export default function ThreeCanvas() {
     return { dx, dy }
   }, [])
 
+  // 픽셀 좌표 → 월드 좌표 (worldToPixel의 역함수)
+  const pixelToWorld = useCallback((px: number, py: number): { wx: number; wy: number } => {
+    const { w, h } = canvasSizeRef.current
+    const aspect = w / h
+    return {
+      wx: -FRUSTUM * aspect + (px / w) * 2 * FRUSTUM * aspect,
+      wy: FRUSTUM - (py / h) * 2 * FRUSTUM,
+    }
+  }, [])
+
+  // 월드 좌표 → 스크린 픽셀 좌표 (거리 레이블 위치 계산용)
+  const worldToScreen = useCallback((wx: number, wy: number): { x: number; y: number } | null => {
+    const camera = cameraRef.current
+    const mount = mountRef.current
+    if (!camera || !mount) return null
+    const v = new THREE.Vector3(wx, wy, 0).project(camera)
+    return {
+      x: (v.x * 0.5 + 0.5) * mount.clientWidth,
+      y: (-v.y * 0.5 + 0.5) * mount.clientHeight,
+    }
+  }, [])
+
+  // Three.js 스냅 가이드 라인 업데이트
+  const updateSnapLines = useCallback((lines: SnapLine[]) => {
+    const group = snapGroupRef.current
+    if (!group) return
+    while (group.children.length) group.remove(group.children[0])
+    for (const { x1, y1, x2, y2 } of lines) {
+      const p1 = pixelToWorld(x1, y1)
+      const p2 = pixelToWorld(x2, y2)
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p1.wx, p1.wy, 0.5),
+        new THREE.Vector3(p2.wx, p2.wy, 0.5),
+      ])
+      const mat = new THREE.LineBasicMaterial({ color: 0x0ea5e9, depthTest: false })
+      const line = new THREE.Line(geo, mat)
+      line.renderOrder = 997
+      group.add(line)
+    }
+  }, [pixelToWorld])
+
+  // Three.js 거리 측정 라인 업데이트
+  const updateDistanceLines = useCallback((measures: (DistanceMeasure | null)[]) => {
+    const group = distanceGroupRef.current
+    if (!group) return
+    while (group.children.length) group.remove(group.children[0])
+    const TICK = 5
+    for (const m of measures) {
+      if (!m) continue
+      const p1 = pixelToWorld(m.x1, m.y1)
+      const p2 = pixelToWorld(m.x2, m.y2)
+      const mat = new THREE.LineBasicMaterial({ color: 0xf97316, depthTest: false })
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(p1.wx, p1.wy, 0.5),
+        new THREE.Vector3(p2.wx, p2.wy, 0.5),
+      ])
+      const mainLine = new THREE.Line(geo, mat)
+      mainLine.renderOrder = 996
+      group.add(mainLine)
+      // 끝점 틱 마크
+      const isVert = m.x1 === m.x2
+      for (const [px, py] of [[m.x1, m.y1], [m.x2, m.y2]] as [number, number][]) {
+        const ta = pixelToWorld(isVert ? px - TICK : px, isVert ? py : py - TICK)
+        const tb = pixelToWorld(isVert ? px + TICK : px, isVert ? py : py + TICK)
+        const tGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(ta.wx, ta.wy, 0.5),
+          new THREE.Vector3(tb.wx, tb.wy, 0.5),
+        ])
+        const tick = new THREE.Line(tGeo, mat)
+        tick.renderOrder = 996
+        group.add(tick)
+      }
+    }
+  }, [pixelToWorld])
+
   // Three.js 초기화
   useEffect(() => {
     if (!mountRef.current) return
@@ -122,6 +207,14 @@ export default function ThreeCanvas() {
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0xf7f3ee)
     sceneRef.current = scene
+
+    const snapGroup = new THREE.Group()
+    scene.add(snapGroup)
+    snapGroupRef.current = snapGroup
+
+    const distanceGroup = new THREE.Group()
+    scene.add(distanceGroup)
+    distanceGroupRef.current = distanceGroup
 
     // PerspectiveCamera
     const aspect = w / h
@@ -489,6 +582,8 @@ export default function ThreeCanvas() {
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      const { elements: els } = useChoanStore.getState()
+
       // 리사이즈
       if (isResizingRef.current && selectedId) {
         const worldPos = screenToWorld(e.clientX, e.clientY)
@@ -499,13 +594,18 @@ export default function ThreeCanvas() {
         }
         const pixelDelta = worldDeltaToPixel(worldDelta.x, worldDelta.y)
         const anchor = resizeAnchorRef.current
-        const newCornerX = resizeCornerStartRef.current.x + pixelDelta.dx
-        const newCornerY = resizeCornerStartRef.current.y + pixelDelta.dy
+        const proposed = {
+          x: resizeCornerStartRef.current.x + pixelDelta.dx,
+          y: resizeCornerStartRef.current.y + pixelDelta.dy,
+        }
+        const others = els.filter((e) => e.id !== selectedId)
+        const snap = computeSnapResize(anchor, proposed, others)
+        updateSnapLines(snap.lines)
         updateElement(selectedId, {
-          x: Math.min(anchor.x, newCornerX),
-          y: Math.min(anchor.y, newCornerY),
-          width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - newCornerX)),
-          height: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - newCornerY)),
+          x: Math.min(anchor.x, snap.x),
+          y: Math.min(anchor.y, snap.y),
+          width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x)),
+          height: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y)),
         })
         return
       }
@@ -518,26 +618,40 @@ export default function ThreeCanvas() {
           y: worldPos.y - dragStartWorldRef.current.y,
         }
         const pixelDelta = worldDeltaToPixel(worldDelta.x, worldDelta.y)
-        updateElement(selectedId, {
+        const el = els.find((e) => e.id === selectedId)
+        if (!el) return
+        const proposed = {
           x: dragElStartRef.current.x + pixelDelta.dx,
           y: dragElStartRef.current.y + pixelDelta.dy,
+          width: el.width,
+          height: el.height,
+        }
+        const others = els.filter((e) => e.id !== selectedId)
+        const snap = computeSnapMove(proposed, others)
+        updateSnapLines(snap.lines)
+        updateElement(selectedId, {
+          x: proposed.x + snap.dx,
+          y: proposed.y + snap.dy,
         })
       }
     },
-    [tool, selectedId, updateElement, screenToWorld, worldDeltaToPixel]
+    [tool, selectedId, updateElement, screenToWorld, worldDeltaToPixel, updateSnapLines]
   )
 
   const handlePointerUp = useCallback(() => {
     if (isResizingRef.current) {
       isResizingRef.current = false
+      updateSnapLines([])
       return
     }
     if (isDraggingRef.current) {
       isDraggingRef.current = false
+      updateSnapLines([])
     }
-  }, [])
+  }, [updateSnapLines])
 
   // 키보드 단축키: V=Select, R=Rectangle, C=Circle, L=Line, Delete=삭제
+  // Ctrl/Cmd+C=복사, Ctrl/Cmd+V=붙여넣기
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
@@ -546,6 +660,17 @@ export default function ThreeCanvas() {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { selectedId } = useChoanStore.getState()
         if (selectedId) removeElement(selectedId)
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        const { selectedId, elements } = useChoanStore.getState()
+        if (selectedId) copiedRef.current = elements.find((el) => el.id === selectedId) ?? null
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        const src = copiedRef.current
+        if (src) {
+          const id = nanoid()
+          const { addElement, selectElement } = useChoanStore.getState()
+          addElement({ ...src, id, x: src.x + 20, y: src.y + 20 })
+          selectElement(id)
+        }
       } else if (e.key === 'v' || e.key === 'V') {
         setTool('select')
       } else if (e.key === 'r' || e.key === 'R') {
@@ -559,6 +684,46 @@ export default function ThreeCanvas() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [removeElement, setTool])
+
+  // Alt 키: 요소 간 거리 시각화
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => { if (e.key === 'Alt') { e.preventDefault(); setAltPressed(true) } }
+    const onUp = (e: KeyboardEvent) => { if (e.key === 'Alt') setAltPressed(false) }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+    }
+  }, [])
+
+  // Alt 키 거리 시각화 업데이트
+  useEffect(() => {
+    const group = distanceGroupRef.current
+    if (!group) return
+
+    if (!altPressed || !selectedId) {
+      while (group.children.length) group.remove(group.children[0])
+      setDistanceLabels([])
+      return
+    }
+
+    const el = elements.find((e) => e.id === selectedId)
+    if (!el) return
+    const others = elements.filter((e) => e.id !== selectedId)
+    const { left, right, top, bottom } = computeDistances(el, others)
+    const measures = [left, right, top, bottom]
+    updateDistanceLines(measures)
+
+    const labels: Array<{ x: number; y: number; text: string }> = []
+    for (const m of measures) {
+      if (!m) continue
+      const { wx, wy } = pixelToWorld(m.midX, m.midY)
+      const screen = worldToScreen(wx, wy)
+      if (screen) labels.push({ x: screen.x, y: screen.y, text: `${Math.round(m.distance)}` })
+    }
+    setDistanceLabels(labels)
+  }, [altPressed, selectedId, elements, updateDistanceLines, pixelToWorld, worldToScreen])
 
   const isShapeTool = tool !== 'select'
   const cursor = isShapeTool ? 'crosshair' : 'default'
@@ -612,6 +777,28 @@ export default function ThreeCanvas() {
           </svg>
         </button>
       </div>
+      {/* 거리 측정 레이블 (Alt 키) */}
+      {distanceLabels.map((label, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            left: label.x,
+            top: label.y,
+            transform: 'translate(-50%, -50%)',
+            background: 'rgba(249,115,22,0.92)',
+            color: '#fff',
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontSize: 11,
+            fontWeight: 700,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label.text}
+        </div>
+      ))}
       {/* 컬러 픽커 툴바 */}
       <div className="canvas-toolbar color-picker-toolbar">
         {THEME_COLORS.map(({ name, hex }) => (
