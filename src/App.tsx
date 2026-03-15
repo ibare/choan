@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import ThreeCanvas from './canvas/ThreeCanvas'
+import SDFCanvas from './canvas/SDFCanvas'
 import PropertiesPanel from './panels/PropertiesPanel'
 import StatePanel from './panels/StatePanel'
 import { useChoanStore } from './store/useChoanStore'
@@ -85,7 +85,7 @@ export default function App() {
 
       <div className="main">
         <div className="canvas-area">
-          <ThreeCanvas />
+          <SDFCanvas />
         </div>
         <div className="right-panel">
           <PropertiesPanel />
