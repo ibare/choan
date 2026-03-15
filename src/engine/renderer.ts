@@ -1,11 +1,14 @@
-// Core SDF Renderer — manages WebGL2 state and render loop
+// Core SDF Renderer — manages WebGL2 state and two-pass render loop
+// Pass 1: Geometry → FBO (color + normal/ID via MRT)
+// Pass 2: Edge detection + composite → Canvas
 
 import { createGL, createProgram, getUniformLocation } from './gl'
 import { createFullscreenQuad, drawFullscreenQuad } from './quad'
-import { RAYMARCH_VERT, RAYMARCH_FRAG } from './shaders'
+import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, type SceneUBO } from './scene'
 import { createOverlayRenderer, buildViewProjMatrix, type OverlayRenderer } from './overlay'
+import { createGBuffer } from './fbo'
 import type { ChoanElement } from '../store/useChoanStore'
 
 export interface SDFRenderer {
@@ -27,7 +30,6 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   container.appendChild(canvas)
 
   const gl = createGL(canvas)
-  const program = createProgram(gl, RAYMARCH_VERT, RAYMARCH_FRAG)
   const quad = createFullscreenQuad(gl)
 
   // Camera
@@ -35,24 +37,39 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   // Scene UBO
   const sceneUBO: SceneUBO = createSceneUBO(gl)
-  sceneUBO.bind(gl, program)
 
   // Overlay renderer
   const overlay = createOverlayRenderer(gl)
 
-  // Uniform locations
-  const uResolution = getUniformLocation(gl, program, 'uResolution')
-  const uBgColor = getUniformLocation(gl, program, 'uBgColor')
-  const uCamPos = getUniformLocation(gl, program, 'uCamPos')
-  const uCamForward = getUniformLocation(gl, program, 'uCamForward')
-  const uCamRight = getUniformLocation(gl, program, 'uCamRight')
-  const uCamUp = getUniformLocation(gl, program, 'uCamUp')
-  const uFovScale = getUniformLocation(gl, program, 'uFovScale')
+  // ── Pass 1: Geometry program (MRT → FBO) ──
+  const geoProgram = createProgram(gl, RAYMARCH_VERT, RAYMARCH_FRAG)
+  sceneUBO.bind(gl, geoProgram)
+
+  const uResolution = getUniformLocation(gl, geoProgram, 'uResolution')
+  const uBgColor = getUniformLocation(gl, geoProgram, 'uBgColor')
+  const uCamPos = getUniformLocation(gl, geoProgram, 'uCamPos')
+  const uCamForward = getUniformLocation(gl, geoProgram, 'uCamForward')
+  const uCamRight = getUniformLocation(gl, geoProgram, 'uCamRight')
+  const uCamUp = getUniformLocation(gl, geoProgram, 'uCamUp')
+  const uFovScale = getUniformLocation(gl, geoProgram, 'uFovScale')
+
+  // ── Pass 2: Edge detection program (FBO textures → Canvas) ──
+  const edgeProgram = createProgram(gl, RAYMARCH_VERT, EDGE_FRAG)
+
+  const uColorTex = getUniformLocation(gl, edgeProgram, 'uColorTex')
+  const uNormalIdTex = getUniformLocation(gl, edgeProgram, 'uNormalIdTex')
+  const uTexelSize = getUniformLocation(gl, edgeProgram, 'uTexelSize')
+  const uOutlineWidth = getUniformLocation(gl, edgeProgram, 'uOutlineWidth')
+  const uEdgeColor = getUniformLocation(gl, edgeProgram, 'uEdgeColor')
+  const uEdgeBgColor = getUniformLocation(gl, edgeProgram, 'uBgColor')
 
   // Background color: 0xf7f3ee
   const bgR = 0xf7 / 255
   const bgG = 0xf3 / 255
   const bgB = 0xee / 255
+
+  // GBuffer (created at initial size, resized later)
+  const gbuffer = createGBuffer(gl, 1, 1)
 
   let cssWidth = 1
   let cssHeight = 1
@@ -63,10 +80,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     canvas.height = Math.round(height * dpr)
     canvas.style.width = `${width}px`
     canvas.style.height = `${height}px`
-    gl.viewport(0, 0, canvas.width, canvas.height)
     camera.aspect = width / height
     cssWidth = width
     cssHeight = height
+    gbuffer.resize(gl, canvas.width, canvas.height)
   }
 
   function updateScene(elements: ChoanElement[]) {
@@ -76,8 +93,11 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   function render() {
     const ray = getCameraRayParams(camera)
 
-    // SDF pass
-    gl.useProgram(program)
+    // ── Pass 1: Geometry → FBO ──
+    gbuffer.bind(gl)
+    gl.viewport(0, 0, canvas.width, canvas.height)
+
+    gl.useProgram(geoProgram)
     gl.uniform2f(uResolution, canvas.width, canvas.height)
     gl.uniform3f(uBgColor, bgR, bgG, bgB)
     gl.uniform3f(uCamPos, ray.ro[0], ray.ro[1], ray.ro[2])
@@ -87,7 +107,28 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform1f(uFovScale, ray.fovScale)
     drawFullscreenQuad(gl, quad)
 
-    // Overlay pass — draw on top of SDF scene
+    // ── Pass 2: Edge detection + composite → Canvas ──
+    gbuffer.unbind(gl)
+    gl.viewport(0, 0, canvas.width, canvas.height)
+
+    gl.useProgram(edgeProgram)
+
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, gbuffer.colorTex)
+    gl.uniform1i(uColorTex, 0)
+
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, gbuffer.normalIdTex)
+    gl.uniform1i(uNormalIdTex, 1)
+
+    gl.uniform2f(uTexelSize, 1 / canvas.width, 1 / canvas.height)
+    gl.uniform1f(uOutlineWidth, 1.0)
+    gl.uniform3f(uEdgeColor, 0.133, 0.133, 0.133)
+    gl.uniform3f(uEdgeBgColor, bgR, bgG, bgB)
+
+    drawFullscreenQuad(gl, quad)
+
+    // ── Overlay pass ──
     const vp = buildViewProjMatrix(
       camera.position, camera.target, camera.up,
       camera.fov, camera.aspect, camera.near, camera.far,
@@ -96,9 +137,11 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   }
 
   function dispose() {
+    gbuffer.dispose(gl)
     sceneUBO.dispose(gl)
     overlay.dispose()
-    gl.deleteProgram(program)
+    gl.deleteProgram(geoProgram)
+    gl.deleteProgram(edgeProgram)
     container.removeChild(canvas)
   }
 

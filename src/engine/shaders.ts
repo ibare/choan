@@ -16,7 +16,8 @@ export const RAYMARCH_FRAG = /* glsl */ `#version 300 es
 precision highp float;
 
 in vec2 vUV;
-out vec4 fragColor;
+layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outNormalId;
 
 uniform vec2 uResolution;
 uniform vec3 uBgColor;
@@ -169,15 +170,6 @@ vec3 toonShade(vec3 p, vec3 normal, vec3 rd, vec3 baseColor) {
   return color;
 }
 
-// ─── Outline ──────────────────────────────────────
-
-float calcOutline(vec3 normal, vec3 rd) {
-  vec3 viewDir = -rd;
-  float rim = 1.0 - abs(dot(normal, viewDir));
-  float fw = fwidth(rim);
-  return smoothstep(0.6 - fw * 2.0, 0.6 + fw * 2.0, rim);
-}
-
 // ─── Main ─────────────────────────────────────────
 
 void main() {
@@ -189,7 +181,8 @@ void main() {
   vec2 hit = rayMarch(ro, rd);
 
   if (hit.y < 0.0) {
-    fragColor = vec4(uBgColor, 1.0);
+    outColor = vec4(uBgColor, 1.0);
+    outNormalId = vec4(0.0, 0.0, 0.0, -1.0);
     return;
   }
 
@@ -198,23 +191,75 @@ void main() {
   vec3 baseColor = getObjectColor(hit.y);
   float opacity = getObjectOpacity(hit.y);
 
-  // Toon shading
+  // Toon shading (no outline — handled in edge detection pass)
   vec3 color = toonShade(p, normal, rd, baseColor);
 
-  // Outline
-  float outline = calcOutline(normal, rd);
-  vec3 edgeColor = vec3(0.133); // 0x222222
-  color = mix(color, edgeColor, outline);
+  outColor = vec4(color, opacity);
+  outNormalId = vec4(normal, hit.y);
+}
+`
 
-  // SDF edge AA
-  float d = sceneSDF(p).x;
-  float dfw = fwidth(d);
-  float edgeAA = 1.0 - smoothstep(0.0, dfw * 1.5, abs(d));
-  color = mix(color, edgeColor, edgeAA * 0.3);
+// ─── Edge Detection + Composite (Pass 2) ─────────
 
-  // Opacity: blend with background
-  color = mix(uBgColor, color, opacity);
+export const EDGE_FRAG = /* glsl */ `#version 300 es
+precision highp float;
 
-  fragColor = vec4(color, 1.0);
+in vec2 vUV;
+out vec4 fragColor;
+
+uniform sampler2D uColorTex;
+uniform sampler2D uNormalIdTex;
+uniform vec2 uTexelSize;
+uniform float uOutlineWidth;
+uniform vec3 uEdgeColor;
+uniform vec3 uBgColor;
+
+// Roberts Cross on normal — detects crease and curvature edges
+float edgeNormal(vec2 uv, float scale) {
+  vec3 n00 = texture(uNormalIdTex, uv).xyz;
+  vec3 n10 = texture(uNormalIdTex, uv + vec2(scale, 0.0) * uTexelSize).xyz;
+  vec3 n01 = texture(uNormalIdTex, uv + vec2(0.0, scale) * uTexelSize).xyz;
+  vec3 n11 = texture(uNormalIdTex, uv + vec2(scale, scale) * uTexelSize).xyz;
+
+  vec3 d1 = n11 - n00;
+  vec3 d2 = n10 - n01;
+  return sqrt(dot(d1, d1) + dot(d2, d2));
+}
+
+// Roberts Cross on objectID — detects object boundaries and silhouettes
+float edgeObjectId(vec2 uv, float scale) {
+  float id00 = texture(uNormalIdTex, uv).w;
+  float id10 = texture(uNormalIdTex, uv + vec2(scale, 0.0) * uTexelSize).w;
+  float id01 = texture(uNormalIdTex, uv + vec2(0.0, scale) * uTexelSize).w;
+  float id11 = texture(uNormalIdTex, uv + vec2(scale, scale) * uTexelSize).w;
+
+  float d1 = abs(id11 - id00);
+  float d2 = abs(id10 - id01);
+  return step(0.5, d1 + d2);
+}
+
+void main() {
+  vec4 color = texture(uColorTex, vUV);
+  float objectId = texture(uNormalIdTex, vUV).w;
+
+  float scale = uOutlineWidth;
+
+  // Object boundary edges (always check)
+  float idEdge = edgeObjectId(vUV, scale);
+
+  // Normal edges (only for on-object pixels to avoid false edges at background)
+  float normalEdge = 0.0;
+  if (objectId >= 0.0) {
+    normalEdge = edgeNormal(vUV, scale);
+    normalEdge = smoothstep(0.3, 0.6, normalEdge);
+  }
+
+  float edge = clamp(idEdge + normalEdge, 0.0, 1.0);
+
+  // Composite: apply opacity against background, then draw edge
+  vec3 finalColor = mix(uBgColor, color.rgb, color.a);
+  finalColor = mix(finalColor, uEdgeColor, edge);
+
+  fragColor = vec4(finalColor, 1.0);
 }
 `
