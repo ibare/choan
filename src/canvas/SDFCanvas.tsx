@@ -29,6 +29,8 @@ export default function SDFCanvas() {
   const frameRef = useRef<number>(0)
   const canvasSizeRef = useRef({ w: 1, h: 1 })
   const copiedRef = useRef<ChoanElement | null>(null)
+  const snapLinesRef = useRef<SnapLine[]>([])
+  const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
 
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
   const [altPressed, setAltPressed] = useState(false)
@@ -229,6 +231,7 @@ export default function SDFCanvas() {
         }
         const others = els.filter((e) => e.id !== selectedId)
         const snap = computeSnapResize(anchor, proposed, others)
+        snapLinesRef.current = snap.lines
         updateElement(selectedId, {
           x: Math.min(anchor.x, snap.x),
           y: Math.min(anchor.y, snap.y),
@@ -254,6 +257,7 @@ export default function SDFCanvas() {
         }
         const others = els.filter((e) => e.id !== selectedId)
         const snap = computeSnapMove(proposed, others)
+        snapLinesRef.current = snap.lines
         updateElement(selectedId, {
           x: proposed.x + snap.dx,
           y: proposed.y + snap.dy,
@@ -266,6 +270,7 @@ export default function SDFCanvas() {
   const handlePointerUp = useCallback(() => {
     isResizingRef.current = false
     isDraggingRef.current = false
+    snapLinesRef.current = []
   }, [])
 
   // ── Keyboard shortcuts ──
@@ -318,6 +323,7 @@ export default function SDFCanvas() {
   useEffect(() => {
     if (!altPressed || !selectedId) {
       setDistanceLabels([])
+      distMeasuresRef.current = []
       return
     }
     const el = elements.find((e) => e.id === selectedId)
@@ -325,6 +331,7 @@ export default function SDFCanvas() {
     const others = elements.filter((e) => e.id !== selectedId)
     const { left, right, top, bottom } = computeDistances(el, others)
     const measures = [left, right, top, bottom]
+    distMeasuresRef.current = measures
     const labels: Array<{ x: number; y: number; text: string }> = []
     for (const m of measures) {
       if (!m) continue
@@ -352,6 +359,73 @@ export default function SDFCanvas() {
       frameRef.current = requestAnimationFrame(animate)
       controls.update()
       renderer.render()
+
+      // ── Overlay pass ──
+      const state = useChoanStore.getState()
+      const { w, h } = canvasSizeRef.current
+      const aspect = w / h
+      const ov = renderer.overlay
+
+      const p2w = (px: number, py: number): [number, number] => [
+        -FRUSTUM * aspect + (px / w) * 2 * FRUSTUM * aspect,
+        FRUSTUM - (py / h) * 2 * FRUSTUM,
+      ]
+
+      // Selection bounding box + corner handles
+      if (state.selectedId) {
+        const el = state.elements.find(e => e.id === state.selectedId)
+        if (el) {
+          const tl = p2w(el.x, el.y)
+          const tr = p2w(el.x + el.width, el.y)
+          const br = p2w(el.x + el.width, el.y + el.height)
+          const bl = p2w(el.x, el.y + el.height)
+
+          // Dashed selection rectangle
+          ov.drawDashedLoop(
+            new Float32Array([...tl, ...tr, ...br, ...bl]),
+            [0.26, 0.52, 0.96, 1],
+          )
+
+          // Corner handles: blue outline + white fill
+          const hWorld = 8 * (2 * FRUSTUM) / h
+          const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
+          ov.drawQuads(handles, hWorld, [0.26, 0.52, 0.96, 1])
+          ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
+        }
+      }
+
+      // Snap guide lines (cyan)
+      const snaps = snapLinesRef.current
+      if (snaps.length > 0) {
+        const verts: number[] = []
+        for (const s of snaps) {
+          verts.push(...p2w(s.x1, s.y1), ...p2w(s.x2, s.y2))
+        }
+        ov.drawLines(new Float32Array(verts), [0.0, 0.82, 0.82, 1])
+      }
+
+      // Distance measurement lines + tick marks (orange)
+      const measures = distMeasuresRef.current
+      const dVerts: number[] = []
+      for (const m of measures) {
+        if (!m) continue
+        const a = p2w(m.x1, m.y1)
+        const b = p2w(m.x2, m.y2)
+        dVerts.push(...a, ...b)
+        const tick = 4 * (2 * FRUSTUM) / h
+        const isHoriz = Math.abs(m.y1 - m.y2) < 1
+        if (isHoriz) {
+          dVerts.push(a[0], a[1] - tick, a[0], a[1] + tick)
+          dVerts.push(b[0], b[1] - tick, b[0], b[1] + tick)
+        } else {
+          const tickX = 4 * (2 * FRUSTUM * aspect) / w
+          dVerts.push(a[0] - tickX, a[1], a[0] + tickX, a[1])
+          dVerts.push(b[0] - tickX, b[1], b[0] + tickX, b[1])
+        }
+      }
+      if (dVerts.length > 0) {
+        ov.drawLines(new Float32Array(dVerts), [0.97, 0.45, 0.09, 1])
+      }
     }
     animate()
 
