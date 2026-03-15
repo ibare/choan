@@ -1,5 +1,7 @@
 // GLSL shader sources as template literals
 
+export const MAX_OBJECTS = 40
+
 export const RAYMARCH_VERT = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 aPosition;
 out vec2 vUV;
@@ -26,6 +28,21 @@ uniform vec3 uCamRight;
 uniform vec3 uCamUp;
 uniform float uFovScale;
 
+// Scene UBO (std140)
+// Layout: vec4 numObjPad, then per-object: vec4 posType, vec4 sizeRadius, vec4 colorAlpha
+#define MAX_OBJECTS ${MAX_OBJECTS}
+layout(std140) uniform SceneData {
+  vec4 uNumObjPad;           // x = numObjects
+  vec4 uPosType[MAX_OBJECTS];
+  vec4 uSizeRadius[MAX_OBJECTS];
+  vec4 uColorAlpha[MAX_OBJECTS];
+};
+
+// Shape types
+#define SHAPE_RECT   0.0
+#define SHAPE_CIRCLE 1.0
+#define SHAPE_LINE   2.0
+
 // ─── SDF Primitives ───────────────────────────────
 
 float sdRoundBox(vec3 p, vec3 b, float r) {
@@ -41,27 +58,44 @@ float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
 
 // ─── Scene ────────────────────────────────────────
 
-// Returns vec2(distance, objectID)
-// For now: hardcoded test objects
 vec2 sceneSDF(vec3 p) {
   vec2 res = vec2(1e10, -1.0);
+  int numObj = int(uNumObjPad.x);
 
-  // Test rounded box at origin
-  float d1 = sdRoundBox(p - vec3(0.0, 0.0, 0.0), vec3(2.0, 1.5, 0.075), 0.2);
-  if (d1 < res.x) res = vec2(d1, 0.0);
+  for (int i = 0; i < MAX_OBJECTS; i++) {
+    if (i >= numObj) break;
 
-  // Test smaller box offset
-  float d2 = sdRoundBox(p - vec3(3.0, 1.0, 0.0), vec3(1.0, 0.8, 0.075), 0.1);
-  if (d2 < res.x) res = vec2(d2, 1.0);
+    vec3 objPos = uPosType[i].xyz;
+    float shapeType = uPosType[i].w;
+    vec3 halfSize = uSizeRadius[i].xyz;
+    float radius = uSizeRadius[i].w;
 
-  // Test circle (fully rounded box)
-  float d3 = sdRoundBox(p - vec3(-3.0, -1.0, 0.0), vec3(1.0, 1.0, 0.075), 1.0);
-  if (d3 < res.x) res = vec2(d3, 2.0);
+    vec3 lp = p - objPos;
+    float d;
+
+    if (shapeType < 0.5) {
+      // Rectangle: radius maps 0-1 → 0-min(halfSize.xy)
+      float maxR = min(halfSize.x, halfSize.y);
+      float r = radius * maxR;
+      d = sdRoundBox(lp, halfSize, r);
+    } else if (shapeType < 1.5) {
+      // Circle: fully rounded box
+      float r = min(halfSize.x, halfSize.y);
+      d = sdRoundBox(lp, halfSize, r);
+    } else {
+      // Line: capsule along x-axis
+      vec3 a = vec3(-halfSize.x, 0.0, 0.0);
+      vec3 b = vec3( halfSize.x, 0.0, 0.0);
+      d = sdCapsule(lp, a, b, halfSize.y);
+    }
+
+    if (d < res.x) res = vec2(d, float(i));
+  }
 
   return res;
 }
 
-// ─── Normal (tetrahedron technique, 4 evals) ──────
+// ─── Normal (tetrahedron technique) ───────────────
 
 vec3 calcNormal(vec3 p) {
   const float h = 0.001;
@@ -96,36 +130,38 @@ vec2 rayMarch(vec3 ro, vec3 rd) {
   return res;
 }
 
-// ─── Hardcoded test colors ────────────────────────
+// ─── Get object color from UBO ────────────────────
 
 vec3 getObjectColor(float id) {
-  if (id < 0.5) return vec3(0.490, 0.863, 0.675);  // Mint 0x7DDCAC
-  if (id < 1.5) return vec3(0.494, 0.784, 0.973);  // Sky 0x7EC8F8
-  return vec3(0.663, 0.557, 0.961);                  // Lavender 0xA98EF5
+  int idx = int(id);
+  if (idx >= 0 && idx < MAX_OBJECTS) {
+    return uColorAlpha[idx].rgb;
+  }
+  return vec3(1.0);
 }
 
-// ─── Darken color (side face: 82%) ────────────────
-
-vec3 darkenColor(vec3 c, float factor) {
-  return c * factor;
+float getObjectOpacity(float id) {
+  int idx = int(id);
+  if (idx >= 0 && idx < MAX_OBJECTS) {
+    return uColorAlpha[idx].a;
+  }
+  return 1.0;
 }
 
 // ─── Toon Shading ─────────────────────────────────
 
 vec3 toonShade(vec3 p, vec3 normal, vec3 rd, vec3 baseColor) {
-  vec3 viewDir = -rd;
   vec3 lightDir = normalize(vec3(0.3, 0.8, 0.5));
 
-  // Side face detection: normal perpendicular to Z → side
+  // Side face detection
   float isSide = 1.0 - abs(normal.z);
   isSide = smoothstep(0.3, 0.7, isSide);
-  vec3 surfColor = mix(baseColor, darkenColor(baseColor, 0.82), isSide);
+  vec3 surfColor = mix(baseColor, baseColor * 0.82, isSide);
 
-  // Toon diffuse: 2-band with fwidth AA at shadow boundary
+  // Toon diffuse: 2-band with fwidth AA
   float NdotL = dot(normal, lightDir);
   float fw = fwidth(NdotL);
   float toonDiff = smoothstep(-fw, fw, NdotL);
-  // Subtle shadow on front faces only (sides keep their darkened color)
   vec3 litColor = surfColor;
   vec3 shadowColor = surfColor * 0.85;
   vec3 color = mix(shadowColor, litColor, mix(1.0, toonDiff, 1.0 - isSide * 0.8));
@@ -135,15 +171,11 @@ vec3 toonShade(vec3 p, vec3 normal, vec3 rd, vec3 baseColor) {
 
 // ─── Outline ──────────────────────────────────────
 
-float calcOutline(vec3 p, vec3 normal, vec3 rd, float t) {
+float calcOutline(vec3 normal, vec3 rd) {
   vec3 viewDir = -rd;
-
-  // Fresnel rim outline
   float rim = 1.0 - abs(dot(normal, viewDir));
   float fw = fwidth(rim);
-  float outline = smoothstep(0.6 - fw * 2.0, 0.6 + fw * 2.0, rim);
-
-  return outline;
+  return smoothstep(0.6 - fw * 2.0, 0.6 + fw * 2.0, rim);
 }
 
 // ─── Main ─────────────────────────────────────────
@@ -151,11 +183,9 @@ float calcOutline(vec3 p, vec3 normal, vec3 rd, float t) {
 void main() {
   vec2 uv = (2.0 * gl_FragCoord.xy - uResolution) / uResolution.y;
 
-  // Ray
   vec3 ro = uCamPos;
   vec3 rd = normalize(uCamForward + uv.x * uFovScale * uCamRight + uv.y * uFovScale * uCamUp);
 
-  // March
   vec2 hit = rayMarch(ro, rd);
 
   if (hit.y < 0.0) {
@@ -163,24 +193,27 @@ void main() {
     return;
   }
 
-  // Hit point & normal
   vec3 p = ro + rd * hit.x;
   vec3 normal = calcNormal(p);
   vec3 baseColor = getObjectColor(hit.y);
+  float opacity = getObjectOpacity(hit.y);
 
   // Toon shading
   vec3 color = toonShade(p, normal, rd, baseColor);
 
   // Outline
-  float outline = calcOutline(p, normal, rd, hit.x);
-  vec3 edgeColor = vec3(0.133, 0.133, 0.133); // 0x222222
+  float outline = calcOutline(normal, rd);
+  vec3 edgeColor = vec3(0.133); // 0x222222
   color = mix(color, edgeColor, outline);
 
-  // SDF-based edge AA at surface boundary
+  // SDF edge AA
   float d = sceneSDF(p).x;
   float dfw = fwidth(d);
   float edgeAA = 1.0 - smoothstep(0.0, dfw * 1.5, abs(d));
   color = mix(color, edgeColor, edgeAA * 0.3);
+
+  // Opacity: blend with background
+  color = mix(uBgColor, color, opacity);
 
   fragColor = vec4(color, 1.0);
 }

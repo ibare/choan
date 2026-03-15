@@ -4,12 +4,15 @@ import { createGL, createProgram, getUniformLocation } from './gl'
 import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG } from './shaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
+import { createSceneUBO, type SceneUBO } from './scene'
+import type { ChoanElement } from '../store/useChoanStore'
 
 export interface SDFRenderer {
   canvas: HTMLCanvasElement
   gl: WebGL2RenderingContext
   camera: Camera
   resize(width: number, height: number): void
+  updateScene(elements: ChoanElement[]): void
   render(): void
   dispose(): void
 }
@@ -28,6 +31,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   // Camera
   const camera = createCamera()
 
+  // Scene UBO
+  const sceneUBO: SceneUBO = createSceneUBO(gl)
+  sceneUBO.bind(gl, program)
+
   // Uniform locations
   const uResolution = getUniformLocation(gl, program, 'uResolution')
   const uBgColor = getUniformLocation(gl, program, 'uBgColor')
@@ -42,6 +49,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const bgG = 0xf3 / 255
   const bgB = 0xee / 255
 
+  // Canvas CSS size (for coordinate conversions)
+  let cssWidth = 1
+  let cssHeight = 1
+
   function resize(width: number, height: number) {
     const dpr = window.devicePixelRatio || 1
     canvas.width = Math.round(width * dpr)
@@ -50,6 +61,12 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     canvas.style.height = `${height}px`
     gl.viewport(0, 0, canvas.width, canvas.height)
     camera.aspect = width / height
+    cssWidth = width
+    cssHeight = height
+  }
+
+  function updateScene(elements: ChoanElement[]) {
+    sceneUBO.update(gl, elements, cssWidth, cssHeight)
   }
 
   function render() {
@@ -67,6 +84,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   }
 
   function dispose() {
+    sceneUBO.dispose(gl)
     gl.deleteProgram(program)
     container.removeChild(canvas)
   }
@@ -74,5 +92,5 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   // Initial size
   resize(container.clientWidth, container.clientHeight)
 
-  return { canvas, gl, camera, resize, render, dispose }
+  return { canvas, gl, camera, resize, updateScene, render, dispose }
 }
