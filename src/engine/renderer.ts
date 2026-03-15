@@ -5,12 +5,14 @@ import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG } from './shaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, type SceneUBO } from './scene'
+import { createOverlayRenderer, buildViewProjMatrix, type OverlayRenderer } from './overlay'
 import type { ChoanElement } from '../store/useChoanStore'
 
 export interface SDFRenderer {
   canvas: HTMLCanvasElement
   gl: WebGL2RenderingContext
   camera: Camera
+  overlay: OverlayRenderer
   resize(width: number, height: number): void
   updateScene(elements: ChoanElement[]): void
   render(): void
@@ -35,6 +37,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const sceneUBO: SceneUBO = createSceneUBO(gl)
   sceneUBO.bind(gl, program)
 
+  // Overlay renderer
+  const overlay = createOverlayRenderer(gl)
+
   // Uniform locations
   const uResolution = getUniformLocation(gl, program, 'uResolution')
   const uBgColor = getUniformLocation(gl, program, 'uBgColor')
@@ -49,7 +54,6 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const bgG = 0xf3 / 255
   const bgB = 0xee / 255
 
-  // Canvas CSS size (for coordinate conversions)
   let cssWidth = 1
   let cssHeight = 1
 
@@ -72,6 +76,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   function render() {
     const ray = getCameraRayParams(camera)
 
+    // SDF pass
     gl.useProgram(program)
     gl.uniform2f(uResolution, canvas.width, canvas.height)
     gl.uniform3f(uBgColor, bgR, bgG, bgB)
@@ -81,16 +86,23 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform3f(uCamUp, ray.up[0], ray.up[1], ray.up[2])
     gl.uniform1f(uFovScale, ray.fovScale)
     drawFullscreenQuad(gl, quad)
+
+    // Overlay pass — draw on top of SDF scene
+    const vp = buildViewProjMatrix(
+      camera.position, camera.target, camera.up,
+      camera.fov, camera.aspect, camera.near, camera.far,
+    )
+    overlay.beginFrame(vp)
   }
 
   function dispose() {
     sceneUBO.dispose(gl)
+    overlay.dispose()
     gl.deleteProgram(program)
     container.removeChild(canvas)
   }
 
-  // Initial size
   resize(container.clientWidth, container.clientHeight)
 
-  return { canvas, gl, camera, resize, updateScene, render, dispose }
+  return { canvas, gl, camera, overlay, resize, updateScene, render, dispose }
 }
