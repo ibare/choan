@@ -15,6 +15,16 @@ function sdRoundBox(px: number, py: number, pz: number, bx: number, by: number, 
   return Math.sqrt(mx * mx + my * my + mz * mz) + Math.min(Math.max(qx, Math.max(qy, qz)), 0) - r
 }
 
+// 2D rounded rect extruded along Z — rounds only XY corners (CSS border-radius)
+function sdExtrudedRoundRect(px: number, py: number, pz: number, bx: number, by: number, bz: number, r: number): number {
+  const qx = Math.abs(px) - bx + r
+  const qy = Math.abs(py) - by + r
+  const mx = Math.max(qx, 0)
+  const my = Math.max(qy, 0)
+  const d2d = Math.sqrt(mx * mx + my * my) + Math.min(Math.max(qx, qy), 0) - r
+  return Math.max(d2d, Math.abs(pz) - bz)
+}
+
 function sdCapsule(
   px: number, py: number, pz: number,
   ax: number, ay: number, az: number,
@@ -61,7 +71,7 @@ function evalElementSDF(
 
   if (el.type === 'circle') {
     const r = Math.min(hw, hh)
-    return sdRoundBox(lx, ly, lz, hw, hh, hd, r)
+    return sdExtrudedRoundRect(lx, ly, lz, hw, hh, hd, r)
   } else if (el.type === 'line') {
     return sdCapsule(lx, ly, lz, -hw, 0, 0, hw, 0, 0, hh)
   } else {
@@ -69,7 +79,7 @@ function evalElementSDF(
     const radius = el.radius ?? 0
     const maxR = Math.min(hw, hh)
     const r = radius * maxR
-    return sdRoundBox(lx, ly, lz, hw, hh, hd, r)
+    return sdExtrudedRoundRect(lx, ly, lz, hw, hh, hd, r)
   }
 }
 

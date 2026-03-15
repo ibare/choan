@@ -51,6 +51,13 @@ float sdRoundBox(vec3 p, vec3 b, float r) {
   return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
 }
 
+// 2D rounded rect extruded along Z — rounds only XY corners (CSS border-radius)
+float sdExtrudedRoundRect(vec3 p, vec3 b, float r) {
+  vec2 q = abs(p.xy) - b.xy + r;
+  float d2d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+  return max(d2d, abs(p.z) - b.z);
+}
+
 float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
   vec3 pa = p - a, ba = b - a;
   float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
@@ -75,14 +82,14 @@ vec2 sceneSDF(vec3 p) {
     float d;
 
     if (shapeType < 0.5) {
-      // Rectangle: radius maps 0-1 → 0-min(halfSize.xy)
+      // Rectangle: radius maps 0-1 → 0-min(halfSize.xy), XY only
       float maxR = min(halfSize.x, halfSize.y);
       float r = radius * maxR;
-      d = sdRoundBox(lp, halfSize, r);
+      d = sdExtrudedRoundRect(lp, halfSize, r);
     } else if (shapeType < 1.5) {
-      // Circle: fully rounded box
+      // Circle: fully rounded XY, sharp Z extrusion
       float r = min(halfSize.x, halfSize.y);
-      d = sdRoundBox(lp, halfSize, r);
+      d = sdExtrudedRoundRect(lp, halfSize, r);
     } else {
       // Line: capsule along x-axis
       vec3 a = vec3(-halfSize.x, 0.0, 0.0);
