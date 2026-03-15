@@ -104,6 +104,48 @@ vec3 getObjectColor(float id) {
   return vec3(0.663, 0.557, 0.961);                  // Lavender 0xA98EF5
 }
 
+// ─── Darken color (side face: 82%) ────────────────
+
+vec3 darkenColor(vec3 c, float factor) {
+  return c * factor;
+}
+
+// ─── Toon Shading ─────────────────────────────────
+
+vec3 toonShade(vec3 p, vec3 normal, vec3 rd, vec3 baseColor) {
+  vec3 viewDir = -rd;
+  vec3 lightDir = normalize(vec3(0.3, 0.8, 0.5));
+
+  // Side face detection: normal perpendicular to Z → side
+  float isSide = 1.0 - abs(normal.z);
+  isSide = smoothstep(0.3, 0.7, isSide);
+  vec3 surfColor = mix(baseColor, darkenColor(baseColor, 0.82), isSide);
+
+  // Toon diffuse: 2-band with fwidth AA at shadow boundary
+  float NdotL = dot(normal, lightDir);
+  float fw = fwidth(NdotL);
+  float toonDiff = smoothstep(-fw, fw, NdotL);
+  // Subtle shadow on front faces only (sides keep their darkened color)
+  vec3 litColor = surfColor;
+  vec3 shadowColor = surfColor * 0.85;
+  vec3 color = mix(shadowColor, litColor, mix(1.0, toonDiff, 1.0 - isSide * 0.8));
+
+  return color;
+}
+
+// ─── Outline ──────────────────────────────────────
+
+float calcOutline(vec3 p, vec3 normal, vec3 rd, float t) {
+  vec3 viewDir = -rd;
+
+  // Fresnel rim outline
+  float rim = 1.0 - abs(dot(normal, viewDir));
+  float fw = fwidth(rim);
+  float outline = smoothstep(0.6 - fw * 2.0, 0.6 + fw * 2.0, rim);
+
+  return outline;
+}
+
 // ─── Main ─────────────────────────────────────────
 
 void main() {
@@ -117,20 +159,28 @@ void main() {
   vec2 hit = rayMarch(ro, rd);
 
   if (hit.y < 0.0) {
-    // Miss → background
     fragColor = vec4(uBgColor, 1.0);
     return;
   }
 
-  // Hit
+  // Hit point & normal
   vec3 p = ro + rd * hit.x;
   vec3 normal = calcNormal(p);
   vec3 baseColor = getObjectColor(hit.y);
 
-  // Simple diffuse for now (will be replaced by toon shading in Phase 3)
-  vec3 lightDir = normalize(vec3(0.5, 1.0, 1.0));
-  float diff = max(dot(normal, lightDir), 0.0);
-  vec3 color = baseColor * (0.3 + 0.7 * diff);
+  // Toon shading
+  vec3 color = toonShade(p, normal, rd, baseColor);
+
+  // Outline
+  float outline = calcOutline(p, normal, rd, hit.x);
+  vec3 edgeColor = vec3(0.133, 0.133, 0.133); // 0x222222
+  color = mix(color, edgeColor, outline);
+
+  // SDF-based edge AA at surface boundary
+  float d = sceneSDF(p).x;
+  float dfw = fwidth(d);
+  float edgeAA = 1.0 - smoothstep(0.0, dfw * 1.5, abs(d));
+  color = mix(color, edgeColor, edgeAA * 0.3);
 
   fragColor = vec4(color, 1.0);
 }
