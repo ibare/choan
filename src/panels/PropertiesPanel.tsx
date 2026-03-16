@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import type { ElementRole, LineStyle, ElementTrigger } from '../store/useChoanStore'
 import { Plus, X } from '@phosphor-icons/react'
+import { autoKeyframe } from '../animation/autoKeyframe'
+import type { AnimatableProperty } from '../animation/types'
 
 const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
@@ -19,6 +21,13 @@ export default function PropertiesPanel() {
         <p className="panel-empty">선택된 요소 없음</p>
       </div>
     )
+  }
+
+  // Helper: update element + auto-keyframe if editing an animation
+  const updateAnimatable = (prop: AnimatableProperty, value: number) => {
+    const old = (el as Record<string, unknown>)[prop] as number | undefined
+    updateElement(el.id, { [prop]: value })
+    autoKeyframe(el.id, prop, value, old ?? 0)
   }
 
   const isChild = !!el.parentId
@@ -142,7 +151,7 @@ export default function PropertiesPanel() {
               step={0.01}
               value={el.radius ?? 0}
               style={{ flex: 1 }}
-              onChange={(e) => updateElement(el.id, { radius: Number(e.target.value) })}
+              onChange={(e) => updateAnimatable('radius', Number(e.target.value))}
             />
             <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round((el.radius ?? 0) * 100)}%</span>
           </div>
@@ -206,7 +215,7 @@ export default function PropertiesPanel() {
           step={0.05}
           value={el.opacity}
           style={{ flex: 1 }}
-          onChange={(e) => updateElement(el.id, { opacity: Number(e.target.value) })}
+          onChange={(e) => updateAnimatable('opacity', Number(e.target.value))}
         />
         <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round(el.opacity * 100)}%</span>
       </div>
@@ -220,7 +229,7 @@ export default function PropertiesPanel() {
           style={{ width: '50%' }}
           value={Math.round(el.x)}
           disabled={isManaged}
-          onChange={(e) => updateElement(el.id, { x: Number(e.target.value) })}
+          onChange={(e) => updateAnimatable('x', Number(e.target.value))}
         />
         <input
           className="field-input"
@@ -229,7 +238,7 @@ export default function PropertiesPanel() {
           style={{ width: '50%' }}
           value={Math.round(el.y)}
           disabled={isManaged}
-          onChange={(e) => updateElement(el.id, { y: Number(e.target.value) })}
+          onChange={(e) => updateAnimatable('y', Number(e.target.value))}
         />
       </div>
 
@@ -242,7 +251,7 @@ export default function PropertiesPanel() {
           style={{ width: '50%' }}
           value={Math.round(el.width)}
           disabled={isManaged}
-          onChange={(e) => updateElement(el.id, { width: Number(e.target.value) })}
+          onChange={(e) => updateAnimatable('width', Number(e.target.value))}
         />
         <input
           className="field-input"
@@ -251,7 +260,7 @@ export default function PropertiesPanel() {
           style={{ width: '50%' }}
           value={Math.round(el.height)}
           disabled={isManaged}
-          onChange={(e) => updateElement(el.id, { height: Number(e.target.value) })}
+          onChange={(e) => updateAnimatable('height', Number(e.target.value))}
         />
       </div>
 

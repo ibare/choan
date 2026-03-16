@@ -82,7 +82,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     addAnimationBundle, updateAnimationBundle, removeAnimationBundle,
     addClipToBundle, updateClipInBundle, removeClipFromBundle,
   } = useChoanStore()
-  const { previewState, play, pause, stop } = usePreviewStore()
+  const { previewState, play, pause, stop, playheadTime, setPlayheadTime, editingBundleId, setEditingBundle } = usePreviewStore()
 
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null)
   const [editingBundleName, setEditingBundleName] = useState<string | null>(null)
@@ -101,6 +101,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     layerIdx: number; trackIdx: number; kfIdx: number
     startX: number; startTime: number; bundleId?: string
   } | null>(null)
+  const scrubRef = useRef(false)
 
   if (!visible) return null
 
@@ -121,6 +122,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     }
     addAnimationBundle(bundle)
     setSelectedBundleId(bundle.id)
+    setEditingBundle(bundle.id)
   }
 
   // ── Build display clips ──
@@ -165,7 +167,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     layerHeaderHeight: LAYER_HEADER_HEIGHT,
     maxDuration,
     hoverKf,
-    playheadTime: null,
+    playheadTime: editingBundleId ? playheadTime : null,
   }
 
   // ── Add track to a clip ──
@@ -210,6 +212,13 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
     const hit = tl.hitTest(x, y, displayLayers, renderOptions)
+
+    if (hit.type === 'ruler') {
+      setPlayheadTime(hit.time)
+      scrubRef.current = true
+      tl.canvas.setPointerCapture(e.pointerId)
+      return
+    }
 
     if (hit.type === 'keyframe') {
       const entry = displayClips[hit.layerIdx]
@@ -260,6 +269,14 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     const tl = tl2dRef.current
     if (!tl) return
 
+    if (scrubRef.current) {
+      const rect = tl.canvas.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const time = Math.max(0, Math.round((x + scrollX) / PX_PER_MS))
+      setPlayheadTime(time)
+      return
+    }
+
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const newTime = Math.max(0, Math.round((dragRef.current.startTime * PX_PER_MS + dx) / PX_PER_MS))
@@ -295,6 +312,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
 
   const handleCanvasPointerUp = useCallback(() => {
     dragRef.current = null
+    scrubRef.current = false
   }, [])
 
   const handleCanvasDoubleClick = useCallback((e: React.MouseEvent) => {
@@ -472,7 +490,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
               <button
                 key={b.id}
                 className={`btn-small ${activeBundleId === b.id ? 'active' : ''}`}
-                onClick={() => setSelectedBundleId(b.id)}
+                onClick={() => { setSelectedBundleId(b.id); setEditingBundle(b.id) }}
                 onDoubleClick={() => startEditBundleName(b.id, b.name)}
               >
                 {b.name}
@@ -482,7 +500,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           {activeBundleId && (
             <button
               className="btn-icon timeline-tab-delete"
-              onClick={() => { removeAnimationBundle(activeBundleId); setSelectedBundleId(null) }}
+              onClick={() => { removeAnimationBundle(activeBundleId); setSelectedBundleId(null); setEditingBundle(null) }}
             ><X size={12} /></button>
           )}
         </div>

@@ -16,7 +16,10 @@ import {
 import { detectContainment } from '../layout/containment'
 import { createLayoutAnimator } from '../layout/animator'
 import { createKeyframeAnimator } from '../animation/keyframeEngine'
+import { evaluateTrack } from '../animation/interpolate'
+import { resolveEasing } from '../animation/easing'
 import { usePreviewStore } from '../store/usePreviewStore'
+import { autoKeyframe } from '../animation/autoKeyframe'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import { Cursor, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
 
@@ -614,6 +617,33 @@ export default function SDFCanvas() {
       }
     }
 
+    // Auto-keyframe: record property changes if editing an animation bundle
+    const { editingBundleId } = usePreviewStore.getState()
+    if (editingBundleId) {
+      const freshEls = useChoanStore.getState().elements
+      if (isDraggingRef.current && selId) {
+        const el = freshEls.find((e) => e.id === selId)
+        const orig = dragGroupStartRef.current.get(selId)
+        if (el && orig) {
+          autoKeyframe(selId, 'x', el.x, orig.x)
+          autoKeyframe(selId, 'y', el.y, orig.y)
+        }
+      }
+      if (isResizingRef.current && resizeElIdRef.current) {
+        const el = freshEls.find((e) => e.id === resizeElIdRef.current)
+        if (el) {
+          autoKeyframe(resizeElIdRef.current, 'x', el.x)
+          autoKeyframe(resizeElIdRef.current, 'y', el.y)
+          autoKeyframe(resizeElIdRef.current, 'width', el.width)
+          autoKeyframe(resizeElIdRef.current, 'height', el.height)
+        }
+      }
+      if (isRadiusDragRef.current && selId) {
+        const el = freshEls.find((e) => e.id === selId)
+        if (el) autoKeyframe(selId, 'radius', el.radius ?? 0, radiusStartRef.current)
+      }
+    }
+
     isDrawingRef.current = false
     drawElIdRef.current = null
     isResizingRef.current = false
@@ -753,11 +783,35 @@ export default function SDFCanvas() {
       const state = useChoanStore.getState()
       const preview = usePreviewStore.getState()
 
-      // During preview playback: skip spring physics, run keyframe engine directly
-      // Spring animation is purely for UI editing feedback, not for playback
+      // During preview playback: skip spring, run keyframe engine
+      // During editing scrub: skip spring, apply bundle clips at playhead time
+      // Otherwise: spring physics for UI editing feedback
       let animatedElements: typeof state.elements
       if (preview.previewState === 'playing') {
         animatedElements = kfAnimator.tick(state.elements, performance.now())
+      } else if (preview.editingBundleId && preview.previewState === 'stopped') {
+        // Scrub preview: compute element state at playhead time from bundle clips
+        const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)
+        if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
+          const overrides = new Map<string, Partial<ChoanElement>>()
+          for (const clip of bundle.clips) {
+            if (clip.tracks.length === 0) continue
+            const easingFn = resolveEasing(clip.easing)
+            const patch: Partial<ChoanElement> = {}
+            for (const track of clip.tracks) {
+              ;(patch as Record<string, number>)[track.property] = evaluateTrack(
+                track.keyframes, preview.playheadTime, easingFn, track.property as import('../animation/types').AnimatableProperty,
+              )
+            }
+            overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
+          }
+          animatedElements = state.elements.map((el) => {
+            const patch = overrides.get(el.id)
+            return patch ? { ...el, ...patch } : el
+          })
+        } else {
+          animatedElements = state.elements
+        }
       } else {
         animatedElements = animator.tick(state.elements, {
           stiffness: rs.springStiffness,
