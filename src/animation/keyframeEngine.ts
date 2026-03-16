@@ -1,0 +1,112 @@
+// Keyframe animation engine — tick-based playback with easing and interpolation
+
+import type { ChoanElement } from '../store/useChoanStore'
+import type { AnimationClip, AnimatableProperty } from './types'
+import { resolveEasing, type EasingFn } from './easing'
+import { evaluateTrack } from './interpolate'
+
+interface RunningAnimation {
+  clip: AnimationClip
+  startTime: number
+  interactionId: string
+  easingFn: EasingFn
+}
+
+export interface KeyframeAnimator {
+  start(clip: AnimationClip, interactionId: string, now: number): void
+  stop(clipId: string): void
+  stopAll(): void
+  tick(elements: ChoanElement[], now: number): ChoanElement[]
+  isAnimating(): boolean
+  getProgress(clipId: string): number
+}
+
+export function createKeyframeAnimator(): KeyframeAnimator {
+  const running = new Map<string, RunningAnimation>()
+
+  function start(clip: AnimationClip, interactionId: string, now: number) {
+    // Stop any existing animation on the same element
+    for (const [id, anim] of running) {
+      if (anim.clip.elementId === clip.elementId) {
+        running.delete(id)
+      }
+    }
+
+    running.set(clip.id, {
+      clip,
+      startTime: now,
+      interactionId,
+      easingFn: resolveEasing(clip.easing),
+    })
+  }
+
+  function stop(clipId: string) {
+    running.delete(clipId)
+  }
+
+  function stopAll() {
+    running.clear()
+  }
+
+  function tick(elements: ChoanElement[], now: number): ChoanElement[] {
+    if (running.size === 0) return elements
+
+    // Collect property overrides per element
+    const overrides = new Map<string, Partial<ChoanElement>>()
+    const completed: string[] = []
+
+    for (const [clipId, anim] of running) {
+      const elapsed = now - anim.startTime
+      const { clip, easingFn } = anim
+
+      if (elapsed >= clip.duration) {
+        // Apply final values
+        const final: Partial<ChoanElement> = {}
+        for (const track of clip.tracks) {
+          const lastKf = track.keyframes[track.keyframes.length - 1]
+          ;(final as Record<string, number>)[track.property] = lastKf.value
+        }
+        const existing = overrides.get(clip.elementId) ?? {}
+        overrides.set(clip.elementId, { ...existing, ...final })
+        completed.push(clipId)
+        continue
+      }
+
+      // Interpolate each track
+      const patch: Partial<ChoanElement> = {}
+      for (const track of clip.tracks) {
+        const value = evaluateTrack(track.keyframes, elapsed, easingFn, track.property)
+        ;(patch as Record<string, number>)[track.property] = value
+      }
+      const existing = overrides.get(clip.elementId) ?? {}
+      overrides.set(clip.elementId, { ...existing, ...patch })
+    }
+
+    // Remove completed animations
+    for (const id of completed) {
+      running.delete(id)
+    }
+
+    if (overrides.size === 0) return elements
+
+    // Apply overrides
+    return elements.map((el) => {
+      const patch = overrides.get(el.id)
+      if (!patch) return el
+      return { ...el, ...patch }
+    })
+  }
+
+  function isAnimating(): boolean {
+    return running.size > 0
+  }
+
+  function getProgress(clipId: string): number {
+    const anim = running.get(clipId)
+    if (!anim) return 0
+    const elapsed = performance.now() - anim.startTime
+    return Math.min(1, elapsed / anim.clip.duration)
+  }
+
+  return { start, stop, stopAll, tick, isAnimating, getProgress }
+}

@@ -15,6 +15,9 @@ import {
 } from './snapUtils'
 import { detectContainment } from '../layout/containment'
 import { createLayoutAnimator } from '../layout/animator'
+import { createKeyframeAnimator } from '../animation/keyframeEngine'
+import { createStateMachineRuntime, type StateMachineRuntime } from '../animation/stateMachine'
+import { usePreviewStore } from '../store/usePreviewStore'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 
 // Apply a property patch to an element and (if altKey) to its siblings.
@@ -243,6 +246,18 @@ export default function SDFCanvas() {
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
+
+      // Preview mode: intercept clicks as state machine events
+      const previewState = usePreviewStore.getState().previewState
+      if (previewState === 'playing') {
+        const hitId = raycastElement(e.clientX, e.clientY)
+        if (hitId) {
+          const sm = (window as unknown as Record<string, unknown>).__choanSM as StateMachineRuntime | undefined
+          sm?.handleEvent(hitId, 'click')
+        }
+        return
+      }
+
       if (colorPickerOpenRef.current) {
         // Hit test WebGL color picker swatches
         const pixel = screenToPixel(e.clientX, e.clientY)
@@ -687,6 +702,17 @@ export default function SDFCanvas() {
     controlsRef.current = controls
 
     const animator = createLayoutAnimator()
+    const kfAnimator = createKeyframeAnimator()
+    const smRuntime = createStateMachineRuntime({
+      getInteractions: () => useChoanStore.getState().interactions,
+      getElements: () => useChoanStore.getState().elements,
+      getAnimationClips: () => useChoanStore.getState().animationClips,
+      getStateValues: () => useChoanStore.getState().currentStateValues,
+      setStateValue: (k, v) => useChoanStore.getState().setStateValue(k, v),
+    }, kfAnimator)
+    // Expose for pointer event handlers
+    ;(window as unknown as Record<string, unknown>).__choanSM = smRuntime
+    ;(window as unknown as Record<string, unknown>).__choanKF = kfAnimator
 
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate)
@@ -707,11 +733,17 @@ export default function SDFCanvas() {
 
       // Animate element positions/sizes with spring physics
       const state = useChoanStore.getState()
-      const animatedElements = animator.tick(state.elements, {
+      const springAnimated = animator.tick(state.elements, {
         stiffness: rs.springStiffness,
         damping: rs.springDamping,
         squashIntensity: rs.squashIntensity,
       }, manipulatedIds.size > 0 ? manipulatedIds : undefined)
+
+      // Keyframe animations (state-driven) override spring results
+      const preview = usePreviewStore.getState()
+      const animatedElements = preview.previewState === 'playing'
+        ? kfAnimator.tick(springAnimated, performance.now())
+        : springAnimated
       renderer.updateScene(animatedElements, rs.extrudeDepth)
 
       renderer.render(rs)
@@ -849,8 +881,11 @@ export default function SDFCanvas() {
       ro.disconnect()
       controls.dispose()
       renderer.dispose()
+      kfAnimator.stopAll()
       rendererRef.current = null
       controlsRef.current = null
+      delete (window as unknown as Record<string, unknown>).__choanSM
+      delete (window as unknown as Record<string, unknown>).__choanKF
     }
   }, [])
 

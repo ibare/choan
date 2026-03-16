@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { computeAutoLayout } from '../layout/autoLayout'
+import type { AnimationClip } from '../animation/types'
 
 export type ElementRole = 'container' | 'image' | 'button' | 'input' | 'card'
 export type ElementType = 'rectangle' | 'circle' | 'line'
@@ -78,6 +79,8 @@ interface ChoanStore {
   // state machine data
   globalStates: GlobalState[]
   interactions: Interaction[]
+  animationClips: AnimationClip[]
+  currentStateValues: Record<string, boolean | string | number>
 
   // element operations
   addElement: (el: ChoanElement) => void
@@ -101,8 +104,17 @@ interface ChoanStore {
   updateInteraction: (id: string, patch: Partial<Interaction>) => void
   removeInteraction: (id: string) => void
 
+  // animation clips
+  addAnimationClip: (clip: AnimationClip) => void
+  updateAnimationClip: (clipId: string, patch: Partial<AnimationClip>) => void
+  removeAnimationClip: (clipId: string) => void
+
+  // runtime state values (preview mode)
+  setStateValue: (key: string, value: boolean | string | number) => void
+  resetStateValues: () => void
+
   // file operations
-  loadFile: (data: { elements: ChoanElement[]; globalStates: GlobalState[]; interactions: Interaction[] }) => void
+  loadFile: (data: { elements: ChoanElement[]; globalStates: GlobalState[]; interactions: Interaction[]; animationClips?: AnimationClip[] }) => void
   reset: () => void
 }
 
@@ -148,6 +160,8 @@ const initialState = {
   drawColor: 0xE6F8F0,
   globalStates: [] as GlobalState[],
   interactions: [] as Interaction[],
+  animationClips: [] as AnimationClip[],
+  currentStateValues: {} as Record<string, boolean | string | number>,
 }
 
 export const useChoanStore = create<ChoanStore>((set, get) => ({
@@ -232,14 +246,45 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
       interactions: s.interactions.filter((i) => i.id !== id),
     })),
 
-  loadFile: ({ elements, globalStates, interactions }) => {
+  addAnimationClip: (clip) =>
+    set((s) => ({ animationClips: [...s.animationClips, clip] })),
+
+  updateAnimationClip: (clipId, patch) =>
+    set((s) => ({
+      animationClips: s.animationClips.map((c) =>
+        c.id === clipId ? { ...c, ...patch } : c,
+      ),
+    })),
+
+  removeAnimationClip: (clipId) =>
+    set((s) => ({
+      animationClips: s.animationClips.filter((c) => c.id !== clipId),
+    })),
+
+  setStateValue: (key, value) =>
+    set((s) => ({
+      currentStateValues: { ...s.currentStateValues, [key]: value },
+    })),
+
+  resetStateValues: () =>
+    set((s) => {
+      const values: Record<string, boolean | string | number> = {}
+      for (const gs of s.globalStates) {
+        values[gs.name] = gs.default
+      }
+      return { currentStateValues: values }
+    }),
+
+  loadFile: ({ elements, globalStates, interactions, animationClips }) => {
     // After loading, run layout on all containers
     let updated = elements
     const containers = updated.filter((e) => e.role === 'container')
     for (const c of containers) {
       updated = applyLayout(updated, c.id)
     }
-    set({ elements: updated, globalStates, interactions, selectedId: null })
+    const values: Record<string, boolean | string | number> = {}
+    for (const gs of globalStates) values[gs.name] = gs.default
+    set({ elements: updated, globalStates, interactions, animationClips: animationClips ?? [], currentStateValues: values, selectedId: null })
   },
 
   reset: () => set(initialState),
