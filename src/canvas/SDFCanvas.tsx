@@ -19,6 +19,7 @@ import { createKeyframeAnimator } from '../animation/keyframeEngine'
 import { createStateMachineRuntime, type StateMachineRuntime } from '../animation/stateMachine'
 import { usePreviewStore } from '../store/usePreviewStore'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
+import { Cursor, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
 
 // Apply a property patch to an element and (if altKey) to its siblings.
 // Position fields (x, y) are always excluded from sibling propagation.
@@ -922,16 +923,16 @@ export default function SDFCanvas() {
       {/* Canvas floating toolbar */}
       <div className="canvas-toolbar">
         <button className={`canvas-tool ${tool === 'select' ? 'active' : ''}`} onClick={() => setTool('select')} title="Select (V)">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 1L3 13L6.5 9.5L10 14L12 13L8.5 8.5L13 8L3 1Z" fill="currentColor"/></svg>
+          <Cursor size={16} />
         </button>
         <button className={`canvas-tool ${tool === 'rectangle' ? 'active' : ''}`} onClick={() => setTool('rectangle')} title="Rectangle (R)">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" strokeWidth="1.5"/></svg>
+          <Rectangle size={16} />
         </button>
         <button className={`canvas-tool ${tool === 'circle' ? 'active' : ''}`} onClick={() => setTool('circle')} title="Circle (C)">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/></svg>
+          <Circle size={16} />
         </button>
         <button className={`canvas-tool ${tool === 'line' ? 'active' : ''}`} onClick={() => setTool('line')} title="Line (L)">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><line x1="2" y1="14" x2="14" y2="2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          <LineSegment size={16} />
         </button>
       </div>
       {/* Distance labels (Alt key) */}

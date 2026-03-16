@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useRenderSettings, DEFAULT_RENDER_SETTINGS, type RenderSettings } from '../store/useRenderSettings'
+import { GearSix } from '@phosphor-icons/react'
 
 type Vec2Key = 'sideSmooth' | 'normalEdgeThreshold' | 'idEdgeThreshold'
 type Vec3Key = 'lightDir' | 'warmTone' | 'edgeColor' | 'bgColor'
@@ -81,10 +82,7 @@ export default function RenderSettingsPanel() {
   if (!open) {
     return (
       <button className="rs-toggle" onClick={() => setOpen(true)} title="Render Settings">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" strokeWidth="1.3"/>
-          <path d="M13.5 8c0-.3-.2-.6-.4-.8l1-1.5-.8-1.4-1.7.4c-.4-.3-.8-.5-1.3-.6L9.8 2.5H8.2l-.5 1.6c-.5.1-.9.3-1.3.6l-1.7-.4-.8 1.4 1 1.5c-.2.2-.3.5-.4.8H3v1.6h1.5c.1.3.2.6.4.8l-1 1.5.8 1.4 1.7-.4c.4.3.8.5 1.3.6l.5 1.6h1.6l.5-1.6c.5-.1.9-.3 1.3-.6l1.7.4.8-1.4-1-1.5c.2-.2.3-.5.4-.8H13V8z" stroke="currentColor" strokeWidth="1.3"/>
-        </svg>
+        <GearSix size={16} />
       </button>
     )
   }

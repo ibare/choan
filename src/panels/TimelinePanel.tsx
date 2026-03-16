@@ -11,6 +11,7 @@ import type { AnimationClip, AnimationBundle, AnimatableProperty } from '../anim
 import type { KeyframeAnimator } from '../animation/keyframeEngine'
 import type { ChoanElement } from '../store/useChoanStore'
 import { nanoid } from '../canvas/nanoid'
+import { Play, Pause, Stop, Plus, X } from '@phosphor-icons/react'
 
 const TRACK_HEIGHT = 26
 const LEFT_WIDTH = 190
@@ -460,10 +461,10 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       <div className="timeline-header-bar">
         <div className="playback-controls">
           <button className="btn-small" onClick={handlePlayPause} title={previewState === 'playing' ? 'Pause' : 'Play'}>
-            {previewState === 'playing' ? '⏸' : '▶'}
+            {previewState === 'playing' ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
           </button>
-          <button className="btn-small" onClick={handleStop} title="Stop">⏹</button>
-          <button className="btn-small" onClick={handleCreateBundle} title="New Animation">+</button>
+          <button className="btn-small" onClick={handleStop} title="Stop"><Stop size={14} weight="fill" /></button>
+          <button className="btn-small" onClick={handleCreateBundle} title="New Animation"><Plus size={14} /></button>
           <span className="preview-state-label">
             {previewState === 'stopped' ? 'Edit' : previewState === 'playing' ? 'Playing' : 'Paused'}
           </span>
@@ -505,7 +506,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
             <button
               className="btn-icon timeline-tab-delete"
               onClick={() => { removeAnimationBundle(currentBundleId); setViewMode({ type: 'interaction', iaId: null }) }}
-            >×</button>
+            ><X size={12} /></button>
           )}
         </div>
       </div>
@@ -543,7 +544,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
                         .filter((p) => !entry.clip.tracks.some((t) => t.property === p))
                         .map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
-                    <button className="btn-icon" onClick={() => removeClipFromBundle(entry.bundleId!, entry.clip.id)}>×</button>
+                    <button className="btn-icon" onClick={() => removeClipFromBundle(entry.bundleId!, entry.clip.id)}><X size={10} /></button>
                   </div>
                 )}
               </div>
@@ -557,7 +558,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
                     {formatValue(track.property as AnimatableProperty, track.keyframes[track.keyframes.length - 1]?.value)}
                   </span>
                   {entry.bundleId && (
-                    <button className="btn-icon tl-track-del" onClick={() => handleRemoveTrack(entry.clip.id, ti, entry.bundleId)}>×</button>
+                    <button className="btn-icon tl-track-del" onClick={() => handleRemoveTrack(entry.clip.id, ti, entry.bundleId)}><X size={10} /></button>
                   )}
                 </div>
               ))}

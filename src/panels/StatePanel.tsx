@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import type { GlobalState, Interaction, AnimationHint } from '../store/useChoanStore'
 import { nanoid } from '../canvas/nanoid'
+import { X, Plus, Play, ArrowUDownLeft } from '@phosphor-icons/react'
 
 const ANIMATION_HINTS: AnimationHint[] = [
   'fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right',
@@ -90,7 +91,7 @@ export default function StatePanel() {
           <span className="state-name">{gs.name}</span>
           <span className="state-type">{gs.type}</span>
           <span className="state-default">{String(gs.default)}</span>
-          <button className="btn-icon" onClick={() => removeGlobalState(gs.name)}>×</button>
+          <button className="btn-icon" onClick={() => removeGlobalState(gs.name)}><X size={10} /></button>
         </div>
       ))}
 
@@ -113,7 +114,7 @@ export default function StatePanel() {
           <option value="string">string</option>
           <option value="number">number</option>
         </select>
-        <button className="btn btn-small" onClick={handleAddState}>+</button>
+        <button className="btn btn-small" onClick={handleAddState}><Plus size={12} /></button>
       </div>
 
       {/* ── Interactions ── */}
@@ -129,15 +130,15 @@ export default function StatePanel() {
         return (
           <div key={ia.id} className="interaction-item">
             <div className="interaction-trigger">
-              ▶ {trigEl?.label ?? ia.trigger.elementId}.{ia.trigger.event} → {ia.trigger.stateKey} = {String(ia.trigger.value)}
+              <Play size={10} weight="fill" /> {trigEl?.label ?? ia.trigger.elementId}.{ia.trigger.event} → {ia.trigger.stateKey} = {String(ia.trigger.value)}
             </div>
             <div className="interaction-reaction">
               {bundle
-                ? <>↩ [{ia.reaction.condition}] → <strong>{bundle.name}</strong> ({ia.reaction.easing})</>
-                : <>↩ {rxEl?.label ?? ia.reaction.elementId} [{ia.reaction.condition}] → {ia.reaction.animation} ({ia.reaction.easing})</>
+                ? <><ArrowUDownLeft size={10} /> [{ia.reaction.condition}] → <strong>{bundle.name}</strong> ({ia.reaction.easing})</>
+                : <><ArrowUDownLeft size={10} /> {rxEl?.label ?? ia.reaction.elementId} [{ia.reaction.condition}] → {ia.reaction.animation} ({ia.reaction.easing})</>
               }
             </div>
-            <button className="btn-icon" onClick={() => removeInteraction(ia.id)}>×</button>
+            <button className="btn-icon" onClick={() => removeInteraction(ia.id)}><X size={10} /></button>
           </div>
         )
       })}
@@ -208,7 +209,7 @@ export default function StatePanel() {
           onChange={(e) => setReactionCondition(e.target.value)}
         />
       </div>
-      <button className="btn btn-small" onClick={handleAddInteraction}>+ Add Interaction</button>
+      <button className="btn btn-small" onClick={handleAddInteraction}><Plus size={12} /> Add Interaction</button>
     </div>
   )
 }
