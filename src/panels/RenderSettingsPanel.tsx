@@ -126,6 +126,14 @@ export default function RenderSettingsPanel() {
           onChange={(v) => set({ bgColor: v })} />
         <Slider label="Extrude Depth" value={store.extrudeDepth} min={0.01} max={0.5} step={0.005}
           onChange={(v) => set({ extrudeDepth: v })} />
+
+        <div className="rs-section">Spring Animation</div>
+        <Slider label="Stiffness" value={store.springStiffness} min={0.01} max={0.5} step={0.01}
+          onChange={(v) => set({ springStiffness: v })} />
+        <Slider label="Damping" value={store.springDamping} min={0.1} max={0.99} step={0.01}
+          onChange={(v) => set({ springDamping: v })} />
+        <Slider label="Fluidity" value={store.squashIntensity} min={0} max={3} step={0.05}
+          onChange={(v) => set({ squashIntensity: v })} />
       </div>
     </div>
   )

@@ -558,7 +558,11 @@ export default function SDFCanvas() {
 
       // Animate element positions/sizes with spring physics
       const state = useChoanStore.getState()
-      const animatedElements = animator.tick(state.elements)
+      const animatedElements = animator.tick(state.elements, {
+        stiffness: rs.springStiffness,
+        damping: rs.springDamping,
+        squashIntensity: rs.squashIntensity,
+      })
       renderer.updateScene(animatedElements, rs.extrudeDepth)
 
       renderer.render(rs)

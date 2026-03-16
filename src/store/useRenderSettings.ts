@@ -19,6 +19,11 @@ export interface RenderSettings {
   // Global
   bgColor: [number, number, number]
   extrudeDepth: number
+
+  // Spring animation
+  springStiffness: number
+  springDamping: number
+  squashIntensity: number
 }
 
 export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
@@ -35,6 +40,10 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
 
   bgColor: [0xf7 / 255, 0xf3 / 255, 0xee / 255],
   extrudeDepth: 0.05,
+
+  springStiffness: 0.15,
+  springDamping: 0.75,
+  squashIntensity: 1.75,
 }
 
 interface RenderSettingsStore extends RenderSettings {
