@@ -10,6 +10,7 @@ import { createSceneUBO, type SceneUBO } from './scene'
 import { createOverlayRenderer, buildViewProjMatrix, type OverlayRenderer } from './overlay'
 import { createGBuffer } from './fbo'
 import type { ChoanElement } from '../store/useChoanStore'
+import type { RenderSettings } from '../store/useRenderSettings'
 
 export interface SDFRenderer {
   canvas: HTMLCanvasElement
@@ -17,8 +18,8 @@ export interface SDFRenderer {
   camera: Camera
   overlay: OverlayRenderer
   resize(width: number, height: number): void
-  updateScene(elements: ChoanElement[]): void
-  render(): void
+  updateScene(elements: ChoanElement[], extrudeDepth?: number): void
+  render(settings: RenderSettings): void
   dispose(): void
 }
 
@@ -53,6 +54,13 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const uCamUp = getUniformLocation(gl, geoProgram, 'uCamUp')
   const uFovScale = getUniformLocation(gl, geoProgram, 'uFovScale')
 
+  // Toon shading uniforms
+  const uLightDir = getUniformLocation(gl, geoProgram, 'uLightDir')
+  const uShadowMul = getUniformLocation(gl, geoProgram, 'uShadowMul')
+  const uWarmTone = getUniformLocation(gl, geoProgram, 'uWarmTone')
+  const uSideDarken = getUniformLocation(gl, geoProgram, 'uSideDarken')
+  const uSideSmooth = getUniformLocation(gl, geoProgram, 'uSideSmooth')
+
   // ── Pass 2: Edge detection program (FBO textures → Canvas) ──
   const edgeProgram = createProgram(gl, RAYMARCH_VERT, EDGE_FRAG)
 
@@ -62,11 +70,8 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const uOutlineWidth = getUniformLocation(gl, edgeProgram, 'uOutlineWidth')
   const uEdgeColor = getUniformLocation(gl, edgeProgram, 'uEdgeColor')
   const uEdgeBgColor = getUniformLocation(gl, edgeProgram, 'uBgColor')
-
-  // Background color: 0xf7f3ee
-  const bgR = 0xf7 / 255
-  const bgG = 0xf3 / 255
-  const bgB = 0xee / 255
+  const uNormalEdgeThreshold = getUniformLocation(gl, edgeProgram, 'uNormalEdgeThreshold')
+  const uIdEdgeThreshold = getUniformLocation(gl, edgeProgram, 'uIdEdgeThreshold')
 
   // 2x supersampling for edge AA
   const SS = 2
@@ -116,11 +121,11 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     resizeResolve(sw, sh)
   }
 
-  function updateScene(elements: ChoanElement[]) {
-    sceneUBO.update(gl, elements, cssWidth, cssHeight)
+  function updateScene(elements: ChoanElement[], extrudeDepth?: number) {
+    sceneUBO.update(gl, elements, cssWidth, cssHeight, extrudeDepth)
   }
 
-  function render() {
+  function render(s: RenderSettings) {
     const ray = getCameraRayParams(camera)
 
     // ── Pass 1: Geometry → GBuffer (2x) ──
@@ -129,12 +134,20 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
     gl.useProgram(geoProgram)
     gl.uniform2f(uResolution, ssW, ssH)
-    gl.uniform3f(uBgColor, bgR, bgG, bgB)
+    gl.uniform3f(uBgColor, s.bgColor[0], s.bgColor[1], s.bgColor[2])
     gl.uniform3f(uCamPos, ray.ro[0], ray.ro[1], ray.ro[2])
     gl.uniform3f(uCamForward, ray.forward[0], ray.forward[1], ray.forward[2])
     gl.uniform3f(uCamRight, ray.right[0], ray.right[1], ray.right[2])
     gl.uniform3f(uCamUp, ray.up[0], ray.up[1], ray.up[2])
     gl.uniform1f(uFovScale, ray.fovScale)
+
+    // Toon shading
+    gl.uniform3f(uLightDir, s.lightDir[0], s.lightDir[1], s.lightDir[2])
+    gl.uniform1f(uShadowMul, s.shadowMul)
+    gl.uniform3f(uWarmTone, s.warmTone[0], s.warmTone[1], s.warmTone[2])
+    gl.uniform1f(uSideDarken, s.sideDarken)
+    gl.uniform2f(uSideSmooth, s.sideSmooth[0], s.sideSmooth[1])
+
     drawFullscreenQuad(gl, quad)
 
     // ── Pass 2: Edge detection → resolve FBO (2x) ──
@@ -153,9 +166,11 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform1i(uNormalIdTex, 1)
 
     gl.uniform2f(uTexelSize, 1 / ssW, 1 / ssH)
-    gl.uniform1f(uOutlineWidth, 1.0)
-    gl.uniform3f(uEdgeColor, 0.133, 0.133, 0.133)
-    gl.uniform3f(uEdgeBgColor, bgR, bgG, bgB)
+    gl.uniform1f(uOutlineWidth, s.outlineWidth)
+    gl.uniform3f(uEdgeColor, s.edgeColor[0], s.edgeColor[1], s.edgeColor[2])
+    gl.uniform3f(uEdgeBgColor, s.bgColor[0], s.bgColor[1], s.bgColor[2])
+    gl.uniform2f(uNormalEdgeThreshold, s.normalEdgeThreshold[0], s.normalEdgeThreshold[1])
+    gl.uniform2f(uIdEdgeThreshold, s.idEdgeThreshold[0], s.idEdgeThreshold[1])
 
     drawFullscreenQuad(gl, quad)
 

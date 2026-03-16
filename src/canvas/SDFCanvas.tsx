@@ -3,8 +3,9 @@ import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
 import { getCameraRayParams } from '../engine/camera'
 import { cpuRayMarch, screenToRay } from '../engine/sdf'
-import { FRUSTUM, EXTRUDE_DEPTH } from '../engine/scene'
+import { FRUSTUM } from '../engine/scene'
 import { useChoanStore } from '../store/useChoanStore'
+import { useRenderSettings } from '../store/useRenderSettings'
 import type { ChoanElement, Tool } from '../store/useChoanStore'
 import { THEME_COLORS } from './materials'
 import { nanoid } from './nanoid'
@@ -12,6 +13,7 @@ import {
   computeSnapMove, computeSnapResize, computeDistances,
   type SnapLine, type DistanceMeasure,
 } from './snapUtils'
+import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 
 const HANDLE_HIT_RADIUS = 16
 const MIN_ELEMENT_SIZE = 10
@@ -411,7 +413,8 @@ export default function SDFCanvas() {
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate)
       controls.update()
-      renderer.render()
+      const rs = useRenderSettings.getState()
+      renderer.render(rs)
 
       // ── Overlay pass ──
       const state = useChoanStore.getState()
@@ -428,7 +431,7 @@ export default function SDFCanvas() {
       if (state.selectedId) {
         const el = state.elements.find(e => e.id === state.selectedId)
         if (el) {
-          const frontZ = el.z * EXTRUDE_DEPTH + EXTRUDE_DEPTH / 2
+          const frontZ = el.z * rs.extrudeDepth + rs.extrudeDepth / 2
           ov.setZ(frontZ)
 
           const tl = p2w(el.x, el.y)
@@ -493,7 +496,7 @@ export default function SDFCanvas() {
       canvasSizeRef.current = { w, h }
       renderer.resize(w, h)
       const { elements } = useChoanStore.getState()
-      renderer.updateScene(elements)
+      renderer.updateScene(elements, useRenderSettings.getState().extrudeDepth)
     })
     ro.observe(mount)
 
@@ -508,11 +511,12 @@ export default function SDFCanvas() {
   }, [])
 
   // Sync elements → GPU
+  const extrudeDepth = useRenderSettings((s) => s.extrudeDepth)
   useEffect(() => {
     if (rendererRef.current) {
-      rendererRef.current.updateScene(elements)
+      rendererRef.current.updateScene(elements, extrudeDepth)
     }
-  }, [elements])
+  }, [elements, extrudeDepth])
 
   const effectiveCursor = tool !== 'select' ? 'crosshair' : cursor
 
@@ -553,6 +557,8 @@ export default function SDFCanvas() {
           {label.text}
         </div>
       ))}
+      {/* Render settings panel */}
+      <RenderSettingsPanel />
       {/* Color picker toolbar */}
       <div className="canvas-toolbar color-picker-toolbar">
         {THEME_COLORS.map(({ name, hex }) => (

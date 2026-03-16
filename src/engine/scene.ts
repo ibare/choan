@@ -26,7 +26,7 @@ const UBO_FLOATS = COLOR_OFFSET + MAX_OBJECTS * 4
 export interface SceneUBO {
   buffer: WebGLBuffer
   data: Float32Array
-  update(gl: WebGL2RenderingContext, elements: ChoanElement[], canvasW: number, canvasH: number): void
+  update(gl: WebGL2RenderingContext, elements: ChoanElement[], canvasW: number, canvasH: number, extrudeDepth?: number): void
   bind(gl: WebGL2RenderingContext, program: WebGLProgram): void
   dispose(gl: WebGL2RenderingContext): void
 }
@@ -44,7 +44,9 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     elements: ChoanElement[],
     canvasW: number,
     canvasH: number,
+    extrudeDepthOverride?: number,
   ) {
+    const ed = extrudeDepthOverride ?? EXTRUDE_DEPTH
     const count = Math.min(elements.length, MAX_OBJECTS)
     const aspect = canvasW / canvasH
 
@@ -85,14 +87,14 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       const pi = POS_OFFSET + i * 4
       data[pi + 0] = wx
       data[pi + 1] = wy
-      data[pi + 2] = el.z * EXTRUDE_DEPTH
+      data[pi + 2] = el.z * ed
       data[pi + 3] = shapeType
 
       // uSizeRadius[i]
       const si = SIZE_OFFSET + i * 4
       data[si + 0] = hw
       data[si + 1] = hh
-      data[si + 2] = EXTRUDE_DEPTH / 2
+      data[si + 2] = ed / 2
       data[si + 3] = radius
 
       // uColorAlpha[i]

@@ -29,6 +29,13 @@ uniform vec3 uCamRight;
 uniform vec3 uCamUp;
 uniform float uFovScale;
 
+// Toon shading parameters
+uniform vec3 uLightDir;
+uniform float uShadowMul;
+uniform vec3 uWarmTone;
+uniform float uSideDarken;
+uniform vec2 uSideSmooth;
+
 // Scene UBO (std140)
 // Layout: vec4 numObjPad, then per-object: vec4 posType, vec4 sizeRadius, vec4 colorAlpha
 #define MAX_OBJECTS ${MAX_OBJECTS}
@@ -159,20 +166,19 @@ float getObjectOpacity(float id) {
 // ─── Toon Shading ─────────────────────────────────
 
 vec3 toonShade(vec3 p, vec3 normal, vec3 rd, vec3 baseColor) {
-  vec3 lightDir = normalize(vec3(0.8, 0.6, 0.35));
+  vec3 lightDir = normalize(uLightDir);
 
   // Side face detection
   float isSide = 1.0 - abs(normal.z);
-  isSide = smoothstep(0.3, 0.7, isSide);
-  vec3 surfColor = mix(baseColor, baseColor * 0.72, isSide);
+  isSide = smoothstep(uSideSmooth.x, uSideSmooth.y, isSide);
+  vec3 surfColor = mix(baseColor, baseColor * uSideDarken, isSide);
 
   // Toon diffuse: 2-band cel shading
   float NdotL = dot(normal, lightDir);
   float fw = fwidth(NdotL);
   float toonDiff = smoothstep(-fw, fw, NdotL);
   vec3 litColor = surfColor;
-  // Strong warm shadow
-  vec3 shadowColor = surfColor * 0.52 + vec3(0.05, 0.02, 0.0);
+  vec3 shadowColor = surfColor * uShadowMul + uWarmTone;
   vec3 color = mix(shadowColor, litColor, toonDiff);
 
   return color;
@@ -221,6 +227,8 @@ uniform vec2 uTexelSize;
 uniform float uOutlineWidth;
 uniform vec3 uEdgeColor;
 uniform vec3 uBgColor;
+uniform vec2 uNormalEdgeThreshold;
+uniform vec2 uIdEdgeThreshold;
 
 // Roberts Cross on normal — detects crease and curvature edges
 float edgeNormal(vec2 uv, float scale) {
@@ -243,7 +251,7 @@ float edgeObjectId(vec2 uv, float scale) {
 
   float d1 = abs(id11 - id00);
   float d2 = abs(id10 - id01);
-  return smoothstep(0.1, 0.6, d1 + d2);
+  return smoothstep(uIdEdgeThreshold.x, uIdEdgeThreshold.y, d1 + d2);
 }
 
 void main() {
@@ -259,7 +267,7 @@ void main() {
   float normalEdge = 0.0;
   if (objectId >= 0.0) {
     normalEdge = edgeNormal(vUV, scale);
-    normalEdge = smoothstep(0.3, 0.6, normalEdge);
+    normalEdge = smoothstep(uNormalEdgeThreshold.x, uNormalEdgeThreshold.y, normalEdge);
   }
 
   float edge = clamp(idEdge + normalEdge, 0.0, 1.0);
