@@ -118,7 +118,7 @@ vec3 calcNormal(vec3 p) {
 
 // ─── Ray March ────────────────────────────────────
 
-const int MAX_STEPS = 64;
+const int MAX_STEPS = 256;
 const float MAX_DIST = 100.0;
 const float EPSILON = 0.001;
 

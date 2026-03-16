@@ -4,7 +4,7 @@ import type { ChoanElement } from '../store/useChoanStore'
 import { PALETTE } from '../canvas/materials'
 
 export const MAX_OBJECTS = 40
-export const EXTRUDE_DEPTH = 0.15
+export const EXTRUDE_DEPTH = 0.05
 export const FRUSTUM = 10
 
 // Shape type constants (match shader)
