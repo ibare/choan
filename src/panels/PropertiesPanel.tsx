@@ -1,11 +1,15 @@
+import { useState } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
-import type { ElementRole, LineStyle } from '../store/useChoanStore'
+import type { ElementRole, LineStyle, ElementTrigger } from '../store/useChoanStore'
+import { Plus, X } from '@phosphor-icons/react'
 
 const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 
 export default function PropertiesPanel() {
-  const { elements, selectedId, updateElement, removeElement, runLayout } = useChoanStore()
+  const { elements, selectedId, updateElement, removeElement, runLayout, animationBundles } = useChoanStore()
+  const [newTriggerEvent, setNewTriggerEvent] = useState<'click' | 'hover'>('click')
+  const [newTriggerBundle, setNewTriggerBundle] = useState('')
   const el = elements.find((e) => e.id === selectedId)
 
   if (!el) {
@@ -250,6 +254,44 @@ export default function PropertiesPanel() {
           onChange={(e) => updateElement(el.id, { height: Number(e.target.value) })}
         />
       </div>
+
+      {/* ── Triggers ── */}
+      <div className="sub-title" style={{ marginTop: 8 }}>Triggers</div>
+      {(el.triggers ?? []).map((trigger, i) => {
+        const bundle = animationBundles.find((b) => b.id === trigger.animationBundleId)
+        return (
+          <div key={i} className="trigger-item">
+            <span className="trigger-event">{trigger.event}</span>
+            <span className="trigger-arrow">→</span>
+            <span className="trigger-bundle">{bundle?.name ?? '?'}</span>
+            <button className="btn-icon" onClick={() => {
+              const newTriggers = (el.triggers ?? []).filter((_, idx) => idx !== i)
+              updateElement(el.id, { triggers: newTriggers })
+            }}><X size={10} /></button>
+          </div>
+        )
+      })}
+      {animationBundles.length > 0 && (
+        <div className="add-row" style={{ marginTop: 4 }}>
+          <select className="field-select" style={{ flex: 1 }} value={newTriggerEvent} onChange={(e) => setNewTriggerEvent(e.target.value as 'click' | 'hover')}>
+            <option value="click">click</option>
+            <option value="hover">hover</option>
+          </select>
+          <select className="field-select" style={{ flex: 2 }} value={newTriggerBundle} onChange={(e) => setNewTriggerBundle(e.target.value)}>
+            <option value="">animation...</option>
+            {animationBundles.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+          <button className="btn btn-small" onClick={() => {
+            if (!newTriggerBundle) return
+            const newTrigger: ElementTrigger = { event: newTriggerEvent, animationBundleId: newTriggerBundle }
+            updateElement(el.id, { triggers: [...(el.triggers ?? []), newTrigger] })
+            setNewTriggerBundle('')
+          }}><Plus size={12} /></button>
+        </div>
+      )}
+      {animationBundles.length === 0 && (
+        <div className="panel-empty">타임라인에서 애니메이션을 먼저 만드세요.</div>
+      )}
 
       <button
         className="btn btn-danger"

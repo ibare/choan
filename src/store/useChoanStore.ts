@@ -6,15 +6,11 @@ export type ElementRole = 'container' | 'image' | 'button' | 'input' | 'card'
 export type ElementType = 'rectangle' | 'circle' | 'line'
 export type LineStyle = 'solid' | 'dashed'
 export type LineDirection = 'horizontal' | 'vertical' | 'diagonal'
-export type AnimationHint =
-  | 'fade'
-  | 'slide-up'
-  | 'slide-down'
-  | 'slide-left'
-  | 'slide-right'
-  | 'spring'
-  | 'scale-in'
-  | 'scale-out'
+
+export interface ElementTrigger {
+  event: 'click' | 'hover'
+  animationBundleId: string
+}
 
 export interface ChoanElement {
   id: string
@@ -39,33 +35,8 @@ export interface ChoanElement {
   layoutDirection?: 'free' | 'row' | 'column'
   layoutGap?: number
   layoutPadding?: number
-}
-
-export interface GlobalState {
-  name: string
-  type: 'boolean' | 'string' | 'number'
-  default: boolean | string | number
-}
-
-export interface Trigger {
-  elementId: string
-  event: 'click' | 'hover' | 'focus'
-  stateKey: string
-  value: boolean | string | number
-}
-
-export interface Reaction {
-  elementId: string
-  condition: string
-  animation: AnimationHint
-  easing: 'spring' | 'ease' | 'linear'
-  animationBundleId?: string  // reference to AnimationBundle (overrides preset)
-}
-
-export interface Interaction {
-  id: string
-  trigger: Trigger
-  reaction: Reaction
+  // triggers: event → animation bundle direct link
+  triggers?: ElementTrigger[]
 }
 
 export type Tool = 'select' | 'rectangle' | 'circle' | 'line'
@@ -77,12 +48,9 @@ interface ChoanStore {
   tool: Tool
   drawColor: number
 
-  // state machine data
-  globalStates: GlobalState[]
-  interactions: Interaction[]
+  // animation data
   animationClips: AnimationClip[]
   animationBundles: AnimationBundle[]
-  currentStateValues: Record<string, boolean | string | number>
 
   // element counters for sequential naming
   elementCounters: Record<string, number>
@@ -101,14 +69,6 @@ interface ChoanStore {
   setTool: (tool: Tool) => void
   setDrawColor: (color: number) => void
 
-  // state/interaction
-  addGlobalState: (state: GlobalState) => void
-  updateGlobalState: (name: string, patch: Partial<GlobalState>) => void
-  removeGlobalState: (name: string) => void
-  addInteraction: (interaction: Interaction) => void
-  updateInteraction: (id: string, patch: Partial<Interaction>) => void
-  removeInteraction: (id: string) => void
-
   // animation clips
   addAnimationClip: (clip: AnimationClip) => void
   updateAnimationClip: (clipId: string, patch: Partial<AnimationClip>) => void
@@ -122,12 +82,8 @@ interface ChoanStore {
   updateClipInBundle: (bundleId: string, clipId: string, patch: Partial<AnimationClip>) => void
   removeClipFromBundle: (bundleId: string, clipId: string) => void
 
-  // runtime state values (preview mode)
-  setStateValue: (key: string, value: boolean | string | number) => void
-  resetStateValues: () => void
-
   // file operations
-  loadFile: (data: { elements: ChoanElement[]; globalStates: GlobalState[]; interactions: Interaction[]; animationClips?: AnimationClip[]; animationBundles?: AnimationBundle[] }) => void
+  loadFile: (data: { elements: ChoanElement[]; animationClips?: AnimationClip[]; animationBundles?: AnimationBundle[] }) => void
   reset: () => void
 }
 
@@ -143,7 +99,6 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
   const childZ = container.z + 1
   const childIds = new Set(children.map((c) => c.id))
 
-  // Free mode: only update z, keep positions as-is
   if (direction === 'free') {
     return elements.map((e) =>
       childIds.has(e.id) ? { ...e, z: childZ } : e,
@@ -177,11 +132,8 @@ const initialState = {
   selectedId: null as string | null,
   tool: 'select' as Tool,
   drawColor: 0xE6F8F0,
-  globalStates: [] as GlobalState[],
-  interactions: [] as Interaction[],
   animationClips: [] as AnimationClip[],
   animationBundles: [] as AnimationBundle[],
-  currentStateValues: {} as Record<string, boolean | string | number>,
   elementCounters: {} as Record<string, number>,
 }
 
@@ -191,7 +143,6 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
   addElement: (el) =>
     set((s) => {
       const base = LABEL_MAP[el.type] ?? el.type
-      // Auto-label with sequential number if label matches generic default
       if (el.label === base || el.label === 'Box' || el.label === 'Circle' || el.label === 'Line') {
         const next = (s.elementCounters[el.type] ?? 0) + 1
         return {
@@ -250,38 +201,7 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
     set((s) => ({ elements: applyLayout(s.elements, containerId) })),
 
   setTool: (tool) => set({ tool }),
-
   setDrawColor: (color) => set({ drawColor: color }),
-
-  addGlobalState: (state) =>
-    set((s) => ({ globalStates: [...s.globalStates, state] })),
-
-  updateGlobalState: (name, patch) =>
-    set((s) => ({
-      globalStates: s.globalStates.map((gs) =>
-        gs.name === name ? { ...gs, ...patch } : gs
-      ),
-    })),
-
-  removeGlobalState: (name) =>
-    set((s) => ({
-      globalStates: s.globalStates.filter((gs) => gs.name !== name),
-    })),
-
-  addInteraction: (interaction) =>
-    set((s) => ({ interactions: [...s.interactions, interaction] })),
-
-  updateInteraction: (id, patch) =>
-    set((s) => ({
-      interactions: s.interactions.map((i) =>
-        i.id === id ? { ...i, ...patch } : i
-      ),
-    })),
-
-  removeInteraction: (id) =>
-    set((s) => ({
-      interactions: s.interactions.filter((i) => i.id !== id),
-    })),
 
   addAnimationClip: (clip) =>
     set((s) => ({ animationClips: [...s.animationClips, clip] })),
@@ -311,11 +231,11 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
   removeAnimationBundle: (id) =>
     set((s) => ({
       animationBundles: s.animationBundles.filter((b) => b.id !== id),
-      // Clear references in interactions
-      interactions: s.interactions.map((ia) =>
-        ia.reaction.animationBundleId === id
-          ? { ...ia, reaction: { ...ia.reaction, animationBundleId: undefined } }
-          : ia,
+      // Clear trigger references in elements
+      elements: s.elements.map((el) =>
+        el.triggers?.some((t) => t.animationBundleId === id)
+          ? { ...el, triggers: el.triggers.filter((t) => t.animationBundleId !== id) }
+          : el,
       ),
     })),
 
@@ -344,31 +264,13 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
       ),
     })),
 
-  setStateValue: (key, value) =>
-    set((s) => ({
-      currentStateValues: { ...s.currentStateValues, [key]: value },
-    })),
-
-  resetStateValues: () =>
-    set((s) => {
-      const values: Record<string, boolean | string | number> = {}
-      for (const gs of s.globalStates) {
-        values[gs.name] = gs.default
-      }
-      return { currentStateValues: values }
-    }),
-
-  loadFile: ({ elements, globalStates, interactions, animationClips, animationBundles }) => {
-    // After loading, run layout on all containers
+  loadFile: ({ elements, animationClips, animationBundles }) => {
     let updated = elements
     const containers = updated.filter((e) => e.role === 'container')
     for (const c of containers) {
       updated = applyLayout(updated, c.id)
     }
-    const values: Record<string, boolean | string | number> = {}
-    for (const gs of globalStates) values[gs.name] = gs.default
 
-    // Restore element counters from existing labels
     const counters: Record<string, number> = {}
     for (const el of updated) {
       const match = el.label.match(/^(?:Box|Circle|Line)\s+(\d+)$/)
@@ -379,10 +281,10 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
     }
 
     set({
-      elements: updated, globalStates, interactions,
+      elements: updated,
       animationClips: animationClips ?? [],
       animationBundles: animationBundles ?? [],
-      currentStateValues: values, selectedId: null,
+      selectedId: null,
       elementCounters: counters,
     })
   },

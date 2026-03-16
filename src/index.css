@@ -98,6 +98,15 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 .btn-danger { border-color: var(--danger); color: var(--danger); background: transparent; width: 100%; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; }
 .btn-danger:hover { background: #ffe0e0; }
 
+/* Trigger items in PropertiesPanel */
+.trigger-item {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 0; font-size: 10px;
+}
+.trigger-event { font-weight: 600; color: var(--text); }
+.trigger-arrow { color: var(--text-muted); }
+.trigger-bundle { color: var(--accent); flex: 1; }
+
 .btn-small { padding: 3px 8px; font-size: 11px; border: 1.5px solid var(--border); background: var(--surface); border-radius: 5px; cursor: pointer; color: var(--text); }
 .btn-small:hover { border-color: var(--accent); color: var(--accent); }
 

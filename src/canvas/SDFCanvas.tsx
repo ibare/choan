@@ -16,7 +16,6 @@ import {
 import { detectContainment } from '../layout/containment'
 import { createLayoutAnimator } from '../layout/animator'
 import { createKeyframeAnimator } from '../animation/keyframeEngine'
-import { createStateMachineRuntime, type StateMachineRuntime } from '../animation/stateMachine'
 import { usePreviewStore } from '../store/usePreviewStore'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import { Cursor, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
@@ -250,13 +249,24 @@ export default function SDFCanvas() {
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
 
-      // Preview mode: intercept clicks as state machine events
+      // Preview mode: trigger animations directly from element triggers
       const previewState = usePreviewStore.getState().previewState
       if (previewState === 'playing') {
         const hitId = raycastElement(e.clientX, e.clientY)
         if (hitId) {
-          const sm = (window as unknown as Record<string, unknown>).__choanSM as StateMachineRuntime | undefined
-          sm?.handleEvent(hitId, 'click')
+          const { elements: els, animationBundles: bundles } = useChoanStore.getState()
+          const el = els.find((el) => el.id === hitId)
+          const kf = (window as unknown as Record<string, unknown>).__choanKF as ReturnType<typeof createKeyframeAnimator> | undefined
+          for (const trigger of el?.triggers ?? []) {
+            if (trigger.event === 'click') {
+              const bundle = bundles.find((b) => b.id === trigger.animationBundleId)
+              if (bundle && kf) {
+                for (const clip of bundle.clips) {
+                  kf.start(clip, clip.id, performance.now())
+                }
+              }
+            }
+          }
         }
         return
       }
@@ -710,16 +720,7 @@ export default function SDFCanvas() {
 
     const animator = createLayoutAnimator()
     const kfAnimator = createKeyframeAnimator()
-    const smRuntime = createStateMachineRuntime({
-      getInteractions: () => useChoanStore.getState().interactions,
-      getElements: () => useChoanStore.getState().elements,
-      getAnimationClips: () => useChoanStore.getState().animationClips,
-      getAnimationBundles: () => useChoanStore.getState().animationBundles,
-      getStateValues: () => useChoanStore.getState().currentStateValues,
-      setStateValue: (k, v) => useChoanStore.getState().setStateValue(k, v),
-    }, kfAnimator)
-    // Expose for pointer event handlers
-    ;(window as unknown as Record<string, unknown>).__choanSM = smRuntime
+    // Expose keyframe animator for pointer event handlers
     ;(window as unknown as Record<string, unknown>).__choanKF = kfAnimator
 
     const animate = () => {
@@ -901,7 +902,6 @@ export default function SDFCanvas() {
       kfAnimator.stopAll()
       rendererRef.current = null
       controlsRef.current = null
-      delete (window as unknown as Record<string, unknown>).__choanSM
       delete (window as unknown as Record<string, unknown>).__choanKF
     }
   }, [])

@@ -1,7 +1,6 @@
 import { useRef, useState, useCallback } from 'react'
 import SDFCanvas from './canvas/SDFCanvas'
 import PropertiesPanel from './panels/PropertiesPanel'
-import StatePanel from './panels/StatePanel'
 import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
@@ -9,7 +8,7 @@ import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
 
 export default function App() {
-  const { elements, globalStates, interactions, animationBundles, loadFile, reset } = useChoanStore()
+  const { elements, animationBundles, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -36,7 +35,7 @@ export default function App() {
   }, [])
 
   const handleExport = async () => {
-    const md = toMarkdown(elements, globalStates, interactions, animationBundles)
+    const md = toMarkdown(elements, animationBundles)
     try {
       await navigator.clipboard.writeText(md)
       setExportMsg('클립보드에 복사됨!')
@@ -54,7 +53,7 @@ export default function App() {
   }
 
   const handleSave = () => {
-    const content = serialize(projectName, elements, globalStates, interactions, animationBundles)
+    const content = serialize(projectName, elements, animationBundles)
     const blob = new Blob([content], { type: 'text/yaml' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -74,8 +73,6 @@ export default function App() {
         setProjectName(result.name)
         loadFile({
           elements: result.elements,
-          globalStates: result.globalStates,
-          interactions: result.interactions,
           animationBundles: result.animationBundles,
         })
       } catch (err) {
@@ -121,8 +118,6 @@ export default function App() {
         </div>
         <div className="right-panel">
           <PropertiesPanel />
-          <div className="panel-divider" />
-          <StatePanel />
         </div>
       </div>
 

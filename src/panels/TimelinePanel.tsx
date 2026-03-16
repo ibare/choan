@@ -5,8 +5,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
-import { resolvePreset } from '../animation/presets'
-import { createTimeline2D, type Timeline2D, type DisplayLayer, type DisplayTrack, type RenderOptions, type TimelineHit } from '../engine/timeline2d'
+import { createTimeline2D, type Timeline2D, type DisplayLayer, type RenderOptions, type TimelineHit } from '../engine/timeline2d'
 import type { AnimationClip, AnimationBundle, AnimatableProperty } from '../animation/types'
 import type { KeyframeAnimator } from '../animation/keyframeEngine'
 import type { ChoanElement } from '../store/useChoanStore'
@@ -56,30 +55,12 @@ function buildLayerTree(elements: ChoanElement[]): Array<{ el: ChoanElement; dep
   return result
 }
 
-function resolveClipForInteraction(
-  interactionId: string,
-  customClips: AnimationClip[],
-  elements: ChoanElement[],
-  interactions: ReturnType<typeof useChoanStore.getState>['interactions'],
-): AnimationClip | null {
-  const ia = interactions.find((i) => i.id === interactionId)
-  if (!ia) return null
-  const custom = customClips.find((c) => c.id === `clip_${ia.id}`)
-  if (custom) return custom
-  const el = elements.find((e) => e.id === ia.reaction.elementId)
-  if (!el) return null
-  const preset = resolvePreset(ia.reaction.animation, el, ia.reaction.easing)
-  return { ...preset, id: `clip_${ia.id}` }
-}
-
 function formatValue(prop: AnimatableProperty, value: number | undefined): string {
   if (value === undefined) return '?'
   if (prop === 'color') return `#${value.toString(16).padStart(6, '0')}`
   if (prop === 'opacity' || prop === 'radius') return value.toFixed(2)
   return String(Math.round(value))
 }
-
-type ViewMode = { type: 'bundle'; bundleId: string } | { type: 'interaction'; iaId: string | null }
 
 interface TimelinePanelProps {
   visible: boolean
@@ -96,14 +77,14 @@ interface DisplayClipEntry {
 
 export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   const {
-    elements, interactions, animationClips, animationBundles,
+    elements, animationClips, animationBundles,
     addAnimationClip, updateAnimationClip,
     addAnimationBundle, updateAnimationBundle, removeAnimationBundle,
     addClipToBundle, updateClipInBundle, removeClipFromBundle,
   } = useChoanStore()
   const { previewState, play, pause, stop } = usePreviewStore()
 
-  const [viewMode, setViewMode] = useState<ViewMode>({ type: 'interaction', iaId: null })
+  const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null)
   const [editingBundleName, setEditingBundleName] = useState<string | null>(null)
   const [bundleNameDraft, setBundleNameDraft] = useState('')
   const [editingKf, setEditingKf] = useState<{
@@ -139,14 +120,19 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       clips,
     }
     addAnimationBundle(bundle)
-    setViewMode({ type: 'bundle', bundleId: bundle.id })
+    setSelectedBundleId(bundle.id)
   }
 
   // ── Build display clips ──
   let displayClips: DisplayClipEntry[] = []
 
-  if (viewMode.type === 'bundle') {
-    const bundle = animationBundles.find((b) => b.id === viewMode.bundleId)
+  // Auto-select first bundle if none selected
+  const activeBundleId = selectedBundleId && animationBundles.some((b) => b.id === selectedBundleId)
+    ? selectedBundleId
+    : animationBundles[0]?.id ?? null
+
+  if (activeBundleId) {
+    const bundle = animationBundles.find((b) => b.id === activeBundleId)
     if (bundle) {
       const layerTree = buildLayerTree(elements)
       for (const { el, depth } of layerTree) {
@@ -154,18 +140,6 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
         if (clip) {
           displayClips.push({ clip, label: el.label, depth, bundleId: bundle.id })
         }
-      }
-    }
-  } else {
-    const presetInteractions = interactions.filter((ia) => !ia.reaction.animationBundleId)
-    const filtered = viewMode.iaId
-      ? presetInteractions.filter((ia) => ia.id === viewMode.iaId)
-      : presetInteractions
-    for (const ia of filtered) {
-      const clip = resolveClipForInteraction(ia.id, animationClips, elements, interactions)
-      if (clip) {
-        const trigEl = elements.find((e) => e.id === ia.trigger.elementId)
-        displayClips.push({ clip, label: `${trigEl?.label ?? '?'}.${ia.trigger.event}`, depth: 0 })
       }
     }
   }
@@ -394,12 +368,10 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   // ── Playback ──
   const handlePlayPause = () => {
     if (previewState === 'playing') { pause(); return }
-    if (previewState === 'stopped') useChoanStore.getState().resetStateValues()
     play()
   }
   const handleStop = () => {
     stop()
-    useChoanStore.getState().resetStateValues()
     const kf = (window as unknown as Record<string, unknown>).__choanKF as KeyframeAnimator | undefined
     kf?.stopAll()
   }
@@ -419,9 +391,6 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     mutateClip(clipId, bundleId, { tracks: newTracks })
   }
 
-  const presetInteractions = interactions.filter((ia) => !ia.reaction.animationBundleId)
-  const isBundleView = viewMode.type === 'bundle'
-  const currentBundleId = isBundleView ? viewMode.bundleId : undefined
 
   // ── Canvas init + render ──
   useEffect(() => {
@@ -485,27 +454,18 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
             ) : (
               <button
                 key={b.id}
-                className={`btn-small ${viewMode.type === 'bundle' && viewMode.bundleId === b.id ? 'active' : ''}`}
-                onClick={() => setViewMode({ type: 'bundle', bundleId: b.id })}
+                className={`btn-small ${activeBundleId === b.id ? 'active' : ''}`}
+                onClick={() => setSelectedBundleId(b.id)}
                 onDoubleClick={() => startEditBundleName(b.id, b.name)}
               >
                 {b.name}
               </button>
             )
           ))}
-          {presetInteractions.length > 0 && animationBundles.length > 0 && (
-            <span className="timeline-tab-divider">|</span>
-          )}
-          {presetInteractions.length > 0 && (
-            <button
-              className={`btn-small ${viewMode.type === 'interaction' ? 'active' : ''}`}
-              onClick={() => setViewMode({ type: 'interaction', iaId: null })}
-            >Presets</button>
-          )}
-          {isBundleView && currentBundleId && (
+          {activeBundleId && (
             <button
               className="btn-icon timeline-tab-delete"
-              onClick={() => { removeAnimationBundle(currentBundleId); setViewMode({ type: 'interaction', iaId: null }) }}
+              onClick={() => { removeAnimationBundle(activeBundleId); setSelectedBundleId(null) }}
             ><X size={12} /></button>
           )}
         </div>
