@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState } from 'react'
 import SDFCanvas from './canvas/SDFCanvas'
 import PropertiesPanel from './panels/PropertiesPanel'
 import StatePanel from './panels/StatePanel'
@@ -12,20 +12,7 @@ export default function App() {
   const { elements, globalStates, interactions, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
-  const [timelineVisible, setTimelineVisible] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-      if (e.key === 't' || e.key === 'T') {
-        if (!e.ctrlKey && !e.metaKey) setTimelineVisible((v) => !v)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
 
   const handleExport = async () => {
     const md = toMarkdown(elements, globalStates, interactions)
@@ -102,7 +89,7 @@ export default function App() {
           <div className="canvas-area">
             <SDFCanvas />
           </div>
-          <TimelinePanel visible={timelineVisible} />
+          <TimelinePanel visible />
         </div>
         <div className="right-panel">
           <PropertiesPanel />
