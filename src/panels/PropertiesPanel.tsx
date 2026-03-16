@@ -5,7 +5,7 @@ const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 
 export default function PropertiesPanel() {
-  const { elements, selectedId, updateElement, removeElement } = useChoanStore()
+  const { elements, selectedId, updateElement, removeElement, runLayout } = useChoanStore()
   const el = elements.find((e) => e.id === selectedId)
 
   if (!el) {
@@ -15,6 +15,29 @@ export default function PropertiesPanel() {
         <p className="panel-empty">선택된 요소 없음</p>
       </div>
     )
+  }
+
+  const isChild = !!el.parentId
+  const isContainer = el.role === 'container'
+  const childCount = isContainer ? elements.filter((e) => e.parentId === el.id).length : 0
+  const parentEl = isChild ? elements.find((e) => e.id === el.parentId) : null
+
+  const handleContainerProp = (patch: Record<string, unknown>) => {
+    updateElement(el.id, patch)
+    // runLayout after state settles
+    setTimeout(() => useChoanStore.getState().runLayout(el.id), 0)
+  }
+
+  const handleRoleChange = (newRole: ElementRole) => {
+    const oldRole = el.role
+    updateElement(el.id, { role: newRole })
+    // If changing away from container, orphan children
+    if (oldRole === 'container' && newRole !== 'container') {
+      const children = elements.filter((e) => e.parentId === el.id)
+      for (const child of children) {
+        updateElement(child.id, { parentId: undefined })
+      }
+    }
   }
 
   return (
@@ -37,10 +60,65 @@ export default function PropertiesPanel() {
           <select
             className="field-select"
             value={el.role ?? 'container'}
-            onChange={(e) => updateElement(el.id, { role: e.target.value as ElementRole })}
+            onChange={(e) => handleRoleChange(e.target.value as ElementRole)}
           >
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
+        </>
+      )}
+
+      {/* Container layout properties */}
+      {isContainer && (
+        <>
+          <div className="sub-title">Container Layout</div>
+
+          <label className="field-label">Direction</label>
+          <select
+            className="field-select"
+            value={el.layoutDirection ?? 'column'}
+            onChange={(e) => handleContainerProp({ layoutDirection: e.target.value })}
+          >
+            <option value="column">Column</option>
+            <option value="row">Row</option>
+          </select>
+
+          <label className="field-label">Gap</label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              className="field-input"
+              type="number"
+              min={0}
+              style={{ width: 60 }}
+              value={el.layoutGap ?? 8}
+              onChange={(e) => handleContainerProp({ layoutGap: Math.max(0, Number(e.target.value)) })}
+            />
+            <span style={{ fontSize: 11, color: '#888' }}>px</span>
+          </div>
+
+          <label className="field-label">Padding</label>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input
+              className="field-input"
+              type="number"
+              min={0}
+              style={{ width: 60 }}
+              value={el.layoutPadding ?? 8}
+              onChange={(e) => handleContainerProp({ layoutPadding: Math.max(0, Number(e.target.value)) })}
+            />
+            <span style={{ fontSize: 11, color: '#888' }}>px</span>
+          </div>
+
+          <label className="field-label">Children</label>
+          <div className="field-value">{childCount} elements</div>
+        </>
+      )}
+
+      {/* Child indicator */}
+      {isChild && parentEl && (
+        <>
+          <div className="sub-title">Layout</div>
+          <label className="field-label">Parent</label>
+          <div className="field-value">{parentEl.label}</div>
         </>
       )}
 
@@ -82,14 +160,18 @@ export default function PropertiesPanel() {
         </>
       )}
 
-      <label className="field-label">Z (Depth)</label>
+      <label className="field-label">Z (Depth){isChild ? ' — auto' : ''}</label>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input
           className="field-input"
           type="number"
           style={{ width: 60 }}
           value={el.z}
-          onChange={(e) => updateElement(el.id, { z: Number(e.target.value) })}
+          disabled={isChild}
+          onChange={(e) => {
+            updateElement(el.id, { z: Number(e.target.value) })
+            if (isContainer) setTimeout(() => useChoanStore.getState().runLayout(el.id), 0)
+          }}
         />
         <input
           type="range"
@@ -97,8 +179,12 @@ export default function PropertiesPanel() {
           max={10}
           step={1}
           value={el.z}
+          disabled={isChild}
           style={{ flex: 1 }}
-          onChange={(e) => updateElement(el.id, { z: Number(e.target.value) })}
+          onChange={(e) => {
+            updateElement(el.id, { z: Number(e.target.value) })
+            if (isContainer) setTimeout(() => useChoanStore.getState().runLayout(el.id), 0)
+          }}
         />
       </div>
 
@@ -116,7 +202,7 @@ export default function PropertiesPanel() {
         <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round(el.opacity * 100)}%</span>
       </div>
 
-      <label className="field-label">Position</label>
+      <label className="field-label">Position{isChild ? ' — managed' : ''}</label>
       <div style={{ display: 'flex', gap: 4 }}>
         <input
           className="field-input"
@@ -124,6 +210,7 @@ export default function PropertiesPanel() {
           placeholder="X"
           style={{ width: '50%' }}
           value={Math.round(el.x)}
+          disabled={isChild}
           onChange={(e) => updateElement(el.id, { x: Number(e.target.value) })}
         />
         <input
@@ -132,11 +219,12 @@ export default function PropertiesPanel() {
           placeholder="Y"
           style={{ width: '50%' }}
           value={Math.round(el.y)}
+          disabled={isChild}
           onChange={(e) => updateElement(el.id, { y: Number(e.target.value) })}
         />
       </div>
 
-      <label className="field-label">Size</label>
+      <label className="field-label">Size{isChild ? ' — managed' : ''}</label>
       <div style={{ display: 'flex', gap: 4 }}>
         <input
           className="field-input"
@@ -144,6 +232,7 @@ export default function PropertiesPanel() {
           placeholder="W"
           style={{ width: '50%' }}
           value={Math.round(el.width)}
+          disabled={isChild}
           onChange={(e) => updateElement(el.id, { width: Number(e.target.value) })}
         />
         <input
@@ -152,6 +241,7 @@ export default function PropertiesPanel() {
           placeholder="H"
           style={{ width: '50%' }}
           value={Math.round(el.height)}
+          disabled={isChild}
           onChange={(e) => updateElement(el.id, { height: Number(e.target.value) })}
         />
       </div>

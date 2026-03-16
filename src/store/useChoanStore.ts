@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { computeAutoLayout } from '../layout/autoLayout'
 
 export type ElementRole = 'container' | 'image' | 'button' | 'input' | 'card'
 export type ElementType = 'rectangle' | 'circle' | 'line'
@@ -31,6 +32,12 @@ export interface ChoanElement {
   lineStyle?: LineStyle
   lineDirection?: LineDirection
   hasArrow?: boolean
+  // container hierarchy
+  parentId?: string
+  // container layout (only meaningful when role === 'container')
+  layoutDirection?: 'row' | 'column'
+  layoutGap?: number
+  layoutPadding?: number
 }
 
 export interface GlobalState {
@@ -78,6 +85,10 @@ interface ChoanStore {
   removeElement: (id: string) => void
   selectElement: (id: string | null) => void
 
+  // container operations
+  reparentElement: (childId: string, parentId: string | null) => void
+  runLayout: (containerId: string) => void
+
   // tool & view
   setTool: (tool: Tool) => void
   setDrawColor: (color: number) => void
@@ -95,6 +106,33 @@ interface ChoanStore {
   reset: () => void
 }
 
+// Helper: apply auto-layout to a container's children (pure state transform)
+function applyLayout(elements: ChoanElement[], containerId: string): ChoanElement[] {
+  const container = elements.find((e) => e.id === containerId)
+  if (!container) return elements
+
+  const children = elements.filter((e) => e.parentId === containerId)
+  if (children.length === 0) return elements
+
+  const positions = computeAutoLayout({
+    container: { x: container.x, y: container.y, width: container.width, height: container.height },
+    direction: container.layoutDirection ?? 'column',
+    gap: container.layoutGap ?? 8,
+    padding: container.layoutPadding ?? 8,
+    childCount: children.length,
+  })
+
+  const childZ = container.z + 1
+  const childIds = new Set(children.map((c) => c.id))
+
+  return elements.map((e) => {
+    if (!childIds.has(e.id)) return e
+    const idx = children.indexOf(e)
+    const pos = positions[idx]
+    return { ...e, x: pos.x, y: pos.y, width: pos.width, height: pos.height, z: childZ }
+  })
+}
+
 const initialState = {
   elements: [] as ChoanElement[],
   selectedId: null as string | null,
@@ -104,7 +142,7 @@ const initialState = {
   interactions: [] as Interaction[],
 }
 
-export const useChoanStore = create<ChoanStore>((set) => ({
+export const useChoanStore = create<ChoanStore>((set, get) => ({
   ...initialState,
 
   addElement: (el) =>
@@ -116,12 +154,41 @@ export const useChoanStore = create<ChoanStore>((set) => ({
     })),
 
   removeElement: (id) =>
-    set((s) => ({
-      elements: s.elements.filter((e) => e.id !== id),
-      selectedId: s.selectedId === id ? null : s.selectedId,
-    })),
+    set((s) => {
+      const el = s.elements.find((e) => e.id === id)
+      let updated = s.elements.filter((e) => e.id !== id)
+
+      if (el?.role === 'container') {
+        // Orphan children
+        updated = updated.map((e) =>
+          e.parentId === id ? { ...e, parentId: undefined } : e,
+        )
+      } else if (el?.parentId) {
+        // Re-run layout on parent after removing child
+        updated = applyLayout(updated, el.parentId)
+      }
+
+      return {
+        elements: updated,
+        selectedId: s.selectedId === id ? null : s.selectedId,
+      }
+    }),
 
   selectElement: (id) => set({ selectedId: id }),
+
+  reparentElement: (childId, parentId) =>
+    set((s) => {
+      let updated = s.elements.map((e) =>
+        e.id === childId ? { ...e, parentId: parentId ?? undefined } : e,
+      )
+      if (parentId) {
+        updated = applyLayout(updated, parentId)
+      }
+      return { elements: updated }
+    }),
+
+  runLayout: (containerId) =>
+    set((s) => ({ elements: applyLayout(s.elements, containerId) })),
 
   setTool: (tool) => set({ tool }),
 
@@ -157,8 +224,15 @@ export const useChoanStore = create<ChoanStore>((set) => ({
       interactions: s.interactions.filter((i) => i.id !== id),
     })),
 
-  loadFile: ({ elements, globalStates, interactions }) =>
-    set({ elements, globalStates, interactions, selectedId: null }),
+  loadFile: ({ elements, globalStates, interactions }) => {
+    // After loading, run layout on all containers
+    let updated = elements
+    const containers = updated.filter((e) => e.role === 'container')
+    for (const c of containers) {
+      updated = applyLayout(updated, c.id)
+    }
+    set({ elements: updated, globalStates, interactions, selectedId: null })
+  },
 
   reset: () => set(initialState),
 }))

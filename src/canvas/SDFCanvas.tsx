@@ -13,6 +13,7 @@ import {
   computeSnapMove, computeSnapResize, computeDistances,
   type SnapLine, type DistanceMeasure,
 } from './snapUtils'
+import { detectContainment } from '../layout/containment'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 
 const HANDLE_HIT_RADIUS = 16
@@ -22,6 +23,45 @@ const DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   rectangle: { w: 120, h: 90 },
   circle: { w: 100, h: 100 },
   line: { w: 160, h: 6 },
+}
+
+// Collect all descendants of an element recursively
+function collectDescendants(els: ChoanElement[], parentId: string): string[] {
+  const result: string[] = []
+  for (const e of els) {
+    if (e.parentId === parentId) {
+      result.push(e.id)
+      result.push(...collectDescendants(els, e.id))
+    }
+  }
+  return result
+}
+
+// Find the root ancestor (topmost container) of an element
+function findRootAncestor(els: ChoanElement[], elId: string): string {
+  const el = els.find((e) => e.id === elId)
+  if (!el || !el.parentId) return elId
+  return findRootAncestor(els, el.parentId)
+}
+
+// Resolve the group of element IDs that move together
+function resolveGroup(els: ChoanElement[], elId: string): string[] {
+  const el = els.find((e) => e.id === elId)
+  if (!el) return [elId]
+
+  if (el.parentId) {
+    // Child: find root ancestor, move entire tree
+    const rootId = findRootAncestor(els, elId)
+    return [rootId, ...collectDescendants(els, rootId)]
+  }
+
+  if (el.role === 'container') {
+    // Container: move self + all descendants
+    return [el.id, ...collectDescendants(els, el.id)]
+  }
+
+  // Free element
+  return [el.id]
 }
 
 export default function SDFCanvas() {
@@ -53,13 +93,17 @@ export default function SDFCanvas() {
   // Drag state
   const isDraggingRef = useRef(false)
   const dragStartPixelRef = useRef({ x: 0, y: 0 })
-  const dragElStartRef = useRef({ x: 0, y: 0 })
+  const dragGroupStartRef = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const dragGroupIdsRef = useRef<string[]>([])
+  // The container ID in the group (for snap reference)
+  const dragContainerIdRef = useRef<string | null>(null)
 
   // Resize state
   const isResizingRef = useRef(false)
   const resizeStartPixelRef = useRef({ x: 0, y: 0 })
   const resizeCornerStartRef = useRef({ x: 0, y: 0 })
   const resizeAnchorRef = useRef({ x: 0, y: 0 })
+  const resizeElIdRef = useRef<string | null>(null)
 
   // Radius drag state
   const isRadiusDragRef = useRef(false)
@@ -104,8 +148,6 @@ export default function SDFCanvas() {
   }, [])
 
   const worldToScreen = useCallback((wx: number, wy: number): { x: number; y: number } | null => {
-    // Simplified: assume front view (camera at z=20 looking at z=0)
-    // For orbit camera, this is approximate but sufficient for labels
     return worldToPixel(wx, wy)
   }, [worldToPixel])
 
@@ -146,6 +188,17 @@ export default function SDFCanvas() {
         opacity: 1,
       }
       addElement(el)
+
+      // Check containment after element is added
+      setTimeout(() => {
+        const { elements: els, reparentElement } = useChoanStore.getState()
+        const containers = els.filter((e) => e.role === 'container' && e.id !== id)
+        const parentId = detectContainment(el, containers)
+        if (parentId) {
+          reparentElement(id, parentId)
+        }
+      }, 0)
+
       selectElement(id)
       setTool('select')
     },
@@ -200,8 +253,8 @@ export default function SDFCanvas() {
               return
             }
 
-            if (corner === 1) {
-              // BR handle → resize (anchor at TL)
+            if (corner === 1 && !el.parentId) {
+              // BR handle → resize (only for non-child elements)
               const cornerPositions = [
                 { x: el.x, y: el.y + el.height },
                 { x: el.x + el.width, y: el.y + el.height },
@@ -209,6 +262,7 @@ export default function SDFCanvas() {
                 { x: el.x, y: el.y },
               ]
               isResizingRef.current = true
+              resizeElIdRef.current = el.id
               const pixel = screenToPixel(e.clientX, e.clientY)
               if (pixel) resizeStartPixelRef.current = pixel
               resizeCornerStartRef.current = cornerPositions[corner]
@@ -217,17 +271,33 @@ export default function SDFCanvas() {
               return
             }
             // corners 0, 2 — reserved, no action
+            // corner 1 on child — disabled (layout manages size)
           }
         }
 
         // 2. Element select / drag
         const hitId = raycastElement(e.clientX, e.clientY)
         if (hitId && hitId === selectedId) {
+          const els = useChoanStore.getState().elements
+          const groupIds = resolveGroup(els, selectedId)
+
           isDraggingRef.current = true
+          dragGroupIdsRef.current = groupIds
           const pixel = screenToPixel(e.clientX, e.clientY)
           if (pixel) dragStartPixelRef.current = pixel
-          const el = elements.find((el) => el.id === selectedId)
-          if (el) dragElStartRef.current = { x: el.x, y: el.y }
+
+          // Store start positions for all group members
+          const startMap = new Map<string, { x: number; y: number }>()
+          for (const gid of groupIds) {
+            const ge = els.find((e) => e.id === gid)
+            if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
+          }
+          dragGroupStartRef.current = startMap
+
+          // Find the container in the group (for snap reference)
+          const el = els.find((e) => e.id === selectedId)!
+          dragContainerIdRef.current = el.parentId ?? (el.role === 'container' ? el.id : null)
+
           ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
         } else {
           selectElement(hitId)
@@ -241,7 +311,7 @@ export default function SDFCanvas() {
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      const { elements: els, selectedId: selId } = useChoanStore.getState()
+      const { elements: els, selectedId: selId, updateElement: update } = useChoanStore.getState()
 
       // Radius drag
       if (isRadiusDragRef.current && selId) {
@@ -251,10 +321,9 @@ export default function SDFCanvas() {
         if (!el) return
         const dx = pixel.x - radiusDragStartPixelRef.current.x
         const dy = pixel.y - radiusDragStartPixelRef.current.y
-        // TL→center = +dx, +dy; map diagonal distance to radius delta
         const delta = (dx + dy) / Math.min(el.width, el.height)
         const newRadius = Math.max(0, Math.min(1, radiusStartRef.current + delta))
-        updateElement(selId, { radius: newRadius })
+        update(selId, { radius: newRadius })
         return
       }
 
@@ -272,7 +341,7 @@ export default function SDFCanvas() {
         const others = els.filter((e) => e.id !== selId)
         const snap = computeSnapResize(anchor, proposed, others)
         snapLinesRef.current = snap.lines
-        updateElement(selId, {
+        update(selId, {
           x: Math.min(anchor.x, snap.x),
           y: Math.min(anchor.y, snap.y),
           width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x)),
@@ -281,27 +350,43 @@ export default function SDFCanvas() {
         return
       }
 
-      // Drag
+      // Group drag
       if (isDraggingRef.current && tool === 'select' && selId) {
         const pixel = screenToPixel(e.clientX, e.clientY)
         if (!pixel) return
         const dx = pixel.x - dragStartPixelRef.current.x
         const dy = pixel.y - dragStartPixelRef.current.y
-        const el = els.find((e) => e.id === selId)
-        if (!el) return
+
+        const groupIds = dragGroupIdsRef.current
+        const groupSet = new Set(groupIds)
+
+        // Use container (or the dragged element) as snap reference
+        const refId = dragContainerIdRef.current ?? selId
+        const refStart = dragGroupStartRef.current.get(refId)
+        if (!refStart) return
+        const refEl = els.find((e) => e.id === refId)
+        if (!refEl) return
+
         const proposed = {
-          x: dragElStartRef.current.x + dx,
-          y: dragElStartRef.current.y + dy,
-          width: el.width,
-          height: el.height,
+          x: refStart.x + dx,
+          y: refStart.y + dy,
+          width: refEl.width,
+          height: refEl.height,
         }
-        const others = els.filter((e) => e.id !== selId)
+        const others = els.filter((e) => !groupSet.has(e.id))
         const snap = computeSnapMove(proposed, others)
         snapLinesRef.current = snap.lines
-        updateElement(selId, {
-          x: proposed.x + snap.dx,
-          y: proposed.y + snap.dy,
-        })
+
+        const finalDx = dx + snap.dx
+        const finalDy = dy + snap.dy
+
+        // Apply delta to all group members
+        for (const gid of groupIds) {
+          const start = dragGroupStartRef.current.get(gid)
+          if (start) {
+            update(gid, { x: start.x + finalDx, y: start.y + finalDy })
+          }
+        }
         return
       }
 
@@ -312,7 +397,8 @@ export default function SDFCanvas() {
           const el = els.find((e) => e.id === selId)
           setCursor(el?.type === 'rectangle' ? 'grab' : 'default')
         } else if (corner === 1) {
-          setCursor('nwse-resize')
+          const el = els.find((e) => e.id === selId)
+          setCursor(el?.parentId ? 'default' : 'nwse-resize')
         } else {
           setCursor('default')
         }
@@ -322,8 +408,34 @@ export default function SDFCanvas() {
   )
 
   const handlePointerUp = useCallback(() => {
+    const { elements: els, selectedId: selId, reparentElement, runLayout } = useChoanStore.getState()
+
+    // After resize: run layout if it was a container
+    if (isResizingRef.current && resizeElIdRef.current) {
+      const el = els.find((e) => e.id === resizeElIdRef.current)
+      if (el?.role === 'container') {
+        runLayout(el.id)
+      }
+    }
+
+    // After drag: check containment for free elements
+    if (isDraggingRef.current && selId) {
+      const el = els.find((e) => e.id === selId)
+      if (el && !el.parentId && el.role !== 'container') {
+        const containers = els.filter((e) => e.role === 'container' && e.id !== selId)
+        const parentId = detectContainment(el, containers)
+        if (parentId) {
+          reparentElement(selId, parentId)
+        }
+      }
+    }
+
     isResizingRef.current = false
+    resizeElIdRef.current = null
     isDraggingRef.current = false
+    dragGroupIdsRef.current = []
+    dragGroupStartRef.current.clear()
+    dragContainerIdRef.current = null
     isRadiusDragRef.current = false
     snapLinesRef.current = []
   }, [])
@@ -346,7 +458,8 @@ export default function SDFCanvas() {
         if (src) {
           const id = nanoid()
           const { addElement, selectElement } = useChoanStore.getState()
-          addElement({ ...src, id, x: src.x + 20, y: src.y + 20 })
+          // Paste as free element (no parentId)
+          addElement({ ...src, id, x: src.x + 20, y: src.y + 20, parentId: undefined })
           selectElement(id)
         }
       } else if (e.key === 'v' || e.key === 'V') {
