@@ -19,3 +19,9 @@ export interface AnimationClip {
   easing: 'spring' | 'ease' | 'linear'
   tracks: KeyframeTrack[]
 }
+
+export interface AnimationBundle {
+  id: string              // nanoid
+  name: string            // user-visible name (e.g. "메뉴 열기")
+  clips: AnimationClip[]  // one clip per participating element
+}

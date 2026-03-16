@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import SDFCanvas from './canvas/SDFCanvas'
 import PropertiesPanel from './panels/PropertiesPanel'
 import StatePanel from './panels/StatePanel'
@@ -9,13 +9,34 @@ import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
 
 export default function App() {
-  const { elements, globalStates, interactions, loadFile, reset } = useChoanStore()
+  const { elements, globalStates, interactions, animationBundles, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [timelineHeight, setTimelineHeight] = useState(180)
+  const isDraggingRef = useRef(false)
+  const dragStartYRef = useRef(0)
+  const dragStartHeightRef = useRef(0)
+
+  const handleResizeStart = useCallback((e: React.PointerEvent) => {
+    isDraggingRef.current = true
+    dragStartYRef.current = e.clientY
+    dragStartHeightRef.current = timelineHeight
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [timelineHeight])
+
+  const handleResizeMove = useCallback((e: React.PointerEvent) => {
+    if (!isDraggingRef.current) return
+    const dy = dragStartYRef.current - e.clientY
+    setTimelineHeight(Math.max(80, Math.min(600, dragStartHeightRef.current + dy)))
+  }, [])
+
+  const handleResizeEnd = useCallback(() => {
+    isDraggingRef.current = false
+  }, [])
 
   const handleExport = async () => {
-    const md = toMarkdown(elements, globalStates, interactions)
+    const md = toMarkdown(elements, globalStates, interactions, animationBundles)
     try {
       await navigator.clipboard.writeText(md)
       setExportMsg('클립보드에 복사됨!')
@@ -33,7 +54,7 @@ export default function App() {
   }
 
   const handleSave = () => {
-    const content = serialize(projectName, elements, globalStates, interactions)
+    const content = serialize(projectName, elements, globalStates, interactions, animationBundles)
     const blob = new Blob([content], { type: 'text/yaml' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -55,6 +76,7 @@ export default function App() {
           elements: result.elements,
           globalStates: result.globalStates,
           interactions: result.interactions,
+          animationBundles: result.animationBundles,
         })
       } catch (err) {
         alert('파일을 불러올 수 없습니다.')
@@ -89,7 +111,13 @@ export default function App() {
           <div className="canvas-area">
             <SDFCanvas />
           </div>
-          <TimelinePanel visible />
+          <div
+            className="resize-handle-h"
+            onPointerDown={handleResizeStart}
+            onPointerMove={handleResizeMove}
+            onPointerUp={handleResizeEnd}
+          />
+          <TimelinePanel visible height={timelineHeight} />
         </div>
         <div className="right-panel">
           <PropertiesPanel />

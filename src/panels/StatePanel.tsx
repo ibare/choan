@@ -13,6 +13,7 @@ export default function StatePanel() {
     elements,
     globalStates,
     interactions,
+    animationBundles,
     addGlobalState,
     removeGlobalState,
     addInteraction,
@@ -22,7 +23,7 @@ export default function StatePanel() {
   const [newStateName, setNewStateName] = useState('')
   const [newStateType, setNewStateType] = useState<'boolean' | 'string' | 'number'>('boolean')
 
-  // 새 Interaction 폼
+  // Interaction form
   const [triggerEl, setTriggerEl] = useState('')
   const [triggerEvent, setTriggerEvent] = useState<'click' | 'hover' | 'focus'>('click')
   const [triggerState, setTriggerState] = useState('')
@@ -31,13 +32,12 @@ export default function StatePanel() {
   const [reactionCondition, setReactionCondition] = useState('')
   const [reactionAnim, setReactionAnim] = useState<AnimationHint>('fade')
   const [reactionEasing, setReactionEasing] = useState<'spring' | 'ease' | 'linear'>('spring')
+  const [reactionBundleId, setReactionBundleId] = useState('')
 
   const handleAddState = () => {
     if (!newStateName.trim()) return
     const defaults: Record<string, boolean | string | number> = {
-      boolean: false,
-      string: '',
-      number: 0,
+      boolean: false, string: '', number: 0,
     }
     const gs: GlobalState = {
       name: newStateName.trim(),
@@ -49,7 +49,8 @@ export default function StatePanel() {
   }
 
   const handleAddInteraction = () => {
-    if (!triggerEl || !triggerState || !reactionEl) return
+    if (!triggerEl || !triggerState) return
+    if (!reactionBundleId && !reactionEl) return
     const interaction: Interaction = {
       id: nanoid(),
       trigger: {
@@ -63,15 +64,17 @@ export default function StatePanel() {
         condition: reactionCondition || `${triggerState} == ${triggerValue}`,
         animation: reactionAnim,
         easing: reactionEasing,
+        animationBundleId: reactionBundleId || undefined,
       },
     }
     addInteraction(interaction)
     setTriggerEl('')
     setReactionEl('')
+    setReactionBundleId('')
   }
 
   const elementOptions = elements.map((e) => (
-    <option key={e.id} value={e.id}>{e.label} ({e.id.slice(0, 4)})</option>
+    <option key={e.id} value={e.id}>{e.label}</option>
   ))
 
   const stateOptions = globalStates.map((gs) => (
@@ -113,19 +116,26 @@ export default function StatePanel() {
         <button className="btn btn-small" onClick={handleAddState}>+</button>
       </div>
 
+      {/* ── Interactions ── */}
       <div className="panel-divider" />
       <div className="panel-title">Interactions</div>
 
       {interactions.map((ia) => {
         const trigEl = elements.find((e) => e.id === ia.trigger.elementId)
         const rxEl = elements.find((e) => e.id === ia.reaction.elementId)
+        const bundle = ia.reaction.animationBundleId
+          ? animationBundles.find((b) => b.id === ia.reaction.animationBundleId)
+          : null
         return (
           <div key={ia.id} className="interaction-item">
             <div className="interaction-trigger">
               ▶ {trigEl?.label ?? ia.trigger.elementId}.{ia.trigger.event} → {ia.trigger.stateKey} = {String(ia.trigger.value)}
             </div>
             <div className="interaction-reaction">
-              ↩ {rxEl?.label ?? ia.reaction.elementId} [{ia.reaction.condition}] → {ia.reaction.animation} ({ia.reaction.easing})
+              {bundle
+                ? <>↩ [{ia.reaction.condition}] → <strong>{bundle.name}</strong> ({ia.reaction.easing})</>
+                : <>↩ {rxEl?.label ?? ia.reaction.elementId} [{ia.reaction.condition}] → {ia.reaction.animation} ({ia.reaction.easing})</>
+              }
             </div>
             <button className="btn-icon" onClick={() => removeInteraction(ia.id)}>×</button>
           </div>
@@ -161,27 +171,42 @@ export default function StatePanel() {
 
       <div className="sub-title">Reaction</div>
       <div className="add-row">
-        <select className="field-select" style={{ flex: 2 }} value={reactionEl} onChange={(e) => setReactionEl(e.target.value)}>
-          <option value="">element</option>
-          {elementOptions}
+        <select
+          className="field-select"
+          style={{ flex: 3 }}
+          value={reactionBundleId}
+          onChange={(e) => setReactionBundleId(e.target.value)}
+        >
+          <option value="">preset...</option>
+          {animationBundles.map((b) => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
         </select>
-        <select className="field-select" style={{ flex: 2 }} value={reactionAnim} onChange={(e) => setReactionAnim(e.target.value as AnimationHint)}>
-          {ANIMATION_HINTS.map((a) => <option key={a} value={a}>{a}</option>)}
-        </select>
-      </div>
-      <div className="add-row">
-        <input
-          className="field-input"
-          style={{ flex: 2 }}
-          placeholder="condition (optional)"
-          value={reactionCondition}
-          onChange={(e) => setReactionCondition(e.target.value)}
-        />
         <select className="field-select" style={{ flex: 1 }} value={reactionEasing} onChange={(e) => setReactionEasing(e.target.value as typeof reactionEasing)}>
           <option value="spring">spring</option>
           <option value="ease">ease</option>
           <option value="linear">linear</option>
         </select>
+      </div>
+      {!reactionBundleId && (
+        <div className="add-row">
+          <select className="field-select" style={{ flex: 2 }} value={reactionEl} onChange={(e) => setReactionEl(e.target.value)}>
+            <option value="">element</option>
+            {elementOptions}
+          </select>
+          <select className="field-select" style={{ flex: 2 }} value={reactionAnim} onChange={(e) => setReactionAnim(e.target.value as AnimationHint)}>
+            {ANIMATION_HINTS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="add-row">
+        <input
+          className="field-input"
+          style={{ flex: 1 }}
+          placeholder="condition (optional)"
+          value={reactionCondition}
+          onChange={(e) => setReactionCondition(e.target.value)}
+        />
       </div>
       <button className="btn btn-small" onClick={handleAddInteraction}>+ Add Interaction</button>
     </div>

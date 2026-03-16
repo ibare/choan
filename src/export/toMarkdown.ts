@@ -1,4 +1,5 @@
 import type { ChoanElement, GlobalState, Interaction } from '../store/useChoanStore'
+import type { AnimationBundle } from '../animation/types'
 
 function elementDesc(el: ChoanElement): string {
   const parts: string[] = [`\`${el.label}\``, '—', el.type]
@@ -33,7 +34,8 @@ function interactionDesc(ia: Interaction, elements: ChoanElement[]): string {
 export function toMarkdown(
   elements: ChoanElement[],
   globalStates: GlobalState[],
-  interactions: Interaction[]
+  interactions: Interaction[],
+  animationBundles: AnimationBundle[] = [],
 ): string {
   const lines: string[] = ['## UI Spec', '']
 
@@ -69,6 +71,19 @@ export function toMarkdown(
     }
   }
   lines.push('')
+
+  // Animation Bundles
+  if (animationBundles.length > 0) {
+    lines.push('### Animation Bundles')
+    for (const bundle of animationBundles) {
+      lines.push(`- **${bundle.name}** (${bundle.clips.length} elements)`)
+      for (const clip of bundle.clips) {
+        const el = elements.find((e) => e.id === clip.elementId)
+        lines.push(`  - ${el?.label ?? clip.elementId}: ${clip.tracks.map((t) => `${t.property} ${t.keyframes[0]?.value}→${t.keyframes[t.keyframes.length - 1]?.value}`).join(', ')} (${clip.duration}ms, ${clip.easing})`)
+      }
+    }
+    lines.push('')
+  }
 
   // Interaction
   lines.push('### Interaction')

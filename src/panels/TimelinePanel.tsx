@@ -1,214 +1,392 @@
-// Animation Timeline Panel — keyframe editing + playback controls
-// Shows one clip per interaction, derived from presets or custom clips.
-// Supports: keyframe drag (time), click to add, right-click to delete,
-// double-click to edit value, interaction selector.
+// Animation Timeline Panel — Canvas 2D engine + DOM sidebar hybrid
+// Right side: Canvas 2D renders ruler, track bars, keyframe diamonds, playhead
+// Left side: DOM renders layer labels, property dropdowns, remove buttons
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { resolvePreset } from '../animation/presets'
-import type { AnimationClip, KeyframeTrack, AnimatableProperty } from '../animation/types'
+import { createTimeline2D, type Timeline2D, type DisplayLayer, type DisplayTrack, type RenderOptions, type TimelineHit } from '../engine/timeline2d'
+import type { AnimationClip, AnimationBundle, AnimatableProperty } from '../animation/types'
 import type { KeyframeAnimator } from '../animation/keyframeEngine'
+import type { ChoanElement } from '../store/useChoanStore'
+import { nanoid } from '../canvas/nanoid'
 
 const TRACK_HEIGHT = 26
-const LEFT_WIDTH = 170
+const LEFT_WIDTH = 190
+const RULER_HEIGHT = 30
+const LAYER_HEADER_HEIGHT = 24
+const INDENT_PX = 16
 const PX_PER_MS = 0.8
-const DIAMOND_SIZE = 10
 
-function msToX(ms: number): number { return ms * PX_PER_MS }
-function xToMs(x: number): number { return Math.max(0, Math.round(x / PX_PER_MS)) }
+const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
+  'x', 'y', 'width', 'height', 'opacity', 'color', 'radius',
+]
 
-interface TimelinePanelProps {
-  visible: boolean
+function getPropertyValue(el: ChoanElement, prop: AnimatableProperty): number {
+  switch (prop) {
+    case 'x': return el.x
+    case 'y': return el.y
+    case 'width': return el.width
+    case 'height': return el.height
+    case 'opacity': return el.opacity
+    case 'color': return el.color ?? 0xe6f8f0
+    case 'radius': return el.radius ?? 0
+  }
 }
 
-// Resolve a clip for each interaction: custom clip if saved, otherwise preset
+// Build hierarchy-ordered list with depth for indentation
+function buildLayerTree(elements: ChoanElement[]): Array<{ el: ChoanElement; depth: number }> {
+  const result: Array<{ el: ChoanElement; depth: number }> = []
+  const childMap = new Map<string, ChoanElement[]>()
+  for (const el of elements) {
+    const key = el.parentId ?? '__root__'
+    if (!childMap.has(key)) childMap.set(key, [])
+    childMap.get(key)!.push(el)
+  }
+  function walk(parentKey: string, depth: number) {
+    const children = childMap.get(parentKey) ?? []
+    for (const child of children) {
+      result.push({ el: child, depth })
+      walk(child.id, depth + 1)
+    }
+  }
+  walk('__root__', 0)
+  return result
+}
+
 function resolveClipForInteraction(
   interactionId: string,
   customClips: AnimationClip[],
-  elements: ReturnType<typeof useChoanStore.getState>['elements'],
+  elements: ChoanElement[],
   interactions: ReturnType<typeof useChoanStore.getState>['interactions'],
 ): AnimationClip | null {
   const ia = interactions.find((i) => i.id === interactionId)
   if (!ia) return null
-
-  // Check for user-customized clip
   const custom = customClips.find((c) => c.id === `clip_${ia.id}`)
   if (custom) return custom
-
-  // Derive from preset
   const el = elements.find((e) => e.id === ia.reaction.elementId)
   if (!el) return null
-
   const preset = resolvePreset(ia.reaction.animation, el, ia.reaction.easing)
-  // Tag with interaction id so we can save it later
   return { ...preset, id: `clip_${ia.id}` }
 }
 
-export default function TimelinePanel({ visible }: TimelinePanelProps) {
-  const { elements, interactions, animationClips, addAnimationClip, updateAnimationClip } = useChoanStore()
+function formatValue(prop: AnimatableProperty, value: number | undefined): string {
+  if (value === undefined) return '?'
+  if (prop === 'color') return `#${value.toString(16).padStart(6, '0')}`
+  if (prop === 'opacity' || prop === 'radius') return value.toFixed(2)
+  return String(Math.round(value))
+}
+
+type ViewMode = { type: 'bundle'; bundleId: string } | { type: 'interaction'; iaId: string | null }
+
+interface TimelinePanelProps {
+  visible: boolean
+  height?: number
+}
+
+// Shared display clip structure used by both DOM sidebar and Canvas
+interface DisplayClipEntry {
+  clip: AnimationClip
+  label: string
+  depth: number
+  bundleId?: string
+}
+
+export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
+  const {
+    elements, interactions, animationClips, animationBundles,
+    addAnimationClip, updateAnimationClip,
+    addAnimationBundle, updateAnimationBundle, removeAnimationBundle,
+    addClipToBundle, updateClipInBundle, removeClipFromBundle,
+  } = useChoanStore()
   const { previewState, play, pause, stop } = usePreviewStore()
-  const [selectedIaId, setSelectedIaId] = useState<string | null>(null)
-  const [dragState, setDragState] = useState<{
-    clipId: string; trackIdx: number; kfIdx: number; startX: number; startTime: number
-  } | null>(null)
+
+  const [viewMode, setViewMode] = useState<ViewMode>({ type: 'interaction', iaId: null })
+  const [editingBundleName, setEditingBundleName] = useState<string | null>(null)
+  const [bundleNameDraft, setBundleNameDraft] = useState('')
   const [editingKf, setEditingKf] = useState<{
-    clipId: string; trackIdx: number; kfIdx: number; value: string
+    clipId: string; trackIdx: number; kfIdx: number; value: string; bundleId?: string
+  } | null>(null)
+  const [scrollX, setScrollX] = useState(0)
+  const [scrollY, setScrollY] = useState(0)
+  const [hoverKf, setHoverKf] = useState<{ layerIdx: number; trackIdx: number; kfIdx: number } | null>(null)
+
+  const canvasWrapRef = useRef<HTMLDivElement>(null)
+  const leftPanelRef = useRef<HTMLDivElement>(null)
+  const tl2dRef = useRef<Timeline2D | null>(null)
+  const dragRef = useRef<{
+    layerIdx: number; trackIdx: number; kfIdx: number
+    startX: number; startTime: number; bundleId?: string
   } | null>(null)
 
   if (!visible) return null
 
-  // Build display clips from interactions
-  const allClips: Array<{ ia: typeof interactions[0]; clip: AnimationClip }> = []
-  for (const ia of interactions) {
-    const clip = resolveClipForInteraction(ia.id, animationClips, elements, interactions)
-    if (clip) allClips.push({ ia, clip })
+  // ── Create animation bundle with all elements ──
+  const handleCreateBundle = () => {
+    const layerTree = buildLayerTree(elements)
+    const clips: AnimationClip[] = layerTree.map(({ el }) => ({
+      id: nanoid(),
+      elementId: el.id,
+      duration: 300,
+      easing: 'ease' as const,
+      tracks: [],
+    }))
+    const bundle: AnimationBundle = {
+      id: nanoid(),
+      name: `Animation ${animationBundles.length + 1}`,
+      clips,
+    }
+    addAnimationBundle(bundle)
+    setViewMode({ type: 'bundle', bundleId: bundle.id })
   }
 
-  // Filter by selected interaction
-  const displayClips = selectedIaId
-    ? allClips.filter((c) => c.ia.id === selectedIaId)
-    : allClips
+  // ── Build display clips ──
+  let displayClips: DisplayClipEntry[] = []
 
-  const maxDuration = Math.max(300, ...displayClips.map((c) => c.clip.duration))
-  const rulerWidth = msToX(maxDuration + 200)
-
-  const ticks: number[] = []
-  const tickInterval = maxDuration > 1000 ? 200 : 100
-  for (let t = 0; t <= maxDuration + 200; t += tickInterval) ticks.push(t)
-
-  // Ensure clip is persisted as custom before mutating
-  function ensureCustomClip(clip: AnimationClip): AnimationClip {
-    const existing = animationClips.find((c) => c.id === clip.id)
-    if (existing) return existing
-    // Save preset-derived clip as custom
-    addAnimationClip(clip)
-    return clip
-  }
-
-  // ── Keyframe time drag ──
-  const handleDragStart = (clipId: string, trackIdx: number, kfIdx: number, e: React.PointerEvent) => {
-    e.stopPropagation()
-    const entry = displayClips.find((c) => c.clip.id === clipId)
-    if (!entry) return
-    const kf = entry.clip.tracks[trackIdx].keyframes[kfIdx]
-    setDragState({ clipId, trackIdx, kfIdx, startX: e.clientX, startTime: kf.time })
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }
-
-  const handleDragMove = (e: React.PointerEvent) => {
-    if (!dragState) return
-    const dx = e.clientX - dragState.startX
-    const newTime = xToMs(msToX(dragState.startTime) + dx)
-    const entry = displayClips.find((c) => c.clip.id === dragState.clipId)
-    if (!entry) return
-
-    const clip = ensureCustomClip(entry.clip)
-    const newTracks = clip.tracks.map((track, ti) => {
-      if (ti !== dragState.trackIdx) return track
-      const newKfs = track.keyframes.map((kf, ki) =>
-        ki === dragState.kfIdx ? { ...kf, time: newTime } : kf,
-      )
-      newKfs.sort((a, b) => a.time - b.time)
-      return { ...track, keyframes: newKfs }
-    })
-    const dur = Math.max(...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
-    updateAnimationClip(clip.id, { tracks: newTracks, duration: dur })
-  }
-
-  const handleDragEnd = () => { setDragState(null) }
-
-  // ── Click on track area to add keyframe ──
-  const handleTrackClick = (clipId: string, trackIdx: number, e: React.MouseEvent) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const time = xToMs(x)
-
-    const entry = displayClips.find((c) => c.clip.id === clipId)
-    if (!entry) return
-
-    const clip = ensureCustomClip(entry.clip)
-    const track = clip.tracks[trackIdx]
-
-    // Don't add if too close to existing keyframe
-    if (track.keyframes.some((kf) => Math.abs(kf.time - time) < 10)) return
-
-    // Interpolate value at this time from neighbors
-    let value = 0
-    const sorted = [...track.keyframes].sort((a, b) => a.time - b.time)
-    if (sorted.length === 0) {
-      value = 0
-    } else if (time <= sorted[0].time) {
-      value = sorted[0].value
-    } else if (time >= sorted[sorted.length - 1].time) {
-      value = sorted[sorted.length - 1].value
-    } else {
-      for (let i = 0; i < sorted.length - 1; i++) {
-        if (time >= sorted[i].time && time <= sorted[i + 1].time) {
-          const t = (time - sorted[i].time) / (sorted[i + 1].time - sorted[i].time)
-          value = sorted[i].value + (sorted[i + 1].value - sorted[i].value) * t
-          if (track.property === 'color') value = Math.round(value)
-          break
+  if (viewMode.type === 'bundle') {
+    const bundle = animationBundles.find((b) => b.id === viewMode.bundleId)
+    if (bundle) {
+      const layerTree = buildLayerTree(elements)
+      for (const { el, depth } of layerTree) {
+        const clip = bundle.clips.find((c) => c.elementId === el.id)
+        if (clip) {
+          displayClips.push({ clip, label: el.label, depth, bundleId: bundle.id })
         }
       }
     }
-
-    const newKfs = [...track.keyframes, { time, value }].sort((a, b) => a.time - b.time)
-    const newTracks = clip.tracks.map((t, i) => i === trackIdx ? { ...t, keyframes: newKfs } : t)
-    const dur = Math.max(...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
-    updateAnimationClip(clip.id, { tracks: newTracks, duration: dur })
+  } else {
+    const presetInteractions = interactions.filter((ia) => !ia.reaction.animationBundleId)
+    const filtered = viewMode.iaId
+      ? presetInteractions.filter((ia) => ia.id === viewMode.iaId)
+      : presetInteractions
+    for (const ia of filtered) {
+      const clip = resolveClipForInteraction(ia.id, animationClips, elements, interactions)
+      if (clip) {
+        const trigEl = elements.find((e) => e.id === ia.trigger.elementId)
+        displayClips.push({ clip, label: `${trigEl?.label ?? '?'}.${ia.trigger.event}`, depth: 0 })
+      }
+    }
   }
 
-  // ── Right-click to delete keyframe ──
-  const handleKfContextMenu = (clipId: string, trackIdx: number, kfIdx: number, e: React.MouseEvent) => {
+  const maxDuration = Math.max(300, ...displayClips.map((c) => c.clip.duration))
+
+  // ── Convert to DisplayLayer for engine ──
+  const displayLayers: DisplayLayer[] = displayClips.map((entry) => ({
+    clipId: entry.clip.id,
+    label: entry.label,
+    tracks: entry.clip.tracks.map((t) => ({
+      property: t.property,
+      keyframes: [...t.keyframes].sort((a, b) => a.time - b.time),
+    })),
+  }))
+
+  const renderOptions: RenderOptions = {
+    scrollX,
+    scrollY,
+    pxPerMs: PX_PER_MS,
+    rulerHeight: RULER_HEIGHT,
+    trackHeight: TRACK_HEIGHT,
+    layerHeaderHeight: LAYER_HEADER_HEIGHT,
+    maxDuration,
+    hoverKf,
+    playheadTime: null,
+  }
+
+  // ── Add track to a clip ──
+  const handleAddTrack = (bundleId: string, clipId: string, property: AnimatableProperty) => {
+    const bundle = animationBundles.find((b) => b.id === bundleId)
+    if (!bundle) return
+    const clip = bundle.clips.find((c) => c.id === clipId)
+    if (!clip) return
+    if (clip.tracks.some((t) => t.property === property)) return
+    const el = elements.find((e) => e.id === clip.elementId)
+    const currentValue = el ? getPropertyValue(el, property) : 0
+    updateClipInBundle(bundleId, clipId, {
+      tracks: [...clip.tracks, {
+        property,
+        keyframes: [
+          { time: 0, value: currentValue },
+          { time: clip.duration, value: currentValue },
+        ],
+      }],
+    })
+  }
+
+  // ── Clip mutation helper ──
+  function mutateClip(clipId: string, bundleId: string | undefined, patch: Partial<AnimationClip>) {
+    if (bundleId) {
+      updateClipInBundle(bundleId, clipId, patch)
+    } else {
+      const existing = animationClips.find((c) => c.id === clipId)
+      if (!existing) {
+        const entry = displayClips.find((c) => c.clip.id === clipId)
+        if (entry) addAnimationClip(entry.clip)
+      }
+      updateAnimationClip(clipId, patch)
+    }
+  }
+
+  // ── Canvas pointer events ──
+  const handleCanvasPointerDown = useCallback((e: React.PointerEvent) => {
+    const tl = tl2dRef.current
+    if (!tl) return
+    const rect = tl.canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const hit = tl.hitTest(x, y, displayLayers, renderOptions)
+
+    if (hit.type === 'keyframe') {
+      const entry = displayClips[hit.layerIdx]
+      if (!entry) return
+      const kf = entry.clip.tracks[hit.trackIdx].keyframes[hit.kfIdx]
+      dragRef.current = {
+        layerIdx: hit.layerIdx, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx,
+        startX: e.clientX, startTime: kf.time, bundleId: entry.bundleId,
+      }
+      tl.canvas.setPointerCapture(e.pointerId)
+      e.stopPropagation()
+    } else if (hit.type === 'track') {
+      // Add keyframe
+      const entry = displayClips[hit.layerIdx]
+      if (!entry) return
+      const track = entry.clip.tracks[hit.trackIdx]
+      if (track.keyframes.some((kf) => Math.abs(kf.time - hit.time) < 10)) return
+
+      let value = 0
+      const sorted = [...track.keyframes].sort((a, b) => a.time - b.time)
+      if (sorted.length === 0) {
+        value = 0
+      } else if (hit.time <= sorted[0].time) {
+        value = sorted[0].value
+      } else if (hit.time >= sorted[sorted.length - 1].time) {
+        value = sorted[sorted.length - 1].value
+      } else {
+        for (let i = 0; i < sorted.length - 1; i++) {
+          if (hit.time >= sorted[i].time && hit.time <= sorted[i + 1].time) {
+            const t = (hit.time - sorted[i].time) / (sorted[i + 1].time - sorted[i].time)
+            value = sorted[i].value + (sorted[i + 1].value - sorted[i].value) * t
+            if (track.property === 'color') value = Math.round(value)
+            break
+          }
+        }
+      }
+
+      const newKfs = [...track.keyframes, { time: hit.time, value }].sort((a, b) => a.time - b.time)
+      const newTracks = entry.clip.tracks.map((t, i) =>
+        i === hit.trackIdx ? { ...t, keyframes: newKfs } : t,
+      )
+      const dur = Math.max(...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
+      mutateClip(entry.clip.id, entry.bundleId, { tracks: newTracks, duration: dur })
+    }
+  }, [displayClips, displayLayers, renderOptions])
+
+  const handleCanvasPointerMove = useCallback((e: React.PointerEvent) => {
+    const tl = tl2dRef.current
+    if (!tl) return
+
+    if (dragRef.current) {
+      const dx = e.clientX - dragRef.current.startX
+      const newTime = Math.max(0, Math.round((dragRef.current.startTime * PX_PER_MS + dx) / PX_PER_MS))
+      const entry = displayClips[dragRef.current.layerIdx]
+      if (!entry) return
+
+      const newTracks = entry.clip.tracks.map((track, ti) => {
+        if (ti !== dragRef.current!.trackIdx) return track
+        const newKfs = track.keyframes.map((kf, ki) =>
+          ki === dragRef.current!.kfIdx ? { ...kf, time: newTime } : kf,
+        )
+        newKfs.sort((a, b) => a.time - b.time)
+        return { ...track, keyframes: newKfs }
+      })
+      const dur = Math.max(...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
+      mutateClip(entry.clip.id, entry.bundleId, { tracks: newTracks, duration: dur })
+      return
+    }
+
+    // Hover detection
+    const rect = tl.canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const hit = tl.hitTest(x, y, displayLayers, renderOptions)
+    if (hit.type === 'keyframe') {
+      setHoverKf({ layerIdx: hit.layerIdx, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx })
+      tl.canvas.style.cursor = 'ew-resize'
+    } else {
+      setHoverKf(null)
+      tl.canvas.style.cursor = hit.type === 'track' ? 'crosshair' : 'default'
+    }
+  }, [displayClips, displayLayers, renderOptions])
+
+  const handleCanvasPointerUp = useCallback(() => {
+    dragRef.current = null
+  }, [])
+
+  const handleCanvasDoubleClick = useCallback((e: React.MouseEvent) => {
+    const tl = tl2dRef.current
+    if (!tl) return
+    const rect = tl.canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const hit = tl.hitTest(x, y, displayLayers, renderOptions)
+    if (hit.type === 'keyframe') {
+      const entry = displayClips[hit.layerIdx]
+      if (!entry) return
+      const kf = entry.clip.tracks[hit.trackIdx].keyframes[hit.kfIdx]
+      const prop = entry.clip.tracks[hit.trackIdx].property as AnimatableProperty
+      const display = prop === 'color'
+        ? kf.value.toString(16).padStart(6, '0')
+        : String(Math.round(kf.value * 100) / 100)
+      setEditingKf({ clipId: entry.clip.id, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx, value: display, bundleId: entry.bundleId })
+    }
+  }, [displayClips, displayLayers, renderOptions])
+
+  const handleCanvasContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
+    const tl = tl2dRef.current
+    if (!tl) return
+    const rect = tl.canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const hit = tl.hitTest(x, y, displayLayers, renderOptions)
+    if (hit.type === 'keyframe') {
+      const entry = displayClips[hit.layerIdx]
+      if (!entry) return
+      const track = entry.clip.tracks[hit.trackIdx]
+      if (track.keyframes.length <= 2) return
+      const newKfs = track.keyframes.filter((_, i) => i !== hit.kfIdx)
+      const newTracks = entry.clip.tracks.map((t, i) =>
+        i === hit.trackIdx ? { ...t, keyframes: newKfs } : t,
+      )
+      const dur = Math.max(...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
+      mutateClip(entry.clip.id, entry.bundleId, { tracks: newTracks, duration: dur })
+    }
+  }, [displayClips, displayLayers, renderOptions])
+
+  const handleCanvasWheel = useCallback((e: React.WheelEvent) => {
     e.stopPropagation()
-    const entry = displayClips.find((c) => c.clip.id === clipId)
-    if (!entry) return
-    const track = entry.clip.tracks[trackIdx]
-    if (track.keyframes.length <= 2) return // keep minimum 2
+    setScrollX((prev) => Math.max(0, prev + e.deltaX + e.deltaY))
+  }, [])
 
-    const clip = ensureCustomClip(entry.clip)
-    const newKfs = clip.tracks[trackIdx].keyframes.filter((_, i) => i !== kfIdx)
-    const newTracks = clip.tracks.map((t, i) => i === trackIdx ? { ...t, keyframes: newKfs } : t)
-    const dur = Math.max(...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
-    updateAnimationClip(clip.id, { tracks: newTracks, duration: dur })
-  }
-
-  // ── Double-click to edit keyframe value ──
-  const handleKfDoubleClick = (clipId: string, trackIdx: number, kfIdx: number, e: React.MouseEvent) => {
-    e.stopPropagation()
-    const entry = displayClips.find((c) => c.clip.id === clipId)
-    if (!entry) return
-    const kf = entry.clip.tracks[trackIdx].keyframes[kfIdx]
-    const prop = entry.clip.tracks[trackIdx].property
-    const display = prop === 'color'
-      ? kf.value.toString(16).padStart(6, '0')
-      : String(Math.round(kf.value * 100) / 100)
-    setEditingKf({ clipId, trackIdx, kfIdx, value: display })
-  }
-
+  // ── Edit commit ──
   const handleEditCommit = () => {
     if (!editingKf) return
     const entry = displayClips.find((c) => c.clip.id === editingKf.clipId)
     if (!entry) return
-
-    const clip = ensureCustomClip(entry.clip)
-    const prop = clip.tracks[editingKf.trackIdx].property
+    const prop = entry.clip.tracks[editingKf.trackIdx].property as AnimatableProperty
     let val: number
     if (prop === 'color') {
       val = parseInt(editingKf.value.replace('#', ''), 16) || 0
     } else {
       val = parseFloat(editingKf.value) || 0
     }
-
-    const newKfs = clip.tracks[editingKf.trackIdx].keyframes.map((kf, i) =>
+    const newKfs = entry.clip.tracks[editingKf.trackIdx].keyframes.map((kf, i) =>
       i === editingKf.kfIdx ? { ...kf, value: val } : kf,
     )
-    const newTracks = clip.tracks.map((t, i) =>
+    const newTracks = entry.clip.tracks.map((t, i) =>
       i === editingKf.trackIdx ? { ...t, keyframes: newKfs } : t,
     )
-    updateAnimationClip(clip.id, { tracks: newTracks })
+    mutateClip(editingKf.clipId, editingKf.bundleId, { tracks: newTracks })
     setEditingKf(null)
   }
 
@@ -218,7 +396,6 @@ export default function TimelinePanel({ visible }: TimelinePanelProps) {
     if (previewState === 'stopped') useChoanStore.getState().resetStateValues()
     play()
   }
-
   const handleStop = () => {
     stop()
     useChoanStore.getState().resetStateValues()
@@ -226,119 +403,179 @@ export default function TimelinePanel({ visible }: TimelinePanelProps) {
     kf?.stopAll()
   }
 
+  // ── Bundle name editing ──
+  const startEditBundleName = (id: string, name: string) => { setEditingBundleName(id); setBundleNameDraft(name) }
+  const commitBundleName = () => {
+    if (editingBundleName && bundleNameDraft.trim()) updateAnimationBundle(editingBundleName, { name: bundleNameDraft.trim() })
+    setEditingBundleName(null)
+  }
+
+  // ── Track removal ──
+  const handleRemoveTrack = (clipId: string, trackIdx: number, bundleId?: string) => {
+    const entry = displayClips.find((c) => c.clip.id === clipId)
+    if (!entry) return
+    const newTracks = entry.clip.tracks.filter((_, i) => i !== trackIdx)
+    mutateClip(clipId, bundleId, { tracks: newTracks })
+  }
+
+  const presetInteractions = interactions.filter((ia) => !ia.reaction.animationBundleId)
+  const isBundleView = viewMode.type === 'bundle'
+  const currentBundleId = isBundleView ? viewMode.bundleId : undefined
+
+  // ── Canvas init + render ──
+  useEffect(() => {
+    const wrap = canvasWrapRef.current
+    if (!wrap) return
+    const tl = createTimeline2D(wrap)
+    tl2dRef.current = tl
+
+    const ro = new ResizeObserver(() => {
+      tl.resize(wrap.clientWidth, wrap.clientHeight)
+    })
+    ro.observe(wrap)
+    tl.resize(wrap.clientWidth, wrap.clientHeight)
+
+    return () => {
+      ro.disconnect()
+      tl.dispose()
+      tl2dRef.current = null
+    }
+  }, [])
+
+  // Re-render canvas on data/state change
+  useEffect(() => {
+    const tl = tl2dRef.current
+    if (!tl) return
+    tl.render(displayLayers, renderOptions)
+  })
+
+  // Sync left panel scroll
+  const handleLeftScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollY((e.target as HTMLDivElement).scrollTop)
+  }, [])
+
   return (
-    <div className="timeline-panel" onPointerMove={handleDragMove} onPointerUp={handleDragEnd}>
-      {/* Header */}
-      <div className="timeline-header">
-        <div className="timeline-left-col" style={{ width: LEFT_WIDTH }}>
-          <div className="playback-controls">
-            <button className="btn-small" onClick={handlePlayPause}
-              title={previewState === 'playing' ? 'Pause' : 'Play'}>
-              {previewState === 'playing' ? '⏸' : '▶'}
-            </button>
-            <button className="btn-small" onClick={handleStop} title="Stop">⏹</button>
-            <span className="preview-state-label">
-              {previewState === 'stopped' ? 'Edit' : previewState === 'playing' ? 'Playing' : 'Paused'}
-            </span>
-          </div>
+    <div className="timeline-panel" style={height ? { height } : undefined}>
+      {/* Header: controls (DOM) */}
+      <div className="timeline-header-bar">
+        <div className="playback-controls">
+          <button className="btn-small" onClick={handlePlayPause} title={previewState === 'playing' ? 'Pause' : 'Play'}>
+            {previewState === 'playing' ? '⏸' : '▶'}
+          </button>
+          <button className="btn-small" onClick={handleStop} title="Stop">⏹</button>
+          <button className="btn-small" onClick={handleCreateBundle} title="New Animation">+</button>
+          <span className="preview-state-label">
+            {previewState === 'stopped' ? 'Edit' : previewState === 'playing' ? 'Playing' : 'Paused'}
+          </span>
         </div>
-        <div className="timeline-ruler-wrap">
-          <div className="timeline-ruler" style={{ width: rulerWidth }}>
-            {ticks.map((t) => (
-              <div key={t} className="timeline-tick" style={{ left: msToX(t) }}>
-                <span className="timeline-tick-label">{t}ms</span>
-              </div>
-            ))}
-          </div>
+        {/* Tabs */}
+        <div className="timeline-tabs">
+          {animationBundles.map((b) => (
+            editingBundleName === b.id ? (
+              <input
+                key={b.id}
+                className="field-input timeline-tab-name-input"
+                autoFocus
+                value={bundleNameDraft}
+                onChange={(e) => setBundleNameDraft(e.target.value)}
+                onBlur={commitBundleName}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitBundleName(); if (e.key === 'Escape') setEditingBundleName(null) }}
+              />
+            ) : (
+              <button
+                key={b.id}
+                className={`btn-small ${viewMode.type === 'bundle' && viewMode.bundleId === b.id ? 'active' : ''}`}
+                onClick={() => setViewMode({ type: 'bundle', bundleId: b.id })}
+                onDoubleClick={() => startEditBundleName(b.id, b.name)}
+              >
+                {b.name}
+              </button>
+            )
+          ))}
+          {presetInteractions.length > 0 && animationBundles.length > 0 && (
+            <span className="timeline-tab-divider">|</span>
+          )}
+          {presetInteractions.length > 0 && (
+            <button
+              className={`btn-small ${viewMode.type === 'interaction' ? 'active' : ''}`}
+              onClick={() => setViewMode({ type: 'interaction', iaId: null })}
+            >Presets</button>
+          )}
+          {isBundleView && currentBundleId && (
+            <button
+              className="btn-icon timeline-tab-delete"
+              onClick={() => { removeAnimationBundle(currentBundleId); setViewMode({ type: 'interaction', iaId: null }) }}
+            >×</button>
+          )}
         </div>
       </div>
 
-      {/* Interaction selector */}
-      {interactions.length > 1 && (
-        <div className="timeline-ia-selector">
-          <button
-            className={`btn-small ${!selectedIaId ? 'active' : ''}`}
-            onClick={() => setSelectedIaId(null)}
-          >All</button>
-          {interactions.map((ia) => {
-            const trigEl = elements.find((e) => e.id === ia.trigger.elementId)
-            return (
-              <button
-                key={ia.id}
-                className={`btn-small ${selectedIaId === ia.id ? 'active' : ''}`}
-                onClick={() => setSelectedIaId(ia.id)}
-              >
-                {trigEl?.label ?? '?'}.{ia.trigger.event}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Tracks */}
-      <div className="timeline-body">
-        {displayClips.length === 0 && (
-          <div className="panel-empty" style={{ padding: '12px' }}>
-            States 패널에서 인터랙션을 추가하면 여기에 키프레임이 표시됩니다.
-          </div>
-        )}
-        {displayClips.map(({ ia, clip }) => {
-          const el = elements.find((e) => e.id === clip.elementId)
-          const rxEl = elements.find((e) => e.id === ia.reaction.elementId)
-          return (
-            <div key={clip.id} className="timeline-clip">
-              <div className="timeline-clip-header">
-                <span className="timeline-clip-trigger">
-                  {el?.label ?? '?'}.{ia.trigger.event}
-                </span>
-                <span className="timeline-clip-arrow">→</span>
-                <span className="timeline-clip-reaction">
-                  {rxEl?.label ?? '?'} ({ia.reaction.animation})
-                </span>
-                <span className="timeline-clip-duration">{clip.duration}ms</span>
-                <span className="timeline-clip-easing">{clip.easing}</span>
+      {/* Body: left DOM + right Canvas */}
+      <div className="timeline-body-row">
+        {/* Left sidebar (DOM) */}
+        <div className="timeline-left-panel" ref={leftPanelRef} onScroll={handleLeftScroll}>
+          {/* Ruler spacer */}
+          <div style={{ height: RULER_HEIGHT, flexShrink: 0 }} />
+          {displayClips.length === 0 && (
+            <div className="panel-empty" style={{ padding: '8px', fontSize: 11 }}>
+              {animationBundles.length === 0
+                ? '+ 버튼으로 애니메이션을 만들어 보세요.'
+                : '속성 트랙을 추가하세요.'}
+            </div>
+          )}
+          {displayClips.map((entry) => (
+            <div key={entry.clip.id}>
+              {/* Layer header */}
+              <div className="tl-left-layer" style={{ height: LAYER_HEADER_HEIGHT, paddingLeft: entry.depth * INDENT_PX }}>
+                <span className="tl-left-label">{entry.label}</span>
+                {entry.bundleId && (
+                  <div className="tl-left-actions">
+                    <select
+                      className="field-select field-select-small"
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) handleAddTrack(entry.bundleId!, entry.clip.id, e.target.value as AnimatableProperty)
+                        e.target.value = ''
+                      }}
+                    >
+                      <option value="">+</option>
+                      {ANIMATABLE_PROPERTIES
+                        .filter((p) => !entry.clip.tracks.some((t) => t.property === p))
+                        .map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                    <button className="btn-icon" onClick={() => removeClipFromBundle(entry.bundleId!, entry.clip.id)}>×</button>
+                  </div>
+                )}
               </div>
-              {clip.tracks.map((track, ti) => (
-                <div key={ti} className="timeline-track" style={{ height: TRACK_HEIGHT }}>
-                  <div className="timeline-left-col" style={{ width: LEFT_WIDTH }}>
-                    <span className="timeline-prop-name">{track.property}</span>
-                    <span className="timeline-prop-range">
-                      {formatValue(track.property, track.keyframes[0]?.value)}
-                      {' → '}
-                      {formatValue(track.property, track.keyframes[track.keyframes.length - 1]?.value)}
-                    </span>
-                  </div>
-                  <div
-                    className="timeline-track-area"
-                    style={{ width: rulerWidth }}
-                    onClick={(e) => handleTrackClick(clip.id, ti, e)}
-                  >
-                    {track.keyframes.length >= 2 && (
-                      <div
-                        className="timeline-track-bar"
-                        style={{
-                          left: msToX(track.keyframes[0].time),
-                          width: msToX(track.keyframes[track.keyframes.length - 1].time - track.keyframes[0].time),
-                        }}
-                      />
-                    )}
-                    {track.keyframes.map((kf, ki) => (
-                      <div
-                        key={ki}
-                        className={`keyframe-diamond ${editingKf?.clipId === clip.id && editingKf?.trackIdx === ti && editingKf?.kfIdx === ki ? 'editing' : ''}`}
-                        style={{ left: msToX(kf.time) - DIAMOND_SIZE / 2 }}
-                        title={`${kf.time}ms = ${formatValue(track.property, kf.value)}`}
-                        onPointerDown={(e) => handleDragStart(clip.id, ti, ki, e)}
-                        onDoubleClick={(e) => handleKfDoubleClick(clip.id, ti, ki, e)}
-                        onContextMenu={(e) => handleKfContextMenu(clip.id, ti, ki, e)}
-                      />
-                    ))}
-                  </div>
+              {/* Track rows */}
+              {entry.clip.tracks.map((track, ti) => (
+                <div key={ti} className="tl-left-track" style={{ height: TRACK_HEIGHT, paddingLeft: entry.depth * INDENT_PX }}>
+                  <span className="tl-left-prop">{track.property}</span>
+                  <span className="tl-left-range">
+                    {formatValue(track.property as AnimatableProperty, track.keyframes[0]?.value)}
+                    →
+                    {formatValue(track.property as AnimatableProperty, track.keyframes[track.keyframes.length - 1]?.value)}
+                  </span>
+                  {entry.bundleId && (
+                    <button className="btn-icon tl-track-del" onClick={() => handleRemoveTrack(entry.clip.id, ti, entry.bundleId)}>×</button>
+                  )}
                 </div>
               ))}
             </div>
-          )
-        })}
+          ))}
+        </div>
+
+        {/* Right Canvas */}
+        <div
+          className="timeline-canvas-wrap"
+          ref={canvasWrapRef}
+          onPointerDown={handleCanvasPointerDown}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={handleCanvasPointerUp}
+          onDoubleClick={handleCanvasDoubleClick}
+          onContextMenu={handleCanvasContextMenu}
+          onWheel={handleCanvasWheel}
+        />
       </div>
 
       {/* Keyframe value editor popup */}
@@ -358,11 +595,4 @@ export default function TimelinePanel({ visible }: TimelinePanelProps) {
       )}
     </div>
   )
-}
-
-function formatValue(prop: AnimatableProperty, value: number | undefined): string {
-  if (value === undefined) return '?'
-  if (prop === 'color') return `#${value.toString(16).padStart(6, '0')}`
-  if (prop === 'opacity' || prop === 'radius') return value.toFixed(2)
-  return String(Math.round(value))
 }

@@ -1,7 +1,7 @@
 // State machine runtime — connects events to state changes to animation dispatch
 
 import type { ChoanElement, Interaction } from '../store/useChoanStore'
-import type { AnimationClip } from './types'
+import type { AnimationClip, AnimationBundle } from './types'
 import type { KeyframeAnimator } from './keyframeEngine'
 import { evaluateCondition } from './conditionParser'
 import { resolvePreset } from './presets'
@@ -10,6 +10,7 @@ interface StoreAccessor {
   getInteractions(): Interaction[]
   getElements(): ChoanElement[]
   getAnimationClips(): AnimationClip[]
+  getAnimationBundles(): AnimationBundle[]
   getStateValues(): Record<string, boolean | string | number>
   setStateValue(key: string, value: boolean | string | number): void
 }
@@ -43,21 +44,32 @@ export function createStateMachineRuntime(
     // 3. Re-evaluate ALL reactions against updated state
     const stateValues = store.getStateValues()
 
+    const bundles = store.getAnimationBundles()
+
     for (const ia of interactions) {
       const conditionMet = evaluateCondition(ia.reaction.condition, stateValues)
       if (!conditionMet) continue
 
-      const targetEl = elements.find((e) => e.id === ia.reaction.elementId)
-      if (!targetEl) continue
+      // 4. Resolve clips: bundle or single preset
+      if (ia.reaction.animationBundleId) {
+        // Bundle: start all clips in the bundle
+        const bundle = bundles.find((b) => b.id === ia.reaction.animationBundleId)
+        if (bundle) {
+          for (const clip of bundle.clips) {
+            keyframeAnimator.start(clip, `${ia.id}_${clip.id}`, performance.now())
+          }
+        }
+      } else {
+        // Legacy: single preset/custom clip
+        const targetEl = elements.find((e) => e.id === ia.reaction.elementId)
+        if (!targetEl) continue
 
-      // 4. Resolve clip: custom clip first, then preset
-      const customClip = clips.find(
-        (c) => c.elementId === targetEl.id && c.id === `clip_${ia.id}`,
-      )
-      const clip = customClip ?? resolvePreset(ia.reaction.animation, targetEl, ia.reaction.easing)
-
-      // 5. Start animation
-      keyframeAnimator.start(clip, ia.id, performance.now())
+        const customClip = clips.find(
+          (c) => c.elementId === targetEl.id && c.id === `clip_${ia.id}`,
+        )
+        const clip = customClip ?? resolvePreset(ia.reaction.animation, targetEl, ia.reaction.easing)
+        keyframeAnimator.start(clip, ia.id, performance.now())
+      }
     }
   }
 

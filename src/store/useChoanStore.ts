@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { computeAutoLayout } from '../layout/autoLayout'
-import type { AnimationClip } from '../animation/types'
+import type { AnimationClip, AnimationBundle } from '../animation/types'
 
 export type ElementRole = 'container' | 'image' | 'button' | 'input' | 'card'
 export type ElementType = 'rectangle' | 'circle' | 'line'
@@ -59,6 +59,7 @@ export interface Reaction {
   condition: string
   animation: AnimationHint
   easing: 'spring' | 'ease' | 'linear'
+  animationBundleId?: string  // reference to AnimationBundle (overrides preset)
 }
 
 export interface Interaction {
@@ -80,7 +81,11 @@ interface ChoanStore {
   globalStates: GlobalState[]
   interactions: Interaction[]
   animationClips: AnimationClip[]
+  animationBundles: AnimationBundle[]
   currentStateValues: Record<string, boolean | string | number>
+
+  // element counters for sequential naming
+  elementCounters: Record<string, number>
 
   // element operations
   addElement: (el: ChoanElement) => void
@@ -109,12 +114,20 @@ interface ChoanStore {
   updateAnimationClip: (clipId: string, patch: Partial<AnimationClip>) => void
   removeAnimationClip: (clipId: string) => void
 
+  // animation bundles
+  addAnimationBundle: (bundle: AnimationBundle) => void
+  updateAnimationBundle: (id: string, patch: Partial<AnimationBundle>) => void
+  removeAnimationBundle: (id: string) => void
+  addClipToBundle: (bundleId: string, clip: AnimationClip) => void
+  updateClipInBundle: (bundleId: string, clipId: string, patch: Partial<AnimationClip>) => void
+  removeClipFromBundle: (bundleId: string, clipId: string) => void
+
   // runtime state values (preview mode)
   setStateValue: (key: string, value: boolean | string | number) => void
   resetStateValues: () => void
 
   // file operations
-  loadFile: (data: { elements: ChoanElement[]; globalStates: GlobalState[]; interactions: Interaction[]; animationClips?: AnimationClip[] }) => void
+  loadFile: (data: { elements: ChoanElement[]; globalStates: GlobalState[]; interactions: Interaction[]; animationClips?: AnimationClip[]; animationBundles?: AnimationBundle[] }) => void
   reset: () => void
 }
 
@@ -153,6 +166,12 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
   })
 }
 
+const LABEL_MAP: Record<string, string> = {
+  rectangle: 'Box',
+  circle: 'Circle',
+  line: 'Line',
+}
+
 const initialState = {
   elements: [] as ChoanElement[],
   selectedId: null as string | null,
@@ -161,14 +180,27 @@ const initialState = {
   globalStates: [] as GlobalState[],
   interactions: [] as Interaction[],
   animationClips: [] as AnimationClip[],
+  animationBundles: [] as AnimationBundle[],
   currentStateValues: {} as Record<string, boolean | string | number>,
+  elementCounters: {} as Record<string, number>,
 }
 
 export const useChoanStore = create<ChoanStore>((set, get) => ({
   ...initialState,
 
   addElement: (el) =>
-    set((s) => ({ elements: [...s.elements, el] })),
+    set((s) => {
+      const base = LABEL_MAP[el.type] ?? el.type
+      // Auto-label with sequential number if label matches generic default
+      if (el.label === base || el.label === 'Box' || el.label === 'Circle' || el.label === 'Line') {
+        const next = (s.elementCounters[el.type] ?? 0) + 1
+        return {
+          elements: [...s.elements, { ...el, label: `${base} ${next}` }],
+          elementCounters: { ...s.elementCounters, [el.type]: next },
+        }
+      }
+      return { elements: [...s.elements, el] }
+    }),
 
   updateElement: (id, patch) =>
     set((s) => ({
@@ -181,18 +213,23 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
       let updated = s.elements.filter((e) => e.id !== id)
 
       if (el?.role === 'container') {
-        // Orphan children
         updated = updated.map((e) =>
           e.parentId === id ? { ...e, parentId: undefined } : e,
         )
       } else if (el?.parentId) {
-        // Re-run layout on parent after removing child
         updated = applyLayout(updated, el.parentId)
       }
+
+      // Clean up bundle clips referencing this element
+      const cleanedBundles = s.animationBundles.map((b) => ({
+        ...b,
+        clips: b.clips.filter((c) => c.elementId !== id),
+      }))
 
       return {
         elements: updated,
         selectedId: s.selectedId === id ? null : s.selectedId,
+        animationBundles: cleanedBundles,
       }
     }),
 
@@ -261,6 +298,52 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
       animationClips: s.animationClips.filter((c) => c.id !== clipId),
     })),
 
+  addAnimationBundle: (bundle) =>
+    set((s) => ({ animationBundles: [...s.animationBundles, bundle] })),
+
+  updateAnimationBundle: (id, patch) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.map((b) =>
+        b.id === id ? { ...b, ...patch } : b,
+      ),
+    })),
+
+  removeAnimationBundle: (id) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.filter((b) => b.id !== id),
+      // Clear references in interactions
+      interactions: s.interactions.map((ia) =>
+        ia.reaction.animationBundleId === id
+          ? { ...ia, reaction: { ...ia.reaction, animationBundleId: undefined } }
+          : ia,
+      ),
+    })),
+
+  addClipToBundle: (bundleId, clip) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.map((b) =>
+        b.id === bundleId ? { ...b, clips: [...b.clips, clip] } : b,
+      ),
+    })),
+
+  updateClipInBundle: (bundleId, clipId, patch) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.map((b) =>
+        b.id === bundleId
+          ? { ...b, clips: b.clips.map((c) => c.id === clipId ? { ...c, ...patch } : c) }
+          : b,
+      ),
+    })),
+
+  removeClipFromBundle: (bundleId, clipId) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.map((b) =>
+        b.id === bundleId
+          ? { ...b, clips: b.clips.filter((c) => c.id !== clipId) }
+          : b,
+      ),
+    })),
+
   setStateValue: (key, value) =>
     set((s) => ({
       currentStateValues: { ...s.currentStateValues, [key]: value },
@@ -275,7 +358,7 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
       return { currentStateValues: values }
     }),
 
-  loadFile: ({ elements, globalStates, interactions, animationClips }) => {
+  loadFile: ({ elements, globalStates, interactions, animationClips, animationBundles }) => {
     // After loading, run layout on all containers
     let updated = elements
     const containers = updated.filter((e) => e.role === 'container')
@@ -284,7 +367,24 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
     }
     const values: Record<string, boolean | string | number> = {}
     for (const gs of globalStates) values[gs.name] = gs.default
-    set({ elements: updated, globalStates, interactions, animationClips: animationClips ?? [], currentStateValues: values, selectedId: null })
+
+    // Restore element counters from existing labels
+    const counters: Record<string, number> = {}
+    for (const el of updated) {
+      const match = el.label.match(/^(?:Box|Circle|Line)\s+(\d+)$/)
+      if (match) {
+        const n = parseInt(match[1], 10)
+        counters[el.type] = Math.max(counters[el.type] ?? 0, n)
+      }
+    }
+
+    set({
+      elements: updated, globalStates, interactions,
+      animationClips: animationClips ?? [],
+      animationBundles: animationBundles ?? [],
+      currentStateValues: values, selectedId: null,
+      elementCounters: counters,
+    })
   },
 
   reset: () => set(initialState),

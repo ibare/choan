@@ -713,6 +713,7 @@ export default function SDFCanvas() {
       getInteractions: () => useChoanStore.getState().interactions,
       getElements: () => useChoanStore.getState().elements,
       getAnimationClips: () => useChoanStore.getState().animationClips,
+      getAnimationBundles: () => useChoanStore.getState().animationBundles,
       getStateValues: () => useChoanStore.getState().currentStateValues,
       setStateValue: (k, v) => useChoanStore.getState().setStateValue(k, v),
     }, kfAnimator)
