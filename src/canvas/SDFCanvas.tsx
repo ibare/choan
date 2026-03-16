@@ -126,6 +126,11 @@ export default function SDFCanvas() {
   const radiusStartRef = useRef(0)
   const radiusDragStartPixelRef = useRef({ x: 0, y: 0 })
 
+  // Draw-to-create state
+  const isDrawingRef = useRef(false)
+  const drawStartPixelRef = useRef({ x: 0, y: 0 })
+  const drawElIdRef = useRef<string | null>(null)
+
   // Cursor
   const [cursor, setCursor] = useState('default')
 
@@ -181,45 +186,6 @@ export default function SDFCanvas() {
     if (!hit || hit.objectIndex < 0 || hit.objectIndex >= elements.length) return null
     return elements[hit.objectIndex].id
   }, [])
-
-  // ── Place shape ──
-
-  const placeShape = useCallback(
-    (shapeType: 'rectangle' | 'circle' | 'line', clientX: number, clientY: number) => {
-      const pixel = screenToPixel(clientX, clientY)
-      if (!pixel) return
-      const size = DEFAULT_SIZE[shapeType]
-      const id = nanoid()
-      const el: ChoanElement = {
-        id,
-        type: shapeType,
-        label: shapeType === 'rectangle' ? 'Box' : shapeType === 'circle' ? 'Circle' : 'Line',
-        role: shapeType === 'rectangle' ? 'container' : undefined,
-        color: drawColor,
-        x: pixel.x - size.w / 2,
-        y: pixel.y - size.h / 2,
-        z: 0,
-        width: size.w,
-        height: size.h,
-        opacity: 1,
-      }
-      addElement(el)
-
-      // Check containment after element is added
-      setTimeout(() => {
-        const { elements: els, reparentElement } = useChoanStore.getState()
-        const containers = els.filter((e) => e.role === 'container' && e.id !== id)
-        const parentId = detectContainment(el, containers)
-        if (parentId) {
-          reparentElement(id, parentId)
-        }
-      }, 0)
-
-      selectElement(id)
-      setTool('select')
-    },
-    [drawColor, addElement, selectElement, setTool, screenToPixel],
-  )
 
   // ── Corner handle hit test ──
 
@@ -328,14 +294,51 @@ export default function SDFCanvas() {
         }
         return
       }
-      placeShape(tool, e.clientX, e.clientY)
+      // Start draw-to-create
+      const pixel = screenToPixel(e.clientX, e.clientY)
+      if (!pixel) return
+      drawStartPixelRef.current = pixel
+      const id = nanoid()
+      const el: ChoanElement = {
+        id,
+        type: tool,
+        label: tool === 'rectangle' ? 'Box' : tool === 'circle' ? 'Circle' : 'Line',
+        role: tool === 'rectangle' ? 'container' : undefined,
+        color: drawColor,
+        x: pixel.x,
+        y: pixel.y,
+        z: 0,
+        width: 1,
+        height: 1,
+        opacity: 1,
+      }
+      addElement(el)
+      selectElement(id)
+      isDrawingRef.current = true
+      drawElIdRef.current = id
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [tool, raycastElement, selectElement, selectedId, elements, placeShape, hitTestCorner, screenToPixel],
+    [tool, raycastElement, selectElement, selectedId, elements, hitTestCorner, screenToPixel, drawColor, addElement],
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       const { elements: els, selectedId: selId, updateElement: update } = useChoanStore.getState()
+
+      // Draw-to-create
+      if (isDrawingRef.current && drawElIdRef.current) {
+        const pixel = screenToPixel(e.clientX, e.clientY)
+        if (!pixel) return
+        const sx = drawStartPixelRef.current.x
+        const sy = drawStartPixelRef.current.y
+        update(drawElIdRef.current, {
+          x: Math.min(sx, pixel.x),
+          y: Math.min(sy, pixel.y),
+          width: Math.max(MIN_ELEMENT_SIZE, Math.abs(pixel.x - sx)),
+          height: Math.max(MIN_ELEMENT_SIZE, Math.abs(pixel.y - sy)),
+        })
+        return
+      }
 
       // Radius drag
       if (isRadiusDragRef.current && selId) {
@@ -436,6 +439,36 @@ export default function SDFCanvas() {
   const handlePointerUp = useCallback(() => {
     const { elements: els, selectedId: selId, reparentElement, runLayout } = useChoanStore.getState()
 
+    // After draw-to-create: apply default size if too small, check containment
+    if (isDrawingRef.current && drawElIdRef.current) {
+      const drawId = drawElIdRef.current
+      const el = els.find((e) => e.id === drawId)
+      if (el) {
+        // If barely dragged, apply default size centered on start point
+        if (el.width <= MIN_ELEMENT_SIZE && el.height <= MIN_ELEMENT_SIZE) {
+          const size = DEFAULT_SIZE[el.type]
+          const sx = drawStartPixelRef.current.x
+          const sy = drawStartPixelRef.current.y
+          useChoanStore.getState().updateElement(drawId, {
+            x: sx - size.w / 2,
+            y: sy - size.h / 2,
+            width: size.w,
+            height: size.h,
+          })
+        }
+        // Check containment
+        const freshEls = useChoanStore.getState().elements
+        const freshEl = freshEls.find((e) => e.id === drawId)
+        if (freshEl) {
+          const containers = freshEls.filter((e) => e.role === 'container' && e.id !== drawId)
+          const parentId = detectContainment(freshEl, containers)
+          if (parentId) {
+            reparentElement(drawId, parentId)
+          }
+        }
+      }
+    }
+
     // After resize: run layout if it was a container
     if (isResizingRef.current && resizeElIdRef.current) {
       const el = els.find((e) => e.id === resizeElIdRef.current)
@@ -456,6 +489,8 @@ export default function SDFCanvas() {
       }
     }
 
+    isDrawingRef.current = false
+    drawElIdRef.current = null
     isResizingRef.current = false
     resizeElIdRef.current = null
     isDraggingRef.current = false
@@ -556,13 +591,16 @@ export default function SDFCanvas() {
       controls.update()
       const rs = useRenderSettings.getState()
 
-      // Collect IDs of elements being directly manipulated (drag/resize)
+      // Collect IDs of elements being directly manipulated (drag/resize/draw)
       const manipulatedIds = new Set<string>()
       if (isDraggingRef.current) {
         for (const id of dragGroupIdsRef.current) manipulatedIds.add(id)
       }
       if (isResizingRef.current && resizeElIdRef.current) {
         manipulatedIds.add(resizeElIdRef.current)
+      }
+      if (isDrawingRef.current && drawElIdRef.current) {
+        manipulatedIds.add(drawElIdRef.current)
       }
 
       // Animate element positions/sizes with spring physics
