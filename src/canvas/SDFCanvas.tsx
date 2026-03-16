@@ -499,14 +499,17 @@ export default function SDFCanvas() {
       }
     }
 
-    // After drag: check containment for free elements
+    // After drag: re-evaluate containment (enter/exit/switch container)
     if (isDraggingRef.current && selId) {
       const el = els.find((e) => e.id === selId)
-      if (el && !el.parentId && el.role !== 'container') {
+      if (el && el.role !== 'container') {
         const containers = els.filter((e) => e.role === 'container' && e.id !== selId)
-        const parentId = detectContainment(el, containers)
-        if (parentId) {
-          reparentElement(selId, parentId)
+        const newParentId = detectContainment(el, containers)
+        if (newParentId !== el.parentId) {
+          const oldParentId = el.parentId
+          reparentElement(selId, newParentId)
+          // Re-run layout on old parent if child left
+          if (oldParentId) runLayout(oldParentId)
         }
       }
     }
@@ -540,9 +543,13 @@ export default function SDFCanvas() {
         const src = copiedRef.current
         if (src) {
           const id = nanoid()
-          const { addElement, selectElement } = useChoanStore.getState()
-          // Paste as free element (no parentId)
-          addElement({ ...src, id, x: src.x + 20, y: src.y + 20, parentId: undefined })
+          const { addElement, selectElement, reparentElement, runLayout, elements: curEls } = useChoanStore.getState()
+          // Inherit parentId if the parent still exists
+          const parentStillExists = src.parentId && curEls.some((e) => e.id === src.parentId)
+          addElement({ ...src, id, x: src.x + 20, y: src.y + 20, parentId: parentStillExists ? src.parentId : undefined })
+          if (parentStillExists && src.parentId) {
+            runLayout(src.parentId)
+          }
           selectElement(id)
         }
       } else if (e.key === 'v' || e.key === 'V') {
