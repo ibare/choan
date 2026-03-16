@@ -6,8 +6,9 @@ import { createProgram } from './gl'
 const OVERLAY_VERT = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 aPosition;
 uniform mat4 uViewProj;
+uniform float uZ;
 void main() {
-  gl_Position = uViewProj * vec4(aPosition, 0.5, 1.0);
+  gl_Position = uViewProj * vec4(aPosition, uZ, 1.0);
 }
 `
 
@@ -38,11 +39,12 @@ void main() {
 const DASH_VERT = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 aPosition;
 uniform mat4 uViewProj;
+uniform float uZ;
 uniform vec2 uResolution;
 flat out float vStartDist;
 out float vDist;
 void main() {
-  gl_Position = uViewProj * vec4(aPosition, 0.5, 1.0);
+  gl_Position = uViewProj * vec4(aPosition, uZ, 1.0);
   // Approximate screen distance for dash pattern
   vec2 screenPos = gl_Position.xy / gl_Position.w * uResolution * 0.5;
   vDist = length(screenPos);
@@ -55,6 +57,7 @@ export interface OverlayRenderer {
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
   beginFrame(viewProj: Float32Array): void
+  setZ(z: number): void
   dispose(): void
 }
 
@@ -81,10 +84,16 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   gl.bindVertexArray(null)
 
   let currentViewProj: Float32Array | null = null
+  let currentZ = 0.0
 
   function beginFrame(viewProj: Float32Array) {
     currentViewProj = viewProj
+    currentZ = 0.0
     gl.disable(gl.DEPTH_TEST)
+  }
+
+  function setZ(z: number) {
+    currentZ = z
   }
 
   function drawLines(vertices: Float32Array, color: [number, number, number, number]) {
@@ -93,6 +102,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.useProgram(lineProgram)
     gl.uniformMatrix4fv(gl.getUniformLocation(lineProgram, 'uViewProj'), false, currentViewProj)
     gl.uniform4fv(gl.getUniformLocation(lineProgram, 'uColor'), color)
+    gl.uniform1f(gl.getUniformLocation(lineProgram, 'uZ'), currentZ)
 
     gl.bindVertexArray(lineVao)
     gl.bindBuffer(gl.ARRAY_BUFFER, lineVbo)
@@ -107,6 +117,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.useProgram(dashProgram)
     gl.uniformMatrix4fv(gl.getUniformLocation(dashProgram, 'uViewProj'), false, currentViewProj)
     gl.uniform4fv(gl.getUniformLocation(dashProgram, 'uColor'), color)
+    gl.uniform1f(gl.getUniformLocation(dashProgram, 'uZ'), currentZ)
     gl.uniform1f(gl.getUniformLocation(dashProgram, 'uDashTotal'), 12.0)
     const canvas = gl.canvas as HTMLCanvasElement
     gl.uniform2f(gl.getUniformLocation(dashProgram, 'uResolution'), canvas.width, canvas.height)
@@ -138,6 +149,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.useProgram(lineProgram)
     gl.uniformMatrix4fv(gl.getUniformLocation(lineProgram, 'uViewProj'), false, currentViewProj)
     gl.uniform4fv(gl.getUniformLocation(lineProgram, 'uColor'), color)
+    gl.uniform1f(gl.getUniformLocation(lineProgram, 'uZ'), currentZ)
 
     gl.bindVertexArray(quadVao)
     gl.bindBuffer(gl.ARRAY_BUFFER, quadVbo)
@@ -155,7 +167,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteBuffer(quadVbo)
   }
 
-  return { drawLines, drawDashedLoop, drawQuads, beginFrame, dispose }
+  return { drawLines, drawDashedLoop, drawQuads, beginFrame, setZ, dispose }
 }
 
 // ── View-Projection matrix builder ──
@@ -209,9 +221,9 @@ export function buildViewProjMatrix(
 
   // VP = P * V (column-major result)
   return new Float32Array([
-    p00 * v00, p11 * v01, p22 * v02 + p23 * v02, -v02,
-    p00 * v10, p11 * v11, p22 * v12 + p23 * v12, -v12,
-    p00 * v20, p11 * v21, p22 * v22 + p23 * v22, -v22,
-    p00 * v30, p11 * v31, p22 * v32 + p23 * v32 + p32, -v32,
+    p00 * v00, p11 * v01, p22 * v02,       -v02,
+    p00 * v10, p11 * v11, p22 * v12,       -v12,
+    p00 * v20, p11 * v21, p22 * v22,       -v22,
+    p00 * v30, p11 * v31, p22 * v32 + p32, -v32,
   ])
 }

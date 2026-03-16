@@ -3,7 +3,7 @@ import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
 import { getCameraRayParams } from '../engine/camera'
 import { cpuRayMarch, screenToRay } from '../engine/sdf'
-import { FRUSTUM } from '../engine/scene'
+import { FRUSTUM, EXTRUDE_DEPTH } from '../engine/scene'
 import { useChoanStore } from '../store/useChoanStore'
 import type { ChoanElement, Tool } from '../store/useChoanStore'
 import { THEME_COLORS } from './materials'
@@ -58,6 +58,14 @@ export default function SDFCanvas() {
   const resizeStartPixelRef = useRef({ x: 0, y: 0 })
   const resizeCornerStartRef = useRef({ x: 0, y: 0 })
   const resizeAnchorRef = useRef({ x: 0, y: 0 })
+
+  // Radius drag state
+  const isRadiusDragRef = useRef(false)
+  const radiusStartRef = useRef(0)
+  const radiusDragStartPixelRef = useRef({ x: 0, y: 0 })
+
+  // Cursor
+  const [cursor, setCursor] = useState('default')
 
   // ── Coordinate helpers ──
 
@@ -174,24 +182,39 @@ export default function SDFCanvas() {
       if (e.button !== 0) return
 
       if (tool === 'select') {
-        // 1. Resize handle check
+        // 1. Handle check — multi-function anchors
         if (selectedId) {
           const corner = hitTestCorner(e.clientX, e.clientY)
           if (corner >= 0) {
             const el = elements.find((e) => e.id === selectedId)!
-            const cornerPositions = [
-              { x: el.x, y: el.y + el.height },
-              { x: el.x + el.width, y: el.y + el.height },
-              { x: el.x + el.width, y: el.y },
-              { x: el.x, y: el.y },
-            ]
-            isResizingRef.current = true
-            const pixel = screenToPixel(e.clientX, e.clientY)
-            if (pixel) resizeStartPixelRef.current = pixel
-            resizeCornerStartRef.current = cornerPositions[corner]
-            resizeAnchorRef.current = cornerPositions[(corner + 2) % 4]
-            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-            return
+
+            if (corner === 3 && el.type === 'rectangle') {
+              // TL handle → radius drag
+              isRadiusDragRef.current = true
+              radiusStartRef.current = el.radius ?? 0
+              const pixel = screenToPixel(e.clientX, e.clientY)
+              if (pixel) radiusDragStartPixelRef.current = pixel
+              ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+              return
+            }
+
+            if (corner === 1) {
+              // BR handle → resize (anchor at TL)
+              const cornerPositions = [
+                { x: el.x, y: el.y + el.height },
+                { x: el.x + el.width, y: el.y + el.height },
+                { x: el.x + el.width, y: el.y },
+                { x: el.x, y: el.y },
+              ]
+              isResizingRef.current = true
+              const pixel = screenToPixel(e.clientX, e.clientY)
+              if (pixel) resizeStartPixelRef.current = pixel
+              resizeCornerStartRef.current = cornerPositions[corner]
+              resizeAnchorRef.current = cornerPositions[(corner + 2) % 4]
+              ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+              return
+            }
+            // corners 0, 2 — reserved, no action
           }
         }
 
@@ -216,10 +239,25 @@ export default function SDFCanvas() {
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      const { elements: els } = useChoanStore.getState()
+      const { elements: els, selectedId: selId } = useChoanStore.getState()
+
+      // Radius drag
+      if (isRadiusDragRef.current && selId) {
+        const pixel = screenToPixel(e.clientX, e.clientY)
+        if (!pixel) return
+        const el = els.find((e) => e.id === selId)
+        if (!el) return
+        const dx = pixel.x - radiusDragStartPixelRef.current.x
+        const dy = pixel.y - radiusDragStartPixelRef.current.y
+        // TL→center = +dx, +dy; map diagonal distance to radius delta
+        const delta = (dx + dy) / Math.min(el.width, el.height)
+        const newRadius = Math.max(0, Math.min(1, radiusStartRef.current + delta))
+        updateElement(selId, { radius: newRadius })
+        return
+      }
 
       // Resize
-      if (isResizingRef.current && selectedId) {
+      if (isResizingRef.current && selId) {
         const pixel = screenToPixel(e.clientX, e.clientY)
         if (!pixel) return
         const dx = pixel.x - resizeStartPixelRef.current.x
@@ -229,10 +267,10 @@ export default function SDFCanvas() {
           x: resizeCornerStartRef.current.x + dx,
           y: resizeCornerStartRef.current.y + dy,
         }
-        const others = els.filter((e) => e.id !== selectedId)
+        const others = els.filter((e) => e.id !== selId)
         const snap = computeSnapResize(anchor, proposed, others)
         snapLinesRef.current = snap.lines
-        updateElement(selectedId, {
+        updateElement(selId, {
           x: Math.min(anchor.x, snap.x),
           y: Math.min(anchor.y, snap.y),
           width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x)),
@@ -242,12 +280,12 @@ export default function SDFCanvas() {
       }
 
       // Drag
-      if (isDraggingRef.current && tool === 'select' && selectedId) {
+      if (isDraggingRef.current && tool === 'select' && selId) {
         const pixel = screenToPixel(e.clientX, e.clientY)
         if (!pixel) return
         const dx = pixel.x - dragStartPixelRef.current.x
         const dy = pixel.y - dragStartPixelRef.current.y
-        const el = els.find((e) => e.id === selectedId)
+        const el = els.find((e) => e.id === selId)
         if (!el) return
         const proposed = {
           x: dragElStartRef.current.x + dx,
@@ -255,21 +293,36 @@ export default function SDFCanvas() {
           width: el.width,
           height: el.height,
         }
-        const others = els.filter((e) => e.id !== selectedId)
+        const others = els.filter((e) => e.id !== selId)
         const snap = computeSnapMove(proposed, others)
         snapLinesRef.current = snap.lines
-        updateElement(selectedId, {
+        updateElement(selId, {
           x: proposed.x + snap.dx,
           y: proposed.y + snap.dy,
         })
+        return
+      }
+
+      // Hover cursor — only when idle
+      if (tool === 'select' && selId) {
+        const corner = hitTestCorner(e.clientX, e.clientY)
+        if (corner === 3) {
+          const el = els.find((e) => e.id === selId)
+          setCursor(el?.type === 'rectangle' ? 'grab' : 'default')
+        } else if (corner === 1) {
+          setCursor('nwse-resize')
+        } else {
+          setCursor('default')
+        }
       }
     },
-    [tool, selectedId, updateElement, screenToPixel],
+    [tool, selectedId, updateElement, screenToPixel, hitTestCorner],
   )
 
   const handlePointerUp = useCallback(() => {
     isResizingRef.current = false
     isDraggingRef.current = false
+    isRadiusDragRef.current = false
     snapLinesRef.current = []
   }, [])
 
@@ -371,16 +424,19 @@ export default function SDFCanvas() {
         FRUSTUM - (py / h) * 2 * FRUSTUM,
       ]
 
-      // Selection bounding box + corner handles
+      // Selection anchors on object front face
       if (state.selectedId) {
         const el = state.elements.find(e => e.id === state.selectedId)
         if (el) {
+          const frontZ = el.z * EXTRUDE_DEPTH + EXTRUDE_DEPTH / 2
+          ov.setZ(frontZ)
+
           const tl = p2w(el.x, el.y)
           const tr = p2w(el.x + el.width, el.y)
           const br = p2w(el.x + el.width, el.y + el.height)
           const bl = p2w(el.x, el.y + el.height)
 
-          // Dashed selection rectangle
+          // Dashed edge lines connecting anchors
           ov.drawDashedLoop(
             new Float32Array([...tl, ...tr, ...br, ...bl]),
             [0.26, 0.52, 0.96, 1],
@@ -391,6 +447,8 @@ export default function SDFCanvas() {
           const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
           ov.drawQuads(handles, hWorld, [0.26, 0.52, 0.96, 1])
           ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
+
+          ov.setZ(0)
         }
       }
 
@@ -456,14 +514,13 @@ export default function SDFCanvas() {
     }
   }, [elements])
 
-  const isShapeTool = tool !== 'select'
-  const cursor = isShapeTool ? 'crosshair' : 'default'
+  const effectiveCursor = tool !== 'select' ? 'crosshair' : cursor
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div
         ref={mountRef}
-        style={{ width: '100%', height: '100%', cursor }}
+        style={{ width: '100%', height: '100%', cursor: effectiveCursor }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
