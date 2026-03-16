@@ -44,13 +44,28 @@ function findRootAncestor(els: ChoanElement[], elId: string): string {
   return findRootAncestor(els, el.parentId)
 }
 
+// Check if an element is in a free-layout container
+function isInFreeLayout(els: ChoanElement[], elId: string): boolean {
+  const el = els.find((e) => e.id === elId)
+  if (!el?.parentId) return false
+  const parent = els.find((e) => e.id === el.parentId)
+  return !parent?.layoutDirection || parent.layoutDirection === 'free'
+}
+
 // Resolve the group of element IDs that move together
 function resolveGroup(els: ChoanElement[], elId: string): string[] {
   const el = els.find((e) => e.id === elId)
   if (!el) return [elId]
 
   if (el.parentId) {
-    // Child: find root ancestor, move entire tree
+    // Free-layout child: move independently (+ own descendants)
+    if (isInFreeLayout(els, elId)) {
+      if (el.role === 'container') {
+        return [el.id, ...collectDescendants(els, el.id)]
+      }
+      return [el.id]
+    }
+    // Managed child: find root ancestor, move entire tree
     const rootId = findRootAncestor(els, elId)
     return [rootId, ...collectDescendants(els, rootId)]
   }
@@ -253,8 +268,10 @@ export default function SDFCanvas() {
               return
             }
 
-            if (corner === 1 && !el.parentId) {
-              // BR handle → resize (only for non-child elements)
+            const parentOfEl = el.parentId ? elements.find((p) => p.id === el.parentId) : null
+            const isManagedChild = el.parentId && parentOfEl?.layoutDirection !== 'free' && parentOfEl?.layoutDirection !== undefined
+            if (corner === 1 && !isManagedChild) {
+              // BR handle → resize (disabled for layout-managed children)
               const cornerPositions = [
                 { x: el.x, y: el.y + el.height },
                 { x: el.x + el.width, y: el.y + el.height },
@@ -294,9 +311,15 @@ export default function SDFCanvas() {
           }
           dragGroupStartRef.current = startMap
 
-          // Find the container in the group (for snap reference)
+          // Find the snap reference element in the group
           const el = els.find((e) => e.id === selectedId)!
-          dragContainerIdRef.current = el.parentId ?? (el.role === 'container' ? el.id : null)
+          if (el.role === 'container' && groupIds.includes(el.id)) {
+            dragContainerIdRef.current = el.id
+          } else if (el.parentId && groupIds.includes(el.parentId)) {
+            dragContainerIdRef.current = el.parentId
+          } else {
+            dragContainerIdRef.current = null
+          }
 
           ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
         } else {
@@ -398,7 +421,9 @@ export default function SDFCanvas() {
           setCursor(el?.type === 'rectangle' ? 'grab' : 'default')
         } else if (corner === 1) {
           const el = els.find((e) => e.id === selId)
-          setCursor(el?.parentId ? 'default' : 'nwse-resize')
+          const parent = el?.parentId ? els.find((p) => p.id === el.parentId) : null
+          const managed = el?.parentId && parent?.layoutDirection !== 'free' && parent?.layoutDirection !== undefined
+          setCursor(managed ? 'default' : 'nwse-resize')
         } else {
           setCursor('default')
         }

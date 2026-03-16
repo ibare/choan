@@ -35,7 +35,7 @@ export interface ChoanElement {
   // container hierarchy
   parentId?: string
   // container layout (only meaningful when role === 'container')
-  layoutDirection?: 'row' | 'column'
+  layoutDirection?: 'free' | 'row' | 'column'
   layoutGap?: number
   layoutPadding?: number
 }
@@ -114,16 +114,24 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
   const children = elements.filter((e) => e.parentId === containerId)
   if (children.length === 0) return elements
 
+  const direction = container.layoutDirection ?? 'free'
+  const childZ = container.z + 1
+  const childIds = new Set(children.map((c) => c.id))
+
+  // Free mode: only update z, keep positions as-is
+  if (direction === 'free') {
+    return elements.map((e) =>
+      childIds.has(e.id) ? { ...e, z: childZ } : e,
+    )
+  }
+
   const positions = computeAutoLayout({
     container: { x: container.x, y: container.y, width: container.width, height: container.height },
-    direction: container.layoutDirection ?? 'column',
+    direction,
     gap: container.layoutGap ?? 8,
     padding: container.layoutPadding ?? 8,
     childCount: children.length,
   })
-
-  const childZ = container.z + 1
-  const childIds = new Set(children.map((c) => c.id))
 
   return elements.map((e) => {
     if (!childIds.has(e.id)) return e

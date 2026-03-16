@@ -2,7 +2,7 @@
 
 export interface LayoutInput {
   container: { x: number; y: number; width: number; height: number }
-  direction: 'row' | 'column'
+  direction: 'free' | 'row' | 'column'
   gap: number
   padding: number
   childCount: number
@@ -17,7 +17,7 @@ export interface LayoutRect {
 
 export function computeAutoLayout(input: LayoutInput): LayoutRect[] {
   const { container, direction, gap, padding, childCount } = input
-  if (childCount <= 0) return []
+  if (childCount <= 0 || direction === 'free') return []
 
   const innerX = container.x + padding
   const innerY = container.y + padding

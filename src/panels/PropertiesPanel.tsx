@@ -18,6 +18,8 @@ export default function PropertiesPanel() {
   }
 
   const isChild = !!el.parentId
+  const parentElForLayout = isChild ? elements.find((e) => e.id === el.parentId) : null
+  const isManaged = isChild && parentElForLayout?.layoutDirection !== 'free' && parentElForLayout?.layoutDirection !== undefined
   const isContainer = el.role === 'container'
   const childCount = isContainer ? elements.filter((e) => e.parentId === el.id).length : 0
   const parentEl = isChild ? elements.find((e) => e.id === el.parentId) : null
@@ -75,13 +77,15 @@ export default function PropertiesPanel() {
           <label className="field-label">Direction</label>
           <select
             className="field-select"
-            value={el.layoutDirection ?? 'column'}
+            value={el.layoutDirection ?? 'free'}
             onChange={(e) => handleContainerProp({ layoutDirection: e.target.value })}
           >
+            <option value="free">Free</option>
             <option value="column">Column</option>
             <option value="row">Row</option>
           </select>
 
+          {(el.layoutDirection === 'row' || el.layoutDirection === 'column') && <>
           <label className="field-label">Gap</label>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
             <input
@@ -107,6 +111,7 @@ export default function PropertiesPanel() {
             />
             <span style={{ fontSize: 11, color: '#888' }}>px</span>
           </div>
+          </>}
 
           <label className="field-label">Children</label>
           <div className="field-value">{childCount} elements</div>
@@ -202,7 +207,7 @@ export default function PropertiesPanel() {
         <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round(el.opacity * 100)}%</span>
       </div>
 
-      <label className="field-label">Position{isChild ? ' — managed' : ''}</label>
+      <label className="field-label">Position{isManaged ? ' — managed' : ''}</label>
       <div style={{ display: 'flex', gap: 4 }}>
         <input
           className="field-input"
@@ -210,7 +215,7 @@ export default function PropertiesPanel() {
           placeholder="X"
           style={{ width: '50%' }}
           value={Math.round(el.x)}
-          disabled={isChild}
+          disabled={isManaged}
           onChange={(e) => updateElement(el.id, { x: Number(e.target.value) })}
         />
         <input
@@ -219,12 +224,12 @@ export default function PropertiesPanel() {
           placeholder="Y"
           style={{ width: '50%' }}
           value={Math.round(el.y)}
-          disabled={isChild}
+          disabled={isManaged}
           onChange={(e) => updateElement(el.id, { y: Number(e.target.value) })}
         />
       </div>
 
-      <label className="field-label">Size{isChild ? ' — managed' : ''}</label>
+      <label className="field-label">Size{isManaged ? ' — managed' : ''}</label>
       <div style={{ display: 'flex', gap: 4 }}>
         <input
           className="field-input"
@@ -232,7 +237,7 @@ export default function PropertiesPanel() {
           placeholder="W"
           style={{ width: '50%' }}
           value={Math.round(el.width)}
-          disabled={isChild}
+          disabled={isManaged}
           onChange={(e) => updateElement(el.id, { width: Number(e.target.value) })}
         />
         <input
@@ -241,7 +246,7 @@ export default function PropertiesPanel() {
           placeholder="H"
           style={{ width: '50%' }}
           value={Math.round(el.height)}
-          disabled={isChild}
+          disabled={isManaged}
           onChange={(e) => updateElement(el.id, { height: Number(e.target.value) })}
         />
       </div>
