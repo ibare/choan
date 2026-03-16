@@ -750,19 +750,21 @@ export default function SDFCanvas() {
         manipulatedIds.add(drawElIdRef.current)
       }
 
-      // Animate element positions/sizes with spring physics
       const state = useChoanStore.getState()
-      const springAnimated = animator.tick(state.elements, {
-        stiffness: rs.springStiffness,
-        damping: rs.springDamping,
-        squashIntensity: rs.squashIntensity,
-      }, manipulatedIds.size > 0 ? manipulatedIds : undefined)
-
-      // Keyframe animations (state-driven) override spring results
       const preview = usePreviewStore.getState()
-      const animatedElements = preview.previewState === 'playing'
-        ? kfAnimator.tick(springAnimated, performance.now())
-        : springAnimated
+
+      // During preview playback: skip spring physics, run keyframe engine directly
+      // Spring animation is purely for UI editing feedback, not for playback
+      let animatedElements: typeof state.elements
+      if (preview.previewState === 'playing') {
+        animatedElements = kfAnimator.tick(state.elements, performance.now())
+      } else {
+        animatedElements = animator.tick(state.elements, {
+          stiffness: rs.springStiffness,
+          damping: rs.springDamping,
+          squashIntensity: rs.squashIntensity,
+        }, manipulatedIds.size > 0 ? manipulatedIds : undefined)
+      }
       renderer.updateScene(animatedElements, rs.extrudeDepth)
 
       renderer.render(rs)
