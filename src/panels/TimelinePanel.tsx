@@ -368,12 +368,29 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   // ── Playback ──
   const handlePlayPause = () => {
     if (previewState === 'playing') { pause(); return }
+    // Save snapshot before first play so stop can restore
+    const kf = (window as unknown as Record<string, unknown>).__choanKF as KeyframeAnimator | undefined
+    if (previewState === 'stopped' && kf) {
+      kf.saveSnapshot(useChoanStore.getState().elements)
+    }
     play()
   }
   const handleStop = () => {
-    stop()
     const kf = (window as unknown as Record<string, unknown>).__choanKF as KeyframeAnimator | undefined
-    kf?.stopAll()
+    if (kf) {
+      kf.stopAll()
+      // Restore elements to pre-playback state
+      const snapshot = kf.getSnapshot()
+      if (snapshot) {
+        useChoanStore.getState().loadFile({
+          elements: snapshot,
+          animationClips: useChoanStore.getState().animationClips,
+          animationBundles: useChoanStore.getState().animationBundles,
+        })
+        kf.clearSnapshot()
+      }
+    }
+    stop()
   }
 
   // ── Bundle name editing ──

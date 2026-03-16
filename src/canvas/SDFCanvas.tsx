@@ -720,6 +720,10 @@ export default function SDFCanvas() {
 
     const animator = createLayoutAnimator()
     const kfAnimator = createKeyframeAnimator()
+    // Persist final values to store so completed animations don't snap back
+    kfAnimator.onComplete = (elementId, finalValues) => {
+      useChoanStore.getState().updateElement(elementId, finalValues)
+    }
     // Expose keyframe animator for pointer event handlers
     ;(window as unknown as Record<string, unknown>).__choanKF = kfAnimator
 

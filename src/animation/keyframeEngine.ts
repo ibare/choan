@@ -1,4 +1,5 @@
 // Keyframe animation engine — tick-based playback with easing and interpolation
+// Snapshots element values before animation starts so they can be restored on stop.
 
 import type { ChoanElement } from '../store/useChoanStore'
 import type { AnimationClip, AnimatableProperty } from './types'
@@ -12,6 +13,8 @@ interface RunningAnimation {
   easingFn: EasingFn
 }
 
+export type OnAnimationComplete = (elementId: string, finalValues: Partial<ChoanElement>) => void
+
 export interface KeyframeAnimator {
   start(clip: AnimationClip, interactionId: string, now: number): void
   stop(clipId: string): void
@@ -19,10 +22,29 @@ export interface KeyframeAnimator {
   tick(elements: ChoanElement[], now: number): ChoanElement[]
   isAnimating(): boolean
   getProgress(clipId: string): number
+  saveSnapshot(elements: ChoanElement[]): void
+  getSnapshot(): ChoanElement[] | null
+  clearSnapshot(): void
+  onComplete: OnAnimationComplete | null
 }
 
 export function createKeyframeAnimator(): KeyframeAnimator {
   const running = new Map<string, RunningAnimation>()
+  let snapshot: ChoanElement[] | null = null
+  let onComplete: OnAnimationComplete | null = null
+
+  function saveSnapshot(elements: ChoanElement[]) {
+    // Deep-enough clone: spread each element
+    snapshot = elements.map((el) => ({ ...el }))
+  }
+
+  function getSnapshot(): ChoanElement[] | null {
+    return snapshot
+  }
+
+  function clearSnapshot() {
+    snapshot = null
+  }
 
   function start(clip: AnimationClip, interactionId: string, now: number) {
     // Stop any existing animation on the same element
@@ -82,8 +104,13 @@ export function createKeyframeAnimator(): KeyframeAnimator {
       overrides.set(clip.elementId, { ...existing, ...patch })
     }
 
-    // Remove completed animations
+    // Remove completed animations and persist final values
     for (const id of completed) {
+      const anim = running.get(id)
+      if (anim && onComplete) {
+        const finalValues = overrides.get(anim.clip.elementId)
+        if (finalValues) onComplete(anim.clip.elementId, finalValues)
+      }
       running.delete(id)
     }
 
@@ -108,5 +135,10 @@ export function createKeyframeAnimator(): KeyframeAnimator {
     return Math.min(1, elapsed / anim.clip.duration)
   }
 
-  return { start, stop, stopAll, tick, isAnimating, getProgress }
+  return {
+    start, stop, stopAll, tick, isAnimating, getProgress,
+    saveSnapshot, getSnapshot, clearSnapshot,
+    get onComplete() { return onComplete },
+    set onComplete(cb: OnAnimationComplete | null) { onComplete = cb },
+  }
 }
