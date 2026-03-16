@@ -129,6 +129,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     const ray = getCameraRayParams(camera)
 
     // ── Pass 1: Geometry → GBuffer (2x) ──
+    gl.disable(gl.BLEND)
     gbuffer.bind(gl)
     gl.viewport(0, 0, ssW, ssH)
 

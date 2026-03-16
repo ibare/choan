@@ -52,10 +52,35 @@ void main() {
 }
 `
 
+const DISC_VERT = /* glsl */ `#version 300 es
+layout(location = 0) in vec4 aData; // xy = position, zw = UV
+uniform mat4 uViewProj;
+uniform float uZ;
+out vec2 vUV;
+void main() {
+  gl_Position = uViewProj * vec4(aData.xy, uZ, 1.0);
+  vUV = aData.zw;
+}
+`
+
+const DISC_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 fragColor;
+in vec2 vUV;
+void main() {
+  float d = length(vUV - 0.5) * 2.0;
+  if (d > 1.0) discard;
+  float aa = 1.0 - smoothstep(0.92, 1.0, d);
+  fragColor = vec4(uColor.rgb, uColor.a * aa);
+}
+`
+
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
+  drawDisc(cx: number, cy: number, radius: number, color: [number, number, number, number]): void
   beginFrame(viewProj: Float32Array): void
   setZ(z: number): void
   dispose(): void
@@ -64,6 +89,7 @@ export interface OverlayRenderer {
 export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRenderer {
   const lineProgram = createProgram(gl, OVERLAY_VERT, OVERLAY_FRAG)
   const dashProgram = createProgram(gl, DASH_VERT, DASH_FRAG)
+  const discProgram = createProgram(gl, DISC_VERT, DISC_FRAG)
 
   // Line VAO
   const lineVao = gl.createVertexArray()!
@@ -83,6 +109,15 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
   gl.bindVertexArray(null)
 
+  // Disc VAO (vec4: xy position + zw UV)
+  const discVao = gl.createVertexArray()!
+  const discVbo = gl.createBuffer()!
+  gl.bindVertexArray(discVao)
+  gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
+  gl.enableVertexAttribArray(0)
+  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0)
+  gl.bindVertexArray(null)
+
   let currentViewProj: Float32Array | null = null
   let currentZ = 0.0
 
@@ -90,6 +125,8 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     currentViewProj = viewProj
     currentZ = 0.0
     gl.disable(gl.DEPTH_TEST)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
   }
 
   function setZ(z: number) {
@@ -158,16 +195,43 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindVertexArray(null)
   }
 
+  function drawDisc(cx: number, cy: number, radius: number, color: [number, number, number, number]) {
+    if (!currentViewProj) return
+
+    const data = new Float32Array([
+      cx - radius, cy - radius, 0, 0,
+      cx + radius, cy - radius, 1, 0,
+      cx + radius, cy + radius, 1, 1,
+      cx - radius, cy - radius, 0, 0,
+      cx + radius, cy + radius, 1, 1,
+      cx - radius, cy + radius, 0, 1,
+    ])
+
+    gl.useProgram(discProgram)
+    gl.uniformMatrix4fv(gl.getUniformLocation(discProgram, 'uViewProj'), false, currentViewProj)
+    gl.uniform4fv(gl.getUniformLocation(discProgram, 'uColor'), color)
+    gl.uniform1f(gl.getUniformLocation(discProgram, 'uZ'), currentZ)
+
+    gl.bindVertexArray(discVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    gl.bindVertexArray(null)
+  }
+
   function dispose() {
     gl.deleteProgram(lineProgram)
     gl.deleteProgram(dashProgram)
+    gl.deleteProgram(discProgram)
     gl.deleteVertexArray(lineVao)
     gl.deleteBuffer(lineVbo)
     gl.deleteVertexArray(quadVao)
     gl.deleteBuffer(quadVbo)
+    gl.deleteVertexArray(discVao)
+    gl.deleteBuffer(discVbo)
   }
 
-  return { drawLines, drawDashedLoop, drawQuads, beginFrame, setZ, dispose }
+  return { drawLines, drawDashedLoop, drawQuads, drawDisc, beginFrame, setZ, dispose }
 }
 
 // ── View-Projection matrix builder ──

@@ -145,7 +145,7 @@ const initialState = {
   elements: [] as ChoanElement[],
   selectedId: null as string | null,
   tool: 'select' as Tool,
-  drawColor: 0x7DDCAC,
+  drawColor: 0xE6F8F0,
   globalStates: [] as GlobalState[],
   interactions: [] as Interaction[],
 }

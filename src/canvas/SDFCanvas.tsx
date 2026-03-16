@@ -7,7 +7,7 @@ import { FRUSTUM } from '../engine/scene'
 import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import type { ChoanElement, Tool } from '../store/useChoanStore'
-import { THEME_COLORS } from './materials'
+import { THEME_COLORS, COLOR_FAMILIES } from './materials'
 import { nanoid } from './nanoid'
 import {
   computeSnapMove, computeSnapResize, computeDistances,
@@ -128,6 +128,10 @@ export default function SDFCanvas() {
     removeElement,
   } = useChoanStore()
 
+  // WebGL color picker state (refs for animate loop access)
+  const colorPickerOpenRef = useRef(false)
+  const colorPickerHoverRef = useRef(-1)
+
   // Drag state
   const isDraggingRef = useRef(false)
   const dragStartPixelRef = useRef({ x: 0, y: 0 })
@@ -239,6 +243,36 @@ export default function SDFCanvas() {
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
+      if (colorPickerOpenRef.current) {
+        // Hit test WebGL color picker swatches
+        const pixel = screenToPixel(e.clientX, e.clientY)
+        if (pixel && selectedId) {
+          const el = elements.find((el) => el.id === selectedId)
+          if (el) {
+            const ax = el.x + el.width, ay = el.y
+            for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
+              for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
+                const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
+                const ring = 48 + si * 28
+                const sx = ax + Math.cos(angle) * ring
+                const sy = ay + Math.sin(angle) * ring
+                const dx = pixel.x - sx, dy = pixel.y - sy
+                if (dx * dx + dy * dy <= 12 * 12) {
+                  const hex = COLOR_FAMILIES[fi].shades[si]
+                  const els = useChoanStore.getState().elements
+                  applyToSiblings(updateElement, els, selectedId, { color: hex }, e.altKey)
+                  colorPickerOpenRef.current = false
+                  colorPickerHoverRef.current = -1
+                  return
+                }
+              }
+            }
+          }
+        }
+        colorPickerOpenRef.current = false
+        colorPickerHoverRef.current = -1
+        return
+      }
 
       if (tool === 'select') {
         // 1. Handle check — multi-function anchors
@@ -246,6 +280,13 @@ export default function SDFCanvas() {
           const corner = hitTestCorner(e.clientX, e.clientY)
           if (corner >= 0) {
             const el = elements.find((e) => e.id === selectedId)!
+
+            if (corner === 2) {
+              // TR handle → WebGL radial color picker
+              colorPickerOpenRef.current = true
+              colorPickerHoverRef.current = -1
+              return
+            }
 
             if (corner === 3 && el.type === 'rectangle') {
               // TL handle → radius drag
@@ -347,6 +388,31 @@ export default function SDFCanvas() {
     (e: React.PointerEvent) => {
       const { elements: els, selectedId: selId, updateElement: update } = useChoanStore.getState()
 
+      // Color picker hover detection
+      if (colorPickerOpenRef.current && selId) {
+        const pixel = screenToPixel(e.clientX, e.clientY)
+        if (pixel) {
+          const el = els.find((el) => el.id === selId)
+          if (el) {
+            const ax = el.x + el.width, ay = el.y
+            let found = -1
+            for (let fi = 0; fi < COLOR_FAMILIES.length && found < 0; fi++) {
+              for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
+                const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
+                const ring = 48 + si * 28
+                const sx = ax + Math.cos(angle) * ring
+                const sy = ay + Math.sin(angle) * ring
+                const dx = pixel.x - sx, dy = pixel.y - sy
+                if (dx * dx + dy * dy <= 12 * 12) { found = fi * 5 + si; break }
+              }
+            }
+            colorPickerHoverRef.current = found
+            setCursor(found >= 0 ? 'pointer' : 'default')
+          }
+        }
+        return
+      }
+
       // Draw-to-create
       if (isDrawingRef.current && drawElIdRef.current) {
         const pixel = screenToPixel(e.clientX, e.clientY)
@@ -442,7 +508,9 @@ export default function SDFCanvas() {
       // Hover cursor — only when idle
       if (tool === 'select' && selId) {
         const corner = hitTestCorner(e.clientX, e.clientY)
-        if (corner === 3) {
+        if (corner === 2) {
+          setCursor('pointer')
+        } else if (corner === 3) {
           const el = els.find((e) => e.id === selId)
           setCursor(el?.type === 'rectangle' ? 'grab' : 'default')
         } else if (corner === 1) {
@@ -533,6 +601,11 @@ export default function SDFCanvas() {
       const tag = (e.target as HTMLElement).tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
 
+      if (e.key === 'Escape') {
+        colorPickerOpenRef.current = false
+        colorPickerHoverRef.current = -1
+        return
+      }
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const { selectedId } = useChoanStore.getState()
         if (selectedId) removeElement(selectedId)
@@ -712,6 +785,53 @@ export default function SDFCanvas() {
       }
       if (dVerts.length > 0) {
         ov.drawLines(new Float32Array(dVerts), [0.97, 0.45, 0.09, 1])
+      }
+
+      // ── WebGL Color Picker (concentric rings) ──
+      if (colorPickerOpenRef.current && state.selectedId) {
+        const pickEl = state.elements.find(e => e.id === state.selectedId)
+        if (pickEl) {
+          const frontZ = pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+          ov.setZ(frontZ)
+
+          const ax = pickEl.x + pickEl.width
+          const ay = pickEl.y
+          const pxToW = (2 * FRUSTUM) / h
+          const discR = 11 * pxToW
+          const borderR = discR * 1.22
+          const hoverIdx = colorPickerHoverRef.current
+
+          for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
+            const family = COLOR_FAMILIES[fi]
+            for (let si = 0; si < family.shades.length; si++) {
+              const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
+              const ring = 48 + si * 28
+              const px = ax + Math.cos(angle) * ring
+              const py = ay + Math.sin(angle) * ring
+              const [wx, wy] = p2w(px, py)
+
+              const hex = family.shades[si]
+              const cr = ((hex >> 16) & 0xFF) / 255
+              const cg = ((hex >> 8) & 0xFF) / 255
+              const cb = (hex & 0xFF) / 255
+              const idx = fi * 5 + si
+              const isHovered = idx === hoverIdx
+              const isActive = pickEl.color === hex
+
+              // Border disc
+              const bR = isHovered ? borderR * 1.3 : isActive ? borderR * 1.2 : borderR
+              const bColor: [number, number, number, number] = isActive
+                ? [0.36, 0.31, 0.81, 1]
+                : [1, 1, 1, 0.9]
+              ov.drawDisc(wx, wy, bR, bColor)
+
+              // Fill disc
+              const fR = isHovered ? discR * 1.3 : discR
+              ov.drawDisc(wx, wy, fR, [cr, cg, cb, 1])
+            }
+          }
+          ov.setZ(0)
+        }
       }
     }
     animate()
