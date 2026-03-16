@@ -31,7 +31,7 @@ const RAD_STIFFNESS = 0.05
 const RAD_DAMPING = 0.90
 
 export interface LayoutAnimator {
-  tick(elements: ChoanElement[], params: SpringParams): ChoanElement[]
+  tick(elements: ChoanElement[], params: SpringParams, skipIds?: ReadonlySet<string>): ChoanElement[]
   isAnimating(): boolean
 }
 
@@ -39,7 +39,7 @@ export function createLayoutAnimator(): LayoutAnimator {
   const springs = new Map<string, SpringState>()
   let animating = false
 
-  function tick(elements: ChoanElement[], params: SpringParams): ChoanElement[] {
+  function tick(elements: ChoanElement[], params: SpringParams, skipIds?: ReadonlySet<string>): ChoanElement[] {
     const { stiffness, damping, squashIntensity: fluid } = params
     const activeIds = new Set<string>()
     animating = false
@@ -53,6 +53,22 @@ export function createLayoutAnimator(): LayoutAnimator {
       const tt = el.y
       const tr = el.x + el.width
       const tb = el.y + el.height
+
+      // Skip animation for elements being directly manipulated by the user
+      if (skipIds?.has(el.id)) {
+        if (s) {
+          s.l = tl; s.t = tt; s.r = tr; s.b = tb
+          s.vl = 0; s.vt = 0; s.vr = 0; s.vb = 0
+          s.rad = el.radius ?? 0; s.vrad = 0
+        } else {
+          springs.set(el.id, {
+            l: tl, t: tt, r: tr, b: tb,
+            vl: 0, vt: 0, vr: 0, vb: 0,
+            rad: el.radius ?? 0, vrad: 0,
+          })
+        }
+        return el
+      }
 
       if (!s) {
         springs.set(el.id, {

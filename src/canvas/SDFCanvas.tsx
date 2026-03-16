@@ -556,13 +556,22 @@ export default function SDFCanvas() {
       controls.update()
       const rs = useRenderSettings.getState()
 
+      // Collect IDs of elements being directly manipulated (drag/resize)
+      const manipulatedIds = new Set<string>()
+      if (isDraggingRef.current) {
+        for (const id of dragGroupIdsRef.current) manipulatedIds.add(id)
+      }
+      if (isResizingRef.current && resizeElIdRef.current) {
+        manipulatedIds.add(resizeElIdRef.current)
+      }
+
       // Animate element positions/sizes with spring physics
       const state = useChoanStore.getState()
       const animatedElements = animator.tick(state.elements, {
         stiffness: rs.springStiffness,
         damping: rs.springDamping,
         squashIntensity: rs.squashIntensity,
-      })
+      }, manipulatedIds.size > 0 ? manipulatedIds : undefined)
       renderer.updateScene(animatedElements, rs.extrudeDepth)
 
       renderer.render(rs)
