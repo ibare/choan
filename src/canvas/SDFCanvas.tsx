@@ -14,6 +14,7 @@ import {
   type SnapLine, type DistanceMeasure,
 } from './snapUtils'
 import { detectContainment } from '../layout/containment'
+import { createLayoutAnimator } from '../layout/animator'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 
 const HANDLE_HIT_RADIUS = 16
@@ -548,14 +549,21 @@ export default function SDFCanvas() {
     const controls = createOrbitControls(renderer.canvas, renderer.camera)
     controlsRef.current = controls
 
+    const animator = createLayoutAnimator()
+
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate)
       controls.update()
       const rs = useRenderSettings.getState()
+
+      // Animate element positions/sizes with spring physics
+      const state = useChoanStore.getState()
+      const animatedElements = animator.tick(state.elements)
+      renderer.updateScene(animatedElements, rs.extrudeDepth)
+
       renderer.render(rs)
 
       // ── Overlay pass ──
-      const state = useChoanStore.getState()
       const { w, h } = canvasSizeRef.current
       const aspect = w / h
       const ov = renderer.overlay
@@ -633,8 +641,6 @@ export default function SDFCanvas() {
       const h = mount.clientHeight
       canvasSizeRef.current = { w, h }
       renderer.resize(w, h)
-      const { elements } = useChoanStore.getState()
-      renderer.updateScene(elements, useRenderSettings.getState().extrudeDepth)
     })
     ro.observe(mount)
 
@@ -648,13 +654,7 @@ export default function SDFCanvas() {
     }
   }, [])
 
-  // Sync elements → GPU
-  const extrudeDepth = useRenderSettings((s) => s.extrudeDepth)
-  useEffect(() => {
-    if (rendererRef.current) {
-      rendererRef.current.updateScene(elements, extrudeDepth)
-    }
-  }, [elements, extrudeDepth])
+  // extrudeDepth is read in the animate loop via useRenderSettings.getState()
 
   const effectiveCursor = tool !== 'select' ? 'crosshair' : cursor
 
