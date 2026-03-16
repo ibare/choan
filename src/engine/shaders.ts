@@ -242,7 +242,7 @@ float edgeObjectId(vec2 uv, float scale) {
 
   float d1 = abs(id11 - id00);
   float d2 = abs(id10 - id01);
-  return step(0.5, d1 + d2);
+  return smoothstep(0.1, 0.6, d1 + d2);
 }
 
 void main() {

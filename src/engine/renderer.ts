@@ -68,8 +68,34 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const bgG = 0xf3 / 255
   const bgB = 0xee / 255
 
+  // 2x supersampling for edge AA
+  const SS = 2
+
   // GBuffer (created at initial size, resized later)
   const gbuffer = createGBuffer(gl, 1, 1)
+
+  // Resolve FBO — edge pass renders here at 2x, then blits down to canvas
+  let resolveFB = gl.createFramebuffer()!
+  let resolveTex = gl.createTexture()!
+  let ssW = 1, ssH = 1
+
+  function resizeResolve(w: number, h: number) {
+    gl.deleteTexture(resolveTex)
+    resolveTex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, resolveTex)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, resolveFB)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, resolveTex, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    ssW = w
+    ssH = h
+  }
 
   let cssWidth = 1
   let cssHeight = 1
@@ -83,7 +109,11 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     camera.aspect = width / height
     cssWidth = width
     cssHeight = height
-    gbuffer.resize(gl, canvas.width, canvas.height)
+
+    const sw = canvas.width * SS
+    const sh = canvas.height * SS
+    gbuffer.resize(gl, sw, sh)
+    resizeResolve(sw, sh)
   }
 
   function updateScene(elements: ChoanElement[]) {
@@ -93,12 +123,12 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   function render() {
     const ray = getCameraRayParams(camera)
 
-    // ── Pass 1: Geometry → FBO ──
+    // ── Pass 1: Geometry → GBuffer (2x) ──
     gbuffer.bind(gl)
-    gl.viewport(0, 0, canvas.width, canvas.height)
+    gl.viewport(0, 0, ssW, ssH)
 
     gl.useProgram(geoProgram)
-    gl.uniform2f(uResolution, canvas.width, canvas.height)
+    gl.uniform2f(uResolution, ssW, ssH)
     gl.uniform3f(uBgColor, bgR, bgG, bgB)
     gl.uniform3f(uCamPos, ray.ro[0], ray.ro[1], ray.ro[2])
     gl.uniform3f(uCamForward, ray.forward[0], ray.forward[1], ray.forward[2])
@@ -107,9 +137,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform1f(uFovScale, ray.fovScale)
     drawFullscreenQuad(gl, quad)
 
-    // ── Pass 2: Edge detection + composite → Canvas ──
+    // ── Pass 2: Edge detection → resolve FBO (2x) ──
     gbuffer.unbind(gl)
-    gl.viewport(0, 0, canvas.width, canvas.height)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, resolveFB)
+    gl.viewport(0, 0, ssW, ssH)
 
     gl.useProgram(edgeProgram)
 
@@ -121,14 +152,25 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.bindTexture(gl.TEXTURE_2D, gbuffer.normalIdTex)
     gl.uniform1i(uNormalIdTex, 1)
 
-    gl.uniform2f(uTexelSize, 1 / canvas.width, 1 / canvas.height)
+    gl.uniform2f(uTexelSize, 1 / ssW, 1 / ssH)
     gl.uniform1f(uOutlineWidth, 1.0)
     gl.uniform3f(uEdgeColor, 0.133, 0.133, 0.133)
     gl.uniform3f(uEdgeBgColor, bgR, bgG, bgB)
 
     drawFullscreenQuad(gl, quad)
 
-    // ── Overlay pass ──
+    // ── Downsample: resolve FBO (2x) → canvas (1x) ──
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, resolveFB)
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
+    gl.blitFramebuffer(
+      0, 0, ssW, ssH,
+      0, 0, canvas.width, canvas.height,
+      gl.COLOR_BUFFER_BIT, gl.LINEAR,
+    )
+
+    // ── Overlay pass (native resolution) ──
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, canvas.width, canvas.height)
     const vp = buildViewProjMatrix(
       camera.position, camera.target, camera.up,
       camera.fov, camera.aspect, camera.near, camera.far,
@@ -138,6 +180,8 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   function dispose() {
     gbuffer.dispose(gl)
+    gl.deleteTexture(resolveTex)
+    gl.deleteFramebuffer(resolveFB)
     sceneUBO.dispose(gl)
     overlay.dispose()
     gl.deleteProgram(geoProgram)
