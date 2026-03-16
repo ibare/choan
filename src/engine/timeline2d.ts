@@ -14,7 +14,7 @@ export interface TimelineHit {
 
 export interface DisplayTrack {
   property: string
-  keyframes: Array<{ time: number; value: number }>
+  keyframes: Array<{ time: number; value: number; easing?: string }>
 }
 
 export interface DisplayLayer {
@@ -45,9 +45,9 @@ export interface Timeline2D {
 
 // ── Constants ──
 
-const DIAMOND_SIZE = 10
+const DIAMOND_SIZE = 15
 const DIAMOND_HALF = DIAMOND_SIZE / 2
-const DIAMOND_HIT = 8 // hit radius slightly larger for usability
+const DIAMOND_HIT = 10
 const BAR_HEIGHT = 3
 const DPR = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1
 
@@ -67,8 +67,8 @@ const C = {
   diamond: '#5b4fcf',
   diamondBorder: '#ffffff',
   diamondHover: '#7b6fef',
-  playhead: '#e05a5a',
-  playheadHandle: '#e05a5a',
+  playhead: '#1a1a2e',
+  playheadHandle: '#1a1a2e',
 }
 
 // ── Factory ──
@@ -141,43 +141,46 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
     ctx.lineTo(w, rh - 0.5)
     ctx.stroke()
 
-    // Adaptive tick intervals based on zoom (pxPerMs)
+    // Adaptive tick intervals
     const { major: majorInterval, minor: minorInterval } = computeTickInterval(opts.pxPerMs)
-    // Visible time range
     const startMs = Math.max(0, Math.floor(opts.scrollX / opts.pxPerMs / minorInterval) * minorInterval)
     const endMs = Math.ceil((opts.scrollX + w) / opts.pxPerMs / minorInterval) * minorInterval
 
-    // Minor ticks
-    ctx.strokeStyle = C.rulerMinorTick
-    ctx.lineWidth = 1
+    const midY = rh * 0.55 // vertical center for labels
+
+    // Minor ticks — small dots hanging from top
+    ctx.fillStyle = C.rulerMinorTick
     for (let t = startMs; t <= endMs; t += minorInterval) {
       const rt = Math.round(t)
-      if (rt % majorInterval === 0) continue // drawn separately
+      if (rt % majorInterval === 0) continue
       const x = msToX(rt, opts)
       if (x < -1 || x > w + 1) continue
-      const px = Math.round(x) + 0.5
+      const px = Math.round(x)
       ctx.beginPath()
-      ctx.moveTo(px, rh - 6)
-      ctx.lineTo(px, rh - 1)
-      ctx.stroke()
+      ctx.arc(px, midY, 1, 0, Math.PI * 2)
+      ctx.fill()
     }
 
-    // Major ticks + labels
-    ctx.strokeStyle = C.rulerMajorTick
-    ctx.fillStyle = C.rulerLabel
-    ctx.font = '9px Inter, system-ui, sans-serif'
-    ctx.textBaseline = 'bottom'
+    // Major ticks — vertical line from top + label
+    ctx.font = '10px Inter, system-ui, sans-serif'
+    ctx.textBaseline = 'middle'
     const majorStart = Math.floor(startMs / majorInterval) * majorInterval
     for (let t = majorStart; t <= endMs; t += majorInterval) {
       const x = msToX(t, opts)
       if (x < -20 || x > w + 20) continue
       const px = Math.round(x) + 0.5
+
+      // Tick line
+      ctx.strokeStyle = C.rulerMajorTick
+      ctx.lineWidth = 1
       ctx.beginPath()
-      ctx.moveTo(px, rh - 14)
-      ctx.lineTo(px, rh - 1)
+      ctx.moveTo(px, midY - 5)
+      ctx.lineTo(px, midY + 5)
       ctx.stroke()
 
-      ctx.fillText(formatTickLabel(t), px + 3, rh - 15)
+      // Label right of tick
+      ctx.fillStyle = C.rulerLabel
+      ctx.fillText(formatTickLabel(t), px + 4, midY)
     }
   }
 
@@ -239,7 +242,7 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
               && opts.hoverKf?.trackIdx === ti
               && opts.hoverKf?.kfIdx === ki
 
-            drawDiamond(ctx, kx, trackMidY, isHover)
+            drawDiamond(ctx, kx, trackMidY, isHover, kf.easing ?? undefined)
           }
         }
         y += th
@@ -258,30 +261,35 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
   function renderPlayhead(opts: RenderOptions) {
     if (opts.playheadTime === null) return
     const x = msToX(opts.playheadTime, opts)
-    if (x < 0 || x > w) return
+    if (x < -8 || x > w + 8) return
     const px = Math.round(x) + 0.5
+    const rh = opts.rulerHeight
 
-    // Vertical line
+    // Vertical line spanning full height
     ctx.strokeStyle = C.playhead
     ctx.lineWidth = 1.5
     ctx.beginPath()
-    ctx.moveTo(px, 0)
+    ctx.moveTo(px, rh)
     ctx.lineTo(px, h)
     ctx.stroke()
 
-    // Handle triangle at top
+    // Stem in ruler area
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(px, rh * 0.55 + 6)
+    ctx.lineTo(px, rh)
+    ctx.stroke()
+
+    // Round handle at ruler center
     ctx.fillStyle = C.playheadHandle
     ctx.beginPath()
-    ctx.moveTo(px - 5, 0)
-    ctx.lineTo(px + 5, 0)
-    ctx.lineTo(px, 8)
-    ctx.closePath()
+    ctx.arc(px, rh * 0.55, 5, 0, Math.PI * 2)
     ctx.fill()
   }
 
   // ── Diamond primitive ──
 
-  function drawDiamond(c: CanvasRenderingContext2D, cx: number, cy: number, hover: boolean) {
+  function drawDiamond(c: CanvasRenderingContext2D, cx: number, cy: number, hover: boolean, easing?: string) {
     const s = hover ? DIAMOND_HALF * 1.3 : DIAMOND_HALF
     c.save()
     c.translate(cx, cy)
@@ -302,6 +310,49 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
     c.lineWidth = 1.5
     c.strokeRect(-s / Math.SQRT2, -s / Math.SQRT2, (s * 2) / Math.SQRT2, (s * 2) / Math.SQRT2)
 
+    c.restore()
+
+    // Easing curve icon below diamond
+    if (easing) {
+      drawEasingIcon(c, cx, cy + DIAMOND_HALF + 6, easing)
+    }
+  }
+
+  // Mini easing curve icon (12x8px area)
+  function drawEasingIcon(c: CanvasRenderingContext2D, cx: number, cy: number, easing: string) {
+    const w = 10, h = 6
+    const x0 = cx - w / 2, y0 = cy - h / 2
+    c.save()
+    c.strokeStyle = '#888'
+    c.lineWidth = 1.2
+    c.lineCap = 'round'
+    c.beginPath()
+    switch (easing) {
+      case 'linear':
+        c.moveTo(x0, y0 + h)
+        c.lineTo(x0 + w, y0)
+        break
+      case 'ease-in':
+        c.moveTo(x0, y0 + h)
+        c.quadraticCurveTo(x0 + w * 0.7, y0 + h, x0 + w, y0)
+        break
+      case 'ease-out':
+        c.moveTo(x0, y0 + h)
+        c.quadraticCurveTo(x0 + w * 0.3, y0, x0 + w, y0)
+        break
+      case 'ease-in-out':
+        c.moveTo(x0, y0 + h)
+        c.bezierCurveTo(x0 + w * 0.4, y0 + h, x0 + w * 0.6, y0, x0 + w, y0)
+        break
+      case 'spring':
+        c.moveTo(x0, y0 + h)
+        c.bezierCurveTo(x0 + w * 0.3, y0 - h * 0.3, x0 + w * 0.7, y0 + h * 0.2, x0 + w, y0)
+        break
+      default:
+        c.moveTo(x0, y0 + h)
+        c.lineTo(x0 + w, y0)
+    }
+    c.stroke()
     c.restore()
   }
 

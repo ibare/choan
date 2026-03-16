@@ -40,8 +40,8 @@ export function autoKeyframe(
     const newTrack = {
       property,
       keyframes: playheadTime === 0
-        ? [{ time: 0, value }]
-        : [{ time: 0, value: startValue }, { time: playheadTime, value }],
+        ? [{ time: 0, value, easing: 'ease-in-out' as const }]
+        : [{ time: 0, value: startValue, easing: 'ease-in-out' as const }, { time: playheadTime, value }],
     }
     const newTracks = [...clip.tracks, newTrack]
     const dur = Math.max(clip.duration, ...newTracks.flatMap((t) => t.keyframes.map((k) => k.time)))
@@ -59,7 +59,7 @@ export function autoKeyframe(
       )
     } else {
       // Insert new keyframe
-      newKfs = [...track.keyframes, { time: playheadTime, value }].sort((a, b) => a.time - b.time)
+      newKfs = [...track.keyframes, { time: playheadTime, value, easing: 'ease-in-out' as const }].sort((a, b) => a.time - b.time)
     }
 
     const newTracks = clip.tracks.map((t, i) =>

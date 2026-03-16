@@ -464,6 +464,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   flex-shrink: 0;
   overflow: hidden;
   font-size: 11px;
+  position: relative;
 }
 
 .timeline-header-bar {
@@ -581,6 +582,27 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .timeline-tab-name-input { width: 90px; font-size: 11px; padding: 2px 6px; }
 .timeline-tab-divider { color: var(--border); margin: 0 2px; font-size: 11px; }
 .timeline-tab-delete { margin-left: auto; font-size: 12px; }
+
+/* Easing curve selector popover */
+.easing-popover-backdrop {
+  position: absolute; inset: 0; z-index: 190;
+}
+.easing-popover {
+  position: absolute;
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  z-index: 191;
+  transform: translateX(-50%);
+}
+.easing-option {
+  padding: 4px 10px; border: none; background: none;
+  font-size: 11px; text-align: left; border-radius: 4px;
+  cursor: pointer; color: var(--text);
+}
+.easing-option:hover { background: var(--bg); }
+.easing-option.active { background: var(--accent); color: #fff; }
 
 .kf-editor-overlay {
   position: fixed;

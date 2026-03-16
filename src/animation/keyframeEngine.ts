@@ -3,14 +3,12 @@
 
 import type { ChoanElement } from '../store/useChoanStore'
 import type { AnimationClip, AnimatableProperty } from './types'
-import { resolveEasing, type EasingFn } from './easing'
 import { evaluateTrack } from './interpolate'
 
 interface RunningAnimation {
   clip: AnimationClip
   startTime: number
   interactionId: string
-  easingFn: EasingFn
 }
 
 export type OnAnimationComplete = (elementId: string, finalValues: Partial<ChoanElement>) => void
@@ -58,7 +56,6 @@ export function createKeyframeAnimator(): KeyframeAnimator {
       clip,
       startTime: now,
       interactionId,
-      easingFn: resolveEasing(clip.easing),
     })
   }
 
@@ -79,7 +76,7 @@ export function createKeyframeAnimator(): KeyframeAnimator {
 
     for (const [clipId, anim] of running) {
       const elapsed = now - anim.startTime
-      const { clip, easingFn } = anim
+      const { clip } = anim
 
       if (elapsed >= clip.duration) {
         // Apply final values
@@ -94,10 +91,10 @@ export function createKeyframeAnimator(): KeyframeAnimator {
         continue
       }
 
-      // Interpolate each track
+      // Interpolate each track (per-keyframe easing with clip-level fallback)
       const patch: Partial<ChoanElement> = {}
       for (const track of clip.tracks) {
-        const value = evaluateTrack(track.keyframes, elapsed, easingFn, track.property)
+        const value = evaluateTrack(track.keyframes, elapsed, clip.easing, track.property)
         ;(patch as Record<string, number>)[track.property] = value
       }
       const existing = overrides.get(clip.elementId) ?? {}

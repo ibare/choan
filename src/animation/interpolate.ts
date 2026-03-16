@@ -1,6 +1,7 @@
 // Property value interpolation
 
 import type { AnimatableProperty, Keyframe } from './types'
+import { resolveEasing } from './easing'
 
 // Numeric lerp
 function lerp(a: number, b: number, t: number): number {
@@ -43,11 +44,12 @@ export function interpolateValue(
 }
 
 // Evaluate a keyframe track at a given time, returning the interpolated value.
-// `easingFn` is applied per-segment.
+// Per-keyframe easing: each keyframe's `easing` field defines the curve to the next keyframe.
+// `fallbackEasing` is used when a keyframe has no easing set.
 export function evaluateTrack(
   keyframes: Keyframe[],
   time: number,
-  easingFn: (t: number) => number,
+  fallbackEasing: string | ((t: number) => number),
   property: AnimatableProperty,
 ): number {
   if (keyframes.length === 0) return 0
@@ -68,6 +70,15 @@ export function evaluateTrack(
       const segDuration = b.time - a.time
       if (segDuration <= 0) return b.value
       const localT = (time - a.time) / segDuration
+      // Per-keyframe easing: use this keyframe's easing, fallback to clip-level
+      let easingFn: (t: number) => number
+      if (a.easing) {
+        easingFn = resolveEasing(a.easing)
+      } else if (typeof fallbackEasing === 'function') {
+        easingFn = fallbackEasing
+      } else {
+        easingFn = resolveEasing(fallbackEasing)
+      }
       const easedT = easingFn(localT)
       return interpolateValue(property, a.value, b.value, easedT)
     }

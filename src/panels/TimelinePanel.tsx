@@ -6,13 +6,13 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { createTimeline2D, type Timeline2D, type DisplayLayer, type RenderOptions, type TimelineHit } from '../engine/timeline2d'
-import type { AnimationClip, AnimationBundle, AnimatableProperty } from '../animation/types'
+import type { AnimationClip, AnimationBundle, AnimatableProperty, EasingType } from '../animation/types'
 import type { KeyframeAnimator } from '../animation/keyframeEngine'
 import type { ChoanElement } from '../store/useChoanStore'
 import { nanoid } from '../canvas/nanoid'
 import { Play, Pause, Stop, Plus, X } from '@phosphor-icons/react'
 
-const TRACK_HEIGHT = 26
+const TRACK_HEIGHT = 38
 const LEFT_WIDTH = 190
 const RULER_HEIGHT = 30
 const LAYER_HEADER_HEIGHT = 24
@@ -93,6 +93,10 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
   const [hoverKf, setHoverKf] = useState<{ layerIdx: number; trackIdx: number; kfIdx: number } | null>(null)
+  const [selectedKf, setSelectedKf] = useState<{
+    layerIdx: number; trackIdx: number; kfIdx: number
+    screenX: number; screenY: number // for popover positioning
+  } | null>(null)
 
   const canvasWrapRef = useRef<HTMLDivElement>(null)
   const leftPanelRef = useRef<HTMLDivElement>(null)
@@ -228,6 +232,14 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
         layerIdx: hit.layerIdx, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx,
         startX: e.clientX, startTime: kf.time, bundleId: entry.bundleId,
       }
+      // Show easing popover
+      const panelRect = canvasWrapRef.current?.getBoundingClientRect()
+      const canvasRect = tl.canvas.getBoundingClientRect()
+      setSelectedKf({
+        layerIdx: hit.layerIdx, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx,
+        screenX: e.clientX - (panelRect?.left ?? canvasRect.left),
+        screenY: e.clientY - (panelRect?.top ?? canvasRect.top),
+      })
       tl.canvas.setPointerCapture(e.pointerId)
       e.stopPropagation()
     } else if (hit.type === 'track') {
@@ -383,6 +395,21 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     setEditingKf(null)
   }
 
+  // ── Easing change ──
+  const handleEasingChange = (easingType: EasingType) => {
+    if (!selectedKf) return
+    const entry = displayClips[selectedKf.layerIdx]
+    if (!entry) return
+    const newKfs = entry.clip.tracks[selectedKf.trackIdx].keyframes.map((kf, i) =>
+      i === selectedKf.kfIdx ? { ...kf, easing: easingType } : kf,
+    )
+    const newTracks = entry.clip.tracks.map((t, i) =>
+      i === selectedKf.trackIdx ? { ...t, keyframes: newKfs } : t,
+    )
+    mutateClip(entry.clip.id, entry.bundleId, { tracks: newTracks })
+    setSelectedKf(null)
+  }
+
   // ── Playback ──
   const handlePlayPause = () => {
     if (previewState === 'playing') { pause(); return }
@@ -469,9 +496,11 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           </button>
           <button className="btn-small" onClick={handleStop} title="Stop"><Stop size={14} weight="fill" /></button>
           <button className="btn-small" onClick={handleCreateBundle} title="New Animation"><Plus size={14} /></button>
-          <span className="preview-state-label">
-            {previewState === 'stopped' ? 'Edit' : previewState === 'playing' ? 'Playing' : 'Paused'}
-          </span>
+          {previewState !== 'stopped' && (
+            <span className="preview-state-label">
+              {previewState === 'playing' ? 'Playing' : 'Paused'}
+            </span>
+          )}
         </div>
         {/* Tabs */}
         <div className="timeline-tabs">
@@ -573,6 +602,31 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           onWheel={handleCanvasWheel}
         />
       </div>
+
+      {/* Easing curve selector popover */}
+      {selectedKf && (
+        <div className="easing-popover-backdrop" onClick={() => setSelectedKf(null)}>
+          <div
+            className="easing-popover"
+            style={{ left: selectedKf.screenX + LEFT_WIDTH, top: selectedKf.screenY + 32 + 16 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {(['linear', 'ease-in', 'ease-out', 'ease-in-out', 'spring'] as EasingType[]).map((et) => {
+              const entry = displayClips[selectedKf.layerIdx]
+              const currentEasing = entry?.clip.tracks[selectedKf.trackIdx]?.keyframes[selectedKf.kfIdx]?.easing
+              return (
+                <button
+                  key={et}
+                  className={`easing-option ${currentEasing === et ? 'active' : ''}`}
+                  onClick={() => handleEasingChange(et)}
+                >
+                  {et}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Keyframe value editor popup */}
       {editingKf && (

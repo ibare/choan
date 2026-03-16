@@ -58,6 +58,9 @@ function cubicBezier(p1x: number, p1y: number, p2x: number, p2y: number): Easing
 }
 
 export const ease: EasingFn = cubicBezier(0.25, 0.1, 0.25, 1.0)
+export const easeIn: EasingFn = cubicBezier(0.42, 0, 1, 1)
+export const easeOut: EasingFn = cubicBezier(0, 0, 0.58, 1)
+export const easeInOut: EasingFn = cubicBezier(0.42, 0, 0.58, 1)
 
 // ── Damped Spring ──
 // Critically/under-damped harmonic oscillator: overshoots then settles
@@ -89,11 +92,15 @@ export function createSpringEasing(stiffness = 0.15, damping = 0.75): EasingFn {
   }
 }
 
-// Resolve easing by name
-export function resolveEasing(name: 'linear' | 'ease' | 'spring', stiffness?: number, damping?: number): EasingFn {
+// Resolve easing by name (supports both legacy clip-level and new per-keyframe types)
+export function resolveEasing(name: string, stiffness?: number, damping?: number): EasingFn {
   switch (name) {
     case 'linear': return linear
     case 'ease': return ease
+    case 'ease-in': return easeIn
+    case 'ease-out': return easeOut
+    case 'ease-in-out': return easeInOut
     case 'spring': return createSpringEasing(stiffness, damping)
+    default: return easeInOut
   }
 }

@@ -64,7 +64,16 @@ export function toMarkdown(
       for (const clip of bundle.clips) {
         const el = elements.find((e) => e.id === clip.elementId)
         if (clip.tracks.length > 0) {
-          lines.push(`  - ${el?.label ?? clip.elementId}: ${clip.tracks.map((t) => `${t.property} ${t.keyframes[0]?.value}→${t.keyframes[t.keyframes.length - 1]?.value}`).join(', ')} (${clip.duration}ms, ${clip.easing})`)
+          const trackDescs = clip.tracks.map((t) => {
+            const segments: string[] = []
+            for (let i = 0; i < t.keyframes.length - 1; i++) {
+              const a = t.keyframes[i], b = t.keyframes[i + 1]
+              const easing = a.easing ?? 'ease-in-out'
+              segments.push(`${a.value}→${b.value} (${a.time}-${b.time}ms, ${easing})`)
+            }
+            return `${t.property}: ${segments.join(', ')}`
+          })
+          lines.push(`  - ${el?.label ?? clip.elementId}: ${trackDescs.join('; ')}`)
         }
       }
     }

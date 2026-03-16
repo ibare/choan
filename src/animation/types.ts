@@ -2,9 +2,12 @@
 
 export type AnimatableProperty = 'x' | 'y' | 'width' | 'height' | 'opacity' | 'color' | 'radius'
 
+export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'spring'
+
 export interface Keyframe {
   time: number    // ms offset from animation start (0 = start)
   value: number   // for color: 0xRRGGBB; for others: direct numeric value
+  easing?: EasingType  // curve from this keyframe to the next (default: 'ease-in-out')
 }
 
 export interface KeyframeTrack {
