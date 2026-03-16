@@ -17,6 +17,28 @@ import { detectContainment } from '../layout/containment'
 import { createLayoutAnimator } from '../layout/animator'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 
+// Apply a property patch to an element and (if altKey) to its siblings.
+// Position fields (x, y) are always excluded from sibling propagation.
+function applyToSiblings(
+  update: (id: string, patch: Partial<ChoanElement>) => void,
+  els: ChoanElement[],
+  id: string,
+  patch: Partial<ChoanElement>,
+  altKey: boolean,
+) {
+  update(id, patch)
+  if (!altKey) return
+  const el = els.find((e) => e.id === id)
+  if (!el?.parentId) return
+  const { x: _x, y: _y, ...siblingPatch } = patch
+  if (Object.keys(siblingPatch).length === 0) return
+  for (const sib of els) {
+    if (sib.parentId === el.parentId && sib.id !== id) {
+      update(sib.id, siblingPatch)
+    }
+  }
+}
+
 const HANDLE_HIT_RADIUS = 16
 const MIN_ELEMENT_SIZE = 10
 
@@ -350,7 +372,7 @@ export default function SDFCanvas() {
         const dy = pixel.y - radiusDragStartPixelRef.current.y
         const delta = (dx + dy) / Math.min(el.width, el.height)
         const newRadius = Math.max(0, Math.min(1, radiusStartRef.current + delta))
-        update(selId, { radius: newRadius })
+        applyToSiblings(update, els, selId, { radius: newRadius }, e.altKey)
         return
       }
 
@@ -368,12 +390,12 @@ export default function SDFCanvas() {
         const others = els.filter((e) => e.id !== selId)
         const snap = computeSnapResize(anchor, proposed, others)
         snapLinesRef.current = snap.lines
-        update(selId, {
+        applyToSiblings(update, els, selId, {
           x: Math.min(anchor.x, snap.x),
           y: Math.min(anchor.y, snap.y),
           width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x)),
           height: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y)),
-        })
+        }, e.altKey)
         return
       }
 
