@@ -159,20 +159,21 @@ float getObjectOpacity(float id) {
 // ─── Toon Shading ─────────────────────────────────
 
 vec3 toonShade(vec3 p, vec3 normal, vec3 rd, vec3 baseColor) {
-  vec3 lightDir = normalize(vec3(0.3, 0.8, 0.5));
+  vec3 lightDir = normalize(vec3(0.8, 0.6, 0.35));
 
   // Side face detection
   float isSide = 1.0 - abs(normal.z);
   isSide = smoothstep(0.3, 0.7, isSide);
-  vec3 surfColor = mix(baseColor, baseColor * 0.82, isSide);
+  vec3 surfColor = mix(baseColor, baseColor * 0.72, isSide);
 
-  // Toon diffuse: 2-band with fwidth AA
+  // Toon diffuse: 2-band cel shading
   float NdotL = dot(normal, lightDir);
   float fw = fwidth(NdotL);
   float toonDiff = smoothstep(-fw, fw, NdotL);
   vec3 litColor = surfColor;
-  vec3 shadowColor = surfColor * 0.85;
-  vec3 color = mix(shadowColor, litColor, mix(1.0, toonDiff, 1.0 - isSide * 0.8));
+  // Strong warm shadow
+  vec3 shadowColor = surfColor * 0.52 + vec3(0.05, 0.02, 0.0);
+  vec3 color = mix(shadowColor, litColor, toonDiff);
 
   return color;
 }
