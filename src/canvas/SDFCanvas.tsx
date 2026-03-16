@@ -114,6 +114,7 @@ export default function SDFCanvas() {
   const copiedRef = useRef<ChoanElement | null>(null)
   const snapLinesRef = useRef<SnapLine[]>([])
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
+  const zoomScaleRef = useRef(1)
 
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
   const [altPressed, setAltPressed] = useState(false)
@@ -231,10 +232,11 @@ export default function SDFCanvas() {
         { x: el.x + el.width, y: el.y },
         { x: el.x, y: el.y },
       ]
+      const scaledHitR = HANDLE_HIT_RADIUS * zoomScaleRef.current
       for (let i = 0; i < corners.length; i++) {
         const dx = pixel.x - corners[i].x
         const dy = pixel.y - corners[i].y
-        if (dx * dx + dy * dy <= HANDLE_HIT_RADIUS * HANDLE_HIT_RADIUS) return i
+        if (dx * dx + dy * dy <= scaledHitR * scaledHitR) return i
       }
       return -1
     },
@@ -265,14 +267,16 @@ export default function SDFCanvas() {
           const el = elements.find((el) => el.id === selectedId)
           if (el) {
             const ax = el.x + el.width, ay = el.y
+            const zsPick = zoomScaleRef.current
+            const pickHitR = 12 * zsPick
             for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
               for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
                 const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-                const ring = 48 + si * 28
+                const ring = (48 + si * 28) * zsPick
                 const sx = ax + Math.cos(angle) * ring
                 const sy = ay + Math.sin(angle) * ring
                 const dx = pixel.x - sx, dy = pixel.y - sy
-                if (dx * dx + dy * dy <= 12 * 12) {
+                if (dx * dx + dy * dy <= pickHitR * pickHitR) {
                   const hex = COLOR_FAMILIES[fi].shades[si]
                   const els = useChoanStore.getState().elements
                   applyToSiblings(updateElement, els, selectedId, { color: hex }, e.altKey)
@@ -410,15 +414,17 @@ export default function SDFCanvas() {
           const el = els.find((el) => el.id === selId)
           if (el) {
             const ax = el.x + el.width, ay = el.y
+            const zsHover = zoomScaleRef.current
+            const hoverHitR = 12 * zsHover
             let found = -1
             for (let fi = 0; fi < COLOR_FAMILIES.length && found < 0; fi++) {
               for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
                 const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-                const ring = 48 + si * 28
+                const ring = (48 + si * 28) * zsHover
                 const sx = ax + Math.cos(angle) * ring
                 const sy = ay + Math.sin(angle) * ring
                 const dx = pixel.x - sx, dy = pixel.y - sy
-                if (dx * dx + dy * dy <= 12 * 12) { found = fi * 5 + si; break }
+                if (dx * dx + dy * dy <= hoverHitR * hoverHitR) { found = fi * 5 + si; break }
               }
             }
             colorPickerHoverRef.current = found
@@ -717,6 +723,12 @@ export default function SDFCanvas() {
     const animate = () => {
       frameRef.current = requestAnimationFrame(animate)
       controls.update()
+      // Zoom compensation: overlay sizes stay constant on screen
+      const cam = renderer.camera
+      const cdx = cam.position[0] - cam.target[0]
+      const cdy = cam.position[1] - cam.target[1]
+      const cdz = cam.position[2] - cam.target[2]
+      zoomScaleRef.current = Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz) / 20
       const rs = useRenderSettings.getState()
 
       // Collect IDs of elements being directly manipulated (drag/resize/draw)
@@ -758,6 +770,9 @@ export default function SDFCanvas() {
         FRUSTUM - (py / h) * 2 * FRUSTUM,
       ]
 
+      // Zoom compensation factor for overlay sizes
+      const zs = zoomScaleRef.current
+
       // Selection anchors on object front face
       if (state.selectedId) {
         const el = state.elements.find(e => e.id === state.selectedId)
@@ -777,7 +792,7 @@ export default function SDFCanvas() {
           )
 
           // Corner handles: blue outline + white fill
-          const hWorld = 8 * (2 * FRUSTUM) / h
+          const hWorld = 8 * (2 * FRUSTUM) / h * zs
           const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
           ov.drawQuads(handles, hWorld, [0.26, 0.52, 0.96, 1])
           ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
@@ -804,13 +819,13 @@ export default function SDFCanvas() {
         const a = p2w(m.x1, m.y1)
         const b = p2w(m.x2, m.y2)
         dVerts.push(...a, ...b)
-        const tick = 4 * (2 * FRUSTUM) / h
+        const tick = 4 * (2 * FRUSTUM) / h * zs
         const isHoriz = Math.abs(m.y1 - m.y2) < 1
         if (isHoriz) {
           dVerts.push(a[0], a[1] - tick, a[0], a[1] + tick)
           dVerts.push(b[0], b[1] - tick, b[0], b[1] + tick)
         } else {
-          const tickX = 4 * (2 * FRUSTUM * aspect) / w
+          const tickX = 4 * (2 * FRUSTUM * aspect) / w * zs
           dVerts.push(a[0] - tickX, a[1], a[0] + tickX, a[1])
           dVerts.push(b[0] - tickX, b[1], b[0] + tickX, b[1])
         }
@@ -828,7 +843,7 @@ export default function SDFCanvas() {
 
           const ax = pickEl.x + pickEl.width
           const ay = pickEl.y
-          const pxToW = (2 * FRUSTUM) / h
+          const pxToW = (2 * FRUSTUM) / h * zs
           const discR = 11 * pxToW
           const borderR = discR * 1.22
           const hoverIdx = colorPickerHoverRef.current
@@ -837,7 +852,7 @@ export default function SDFCanvas() {
             const family = COLOR_FAMILIES[fi]
             for (let si = 0; si < family.shades.length; si++) {
               const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-              const ring = 48 + si * 28
+              const ring = (48 + si * 28) * zs
               const px = ax + Math.cos(angle) * ring
               const py = ay + Math.sin(angle) * ring
               const [wx, wy] = p2w(px, py)
