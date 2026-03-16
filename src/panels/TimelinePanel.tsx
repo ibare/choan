@@ -10,7 +10,7 @@ import type { AnimationClip, AnimationBundle, AnimatableProperty, EasingType } f
 import type { KeyframeAnimator } from '../animation/keyframeEngine'
 import type { ChoanElement } from '../store/useChoanStore'
 import { nanoid } from '../canvas/nanoid'
-import { Play, Pause, Stop, Plus, X } from '@phosphor-icons/react'
+import { Play, Pause, Stop, Plus, X, FilmStrip } from '@phosphor-icons/react'
 
 const TRACK_HEIGHT = 38
 const LEFT_WIDTH = 190
@@ -82,7 +82,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     addAnimationBundle, updateAnimationBundle, removeAnimationBundle,
     addClipToBundle, updateClipInBundle, removeClipFromBundle,
   } = useChoanStore()
-  const { previewState, play, pause, stop, playheadTime, setPlayheadTime, editingBundleId, setEditingBundle } = usePreviewStore()
+  const { previewState, play, pause, stop, playheadTime, setPlayheadTime, editingBundleId, setEditingBundle, ghostPreview, toggleGhostPreview } = usePreviewStore()
 
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null)
   const [editingBundleName, setEditingBundleName] = useState<string | null>(null)
@@ -496,6 +496,11 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           </button>
           <button className="btn-small" onClick={handleStop} title="Stop"><Stop size={14} weight="fill" /></button>
           <button className="btn-small" onClick={handleCreateBundle} title="New Animation"><Plus size={14} /></button>
+          <button
+            className={`btn-small ${ghostPreview ? 'active' : ''}`}
+            onClick={toggleGhostPreview}
+            title="Ghost Preview"
+          ><FilmStrip size={14} /></button>
           {previewState !== 'stopped' && (
             <span className="preview-state-label">
               {previewState === 'playing' ? 'Playing' : 'Paused'}

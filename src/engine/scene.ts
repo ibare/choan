@@ -3,7 +3,7 @@
 import type { ChoanElement } from '../store/useChoanStore'
 import { PALETTE } from '../canvas/materials'
 
-export const MAX_OBJECTS = 40
+export const MAX_OBJECTS = 128
 export const EXTRUDE_DEPTH = 0.05
 export const FRUSTUM = 10
 
@@ -14,10 +14,9 @@ const SHAPE_LINE = 2
 
 // UBO layout (std140) — must match shader SceneData block:
 // vec4 uNumObjPad          (offset 0, 16 bytes)
-// vec4 uPosType[40]        (offset 16, 640 bytes)
-// vec4 uSizeRadius[40]     (offset 656, 640 bytes)
-// vec4 uColorAlpha[40]     (offset 1296, 640 bytes)
-// Total: 1936 bytes = 484 floats
+// vec4 uPosType[128]       (offset 16)
+// vec4 uSizeRadius[128]    (offset 16 + 128*16)
+// vec4 uColorAlpha[128]    (offset 16 + 256*16)
 const POS_OFFSET = 4                           // floats: skip numObjPad vec4
 const SIZE_OFFSET = POS_OFFSET + MAX_OBJECTS * 4
 const COLOR_OFFSET = SIZE_OFFSET + MAX_OBJECTS * 4

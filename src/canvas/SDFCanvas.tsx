@@ -819,6 +819,68 @@ export default function SDFCanvas() {
           squashIntensity: rs.squashIntensity,
         }, manipulatedIds.size > 0 ? manipulatedIds : undefined)
       }
+      // Ghost preview: add semi-transparent copies at intermediate times
+      if (preview.ghostPreview && preview.editingBundleId && preview.previewState === 'stopped') {
+        const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)
+        if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
+          const maxDur = Math.max(...bundle.clips.map((c) => c.duration))
+          // Collect all keyframe times across clips
+          const kfTimes = new Set<number>()
+          for (const clip of bundle.clips) {
+            for (const track of clip.tracks) {
+              for (const kf of track.keyframes) kfTimes.add(kf.time)
+            }
+          }
+
+          // Compute max ghost frames: fill available object slots
+          const animatedElCount = bundle.clips.filter((c) => c.tracks.length > 0).length
+          const baseElCount = state.elements.length
+          const availableSlots = 128 - baseElCount // MAX_OBJECTS = 128
+          const maxGhostFrames = animatedElCount > 0 ? Math.floor(availableSlots / animatedElCount) : 0
+          // Use 60fps equivalent: 1 frame per ~16ms, capped by available slots
+          const idealSteps = Math.max(2, Math.ceil(maxDur / 16))
+          const ghostSteps = Math.min(idealSteps, maxGhostFrames)
+
+          const ghostElements: typeof state.elements = []
+          const allTimes: number[] = []
+          for (let step = 0; step <= ghostSteps; step++) {
+            allTimes.push(Math.round((step / ghostSteps) * maxDur))
+          }
+          // Also add exact keyframe times
+          for (const kt of kfTimes) {
+            if (!allTimes.some((t) => Math.abs(t - kt) < 5)) allTimes.push(kt)
+          }
+          allTimes.sort((a, b) => a - b)
+
+          for (const t of allTimes) {
+            if (Math.abs(t - preview.playheadTime) < maxDur / (GHOST_STEPS * 2)) continue
+            const isKeyframeTime = [...kfTimes].some((kt) => Math.abs(kt - t) < 5)
+            const ghostOverrides = new Map<string, Partial<ChoanElement>>()
+            for (const clip of bundle.clips) {
+              if (clip.tracks.length === 0) continue
+              const patch: Partial<ChoanElement> = {}
+              for (const track of clip.tracks) {
+                ;(patch as Record<string, number>)[track.property] = evaluateTrack(
+                  track.keyframes, t, clip.easing, track.property as import('../animation/types').AnimatableProperty,
+                )
+              }
+              ghostOverrides.set(clip.elementId, { ...ghostOverrides.get(clip.elementId), ...patch })
+            }
+            for (const el of state.elements) {
+              const patch = ghostOverrides.get(el.id)
+              if (patch) {
+                ghostElements.push({
+                  ...el, ...patch,
+                  id: `__ghost_${el.id}_${Math.round(t)}`,
+                  opacity: isKeyframeTime ? (el.opacity ?? 1) : 0.5 * (el.opacity ?? 1),
+                })
+              }
+            }
+          }
+          animatedElements = [...ghostElements, ...animatedElements]
+        }
+      }
+
       renderer.updateScene(animatedElements, rs.extrudeDepth)
 
       renderer.render(rs)

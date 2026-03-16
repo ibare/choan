@@ -1,6 +1,6 @@
 // GLSL shader sources as template literals
 
-export const MAX_OBJECTS = 40
+export const MAX_OBJECTS = 128
 
 export const RAYMARCH_VERT = /* glsl */ `#version 300 es
 layout(location = 0) in vec2 aPosition;
