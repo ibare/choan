@@ -104,19 +104,25 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   let cssWidth = 1
   let cssHeight = 1
+  // Pending canvas pixel dimensions — applied at the START of render() to avoid
+  // clearing the drawing buffer between a render and the next browser paint.
+  let pendingCanvasW = 0
+  let pendingCanvasH = 0
 
   function resize(width: number, height: number) {
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = Math.round(width * dpr)
-    canvas.height = Math.round(height * dpr)
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
+    if (width < 1 || height < 1) return  // guard against 0×0 during rapid layout changes
     camera.aspect = width / height
     cssWidth = width
     cssHeight = height
 
-    const sw = canvas.width * SS
-    const sh = canvas.height * SS
+    const dpr = window.devicePixelRatio || 1
+    const cw = Math.round(width * dpr)
+    const ch = Math.round(height * dpr)
+    pendingCanvasW = cw
+    pendingCanvasH = ch
+
+    const sw = cw * SS
+    const sh = ch * SS
     gbuffer.resize(gl, sw, sh)
     resizeResolve(sw, sh)
   }
@@ -126,6 +132,20 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   }
 
   function render(s: RenderSettings) {
+    // Apply any pending canvas resize here — BEFORE drawing — so that setting
+    // canvas.width (which clears the drawing buffer) is immediately followed by
+    // a full render.  Doing this in ResizeObserver would clear the buffer after
+    // the previous frame was rendered but before the browser paints, causing a
+    // visible black flash on every resize event.
+    if (pendingCanvasW > 0 && pendingCanvasH > 0) {
+      if (canvas.width !== pendingCanvasW || canvas.height !== pendingCanvasH) {
+        canvas.width = pendingCanvasW
+        canvas.height = pendingCanvasH
+      }
+      pendingCanvasW = 0
+      pendingCanvasH = 0
+    }
+
     const ray = getCameraRayParams(camera)
 
     // ── Pass 1: Geometry → GBuffer (2x) ──
