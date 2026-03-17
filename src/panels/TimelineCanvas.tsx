@@ -4,10 +4,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createTimeline2D, type Timeline2D, type DisplayLayer, type RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimatableProperty, EasingType } from '../animation/types'
-import {
-  DisplayClipEntry, PX_PER_MS,
-  formatValue, TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, LEFT_WIDTH,
-} from './timelineTypes'
+import { DisplayClipEntry, PX_PER_MS } from './timelineTypes'
+import EasingPopover from './EasingPopover'
+import KfValueEditor from './KfValueEditor'
 
 interface TimelineCanvasProps {
   displayClips: DisplayClipEntry[]
@@ -231,39 +230,22 @@ export default function TimelineCanvas({
         onWheel={handleCanvasWheel}
       />
       {selectedKf && (
-        <div className="easing-popover-backdrop" onClick={() => setSelectedKf(null)}>
-          <div
-            className="easing-popover"
-            style={{ left: selectedKf.screenX + LEFT_WIDTH, top: selectedKf.screenY + RULER_HEIGHT + LAYER_HEADER_HEIGHT + TRACK_HEIGHT }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {(['linear', 'ease-in', 'ease-out', 'ease-in-out', 'spring'] as EasingType[]).map((et) => {
-              const entry = displayClips[selectedKf.layerIdx]
-              const currentEasing = entry?.clip.tracks[selectedKf.trackIdx]?.keyframes[selectedKf.kfIdx]?.easing
-              return (
-                <button key={et} className={`easing-option ${currentEasing === et ? 'active' : ''}`} onClick={() => handleEasingChange(et)}>{et}</button>
-              )
-            })}
-          </div>
-        </div>
+        <EasingPopover
+          {...selectedKf}
+          displayClips={displayClips}
+          onSelect={handleEasingChange}
+          onClose={() => setSelectedKf(null)}
+        />
       )}
-      {editingKf && (() => {
-        const entry = displayClips.find((c) => c.clip.id === editingKf.clipId)
-        const prop = entry?.clip.tracks[editingKf.trackIdx]?.property as AnimatableProperty | undefined
-        return (
-          <div className="kf-editor-overlay" onClick={() => setEditingKf(null)}>
-            <div className="kf-editor" onClick={(e) => e.stopPropagation()}>
-              <input
-                className="field-input" autoFocus value={editingKf.value}
-                onChange={(e) => setEditingKf({ ...editingKf, value: e.target.value })}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleEditCommit(); if (e.key === 'Escape') setEditingKf(null) }}
-                placeholder={prop ? formatValue(prop, undefined) : ''}
-              />
-              <button className="btn-small" onClick={handleEditCommit}>OK</button>
-            </div>
-          </div>
-        )
-      })()}
+      {editingKf && (
+        <KfValueEditor
+          {...editingKf}
+          displayClips={displayClips}
+          onChange={(value) => setEditingKf({ ...editingKf, value })}
+          onCommit={handleEditCommit}
+          onClose={() => setEditingKf(null)}
+        />
+      )}
     </>
   )
 }
