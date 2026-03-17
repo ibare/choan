@@ -21,7 +21,13 @@ const SHAPE_LINE = 2
 const POS_OFFSET = 4                           // floats: skip numObjPad vec4
 const SIZE_OFFSET = POS_OFFSET + MAX_OBJECTS * 4
 const COLOR_OFFSET = SIZE_OFFSET + MAX_OBJECTS * 4
-const UBO_FLOATS = COLOR_OFFSET + MAX_OBJECTS * 4
+const EFFECT_OFFSET = COLOR_OFFSET + MAX_OBJECTS * 4
+const UBO_FLOATS = EFFECT_OFFSET + MAX_OBJECTS * 4
+
+// Color-change effect tracking
+const EFFECT_DURATION = 300 // ms
+const prevColors = new Map<string, number>()
+const colorChangeTimes = new Map<string, number>()
 
 export interface SceneUBO {
   buffer: WebGLBuffer
@@ -48,6 +54,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
   ) {
     const ed = extrudeDepthOverride ?? EXTRUDE_DEPTH
     const count = Math.min(elements.length, MAX_OBJECTS)
+    const now = performance.now()
 
     // Clear all data
     data.fill(0)
@@ -101,6 +108,22 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       data[ci + 1] = g
       data[ci + 2] = b
       data[ci + 3] = el.opacity
+
+      // Color-change effect: detect change, compute intensity
+      const prevColor = prevColors.get(el.id)
+      if (prevColor !== undefined && prevColor !== color) {
+        colorChangeTimes.set(el.id, now)
+      }
+      prevColors.set(el.id, color)
+
+      const changeTime = colorChangeTimes.get(el.id) ?? -10000
+      const elapsed = now - changeTime
+      const t = Math.max(0, 1 - elapsed / EFFECT_DURATION)
+
+      // uEffect[i]: x = pulse intensity, y = flash intensity
+      const ei = EFFECT_OFFSET + i * 4
+      data[ei + 0] = t * t          // pulse: quadratic ease-out
+      data[ei + 1] = t * t * t      // flash: faster cubic decay
     }
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, buffer)

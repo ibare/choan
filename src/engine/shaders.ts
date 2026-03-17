@@ -44,6 +44,7 @@ layout(std140) uniform SceneData {
   vec4 uPosType[MAX_OBJECTS];
   vec4 uSizeRadius[MAX_OBJECTS];
   vec4 uColorAlpha[MAX_OBJECTS];
+  vec4 uEffect[MAX_OBJECTS];     // x = pulse intensity, y = flash intensity
 };
 
 // Shape types
@@ -102,6 +103,9 @@ vec2 sceneSDF(vec3 p) {
       d = sdCapsule(lp, a, b, hs.y);
     }
 
+    // Pulse: expand SDF on color change
+    d -= uEffect[i].x * 0.015;
+
     if (d < res.x) res = vec2(d, float(i));
   }
 
@@ -129,16 +133,20 @@ float singleSDF(vec3 p, int objId) {
   }
 }
 
+float singleSDFWithPulse(vec3 p, int objId) {
+  return singleSDF(p, objId) - uEffect[objId].x * 0.015;
+}
+
 // ─── Normal (tetrahedron on hit object only — O(1) regardless of N) ─
 
 vec3 calcNormal(vec3 p, int objId) {
   const float h = 0.001;
   const vec2 k = vec2(1.0, -1.0);
   return normalize(
-    k.xyy * singleSDF(p + k.xyy * h, objId) +
-    k.yyx * singleSDF(p + k.yyx * h, objId) +
-    k.yxy * singleSDF(p + k.yxy * h, objId) +
-    k.xxx * singleSDF(p + k.xxx * h, objId)
+    k.xyy * singleSDFWithPulse(p + k.xyy * h, objId) +
+    k.yyx * singleSDFWithPulse(p + k.yyx * h, objId) +
+    k.yxy * singleSDFWithPulse(p + k.yxy * h, objId) +
+    k.xxx * singleSDFWithPulse(p + k.xxx * h, objId)
   );
 }
 
@@ -223,6 +231,11 @@ void main() {
   vec3 normal = calcNormal(p, int(hit.y));
   vec3 baseColor = getObjectColor(hit.y);
   float opacity = getObjectOpacity(hit.y);
+
+  // Flash: blend toward white on color change
+  int hitIdx = int(hit.y);
+  float flash = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].y : 0.0;
+  baseColor = mix(baseColor, vec3(1.0), flash * 0.5);
 
   // Toon shading (no outline — handled in edge detection pass)
   vec3 color = toonShade(p, normal, rd, baseColor);
