@@ -124,7 +124,7 @@ export default function SDFCanvas() {
 
   const {
     elements,
-    selectedId,
+    selectedIds,
     tool,
     drawColor,
     setTool,
@@ -132,8 +132,13 @@ export default function SDFCanvas() {
     addElement,
     updateElement,
     selectElement,
+    toggleSelectElement,
+    setSelectedIds,
     removeElement,
   } = useChoanStore()
+
+  // Derived: primary selected element (single-select operations)
+  const selectedId = selectedIds[0] ?? null
 
   // WebGL color picker state (refs for animate loop access)
   const colorPickerOpenRef = useRef(false)
@@ -163,6 +168,16 @@ export default function SDFCanvas() {
   const isDrawingRef = useRef(false)
   const drawStartPixelRef = useRef({ x: 0, y: 0 })
   const drawElIdRef = useRef<string | null>(null)
+
+  // Drag-select box state
+  const isDragSelectRef = useRef(false)
+  const dragSelectPointerIdRef = useRef<number>(-1)
+  const dragSelectAddModeRef = useRef(false)
+  const dragSelectPreSelectionRef = useRef<string[]>([])
+  const dragSelectStartClientRef = useRef({ x: 0, y: 0 })
+  const dragSelectStartPixelRef = useRef({ x: 0, y: 0 })
+  const dragSelectHasMovedRef = useRef(false)
+  const [dragSelectBox, setDragSelectBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
 
   // Cursor
   const [cursor, setCursor] = useState('default')
@@ -252,6 +267,19 @@ export default function SDFCanvas() {
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
 
+      // Reset any stale drag-select state from a previous gesture
+      if (isDragSelectRef.current) {
+        const originalPointerId = dragSelectPointerIdRef.current
+        isDragSelectRef.current = false
+        dragSelectHasMovedRef.current = false
+        dragSelectAddModeRef.current = false
+        dragSelectPointerIdRef.current = -1
+        setDragSelectBox(null)
+        // If a DIFFERENT pointer fires during an active lasso (e.g. secondary trackpad touch),
+        // just terminate the lasso without starting a new one. Selection is preserved.
+        if (originalPointerId !== -1 && e.pointerId !== originalPointerId) return
+      }
+
       // Preview mode: trigger animations directly from element triggers
       const previewState = usePreviewStore.getState().previewState
       if (previewState === 'playing') {
@@ -308,21 +336,39 @@ export default function SDFCanvas() {
       }
 
       if (tool === 'select') {
-        // 1. Handle check — multi-function anchors
-        if (selectedId) {
+        // 1. Shift+click / shift+drag — handled FIRST before any handle tests
+        if (e.shiftKey) {
+          const hitId = raycastElement(e.clientX, e.clientY)
+          if (hitId) {
+            toggleSelectElement(hitId)
+          } else {
+            // Shift+drag on empty space: additive drag-select
+            dragSelectAddModeRef.current = true
+            dragSelectPreSelectionRef.current = [...selectedIds]
+            dragSelectHasMovedRef.current = false
+            isDragSelectRef.current = true
+            dragSelectPointerIdRef.current = e.pointerId
+            dragSelectStartClientRef.current = { x: e.clientX, y: e.clientY }
+            const pixel = screenToPixel(e.clientX, e.clientY)
+            if (pixel) dragSelectStartPixelRef.current = pixel
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+          }
+          return
+        }
+
+        // 2. Handle check — only for single selection
+        if (selectedIds.length === 1) {
           const corner = hitTestCorner(e.clientX, e.clientY)
           if (corner >= 0) {
             const el = elements.find((e) => e.id === selectedId)!
 
             if (corner === 2) {
-              // TR handle → WebGL radial color picker
               colorPickerOpenRef.current = true
               colorPickerHoverRef.current = -1
               return
             }
 
             if (corner === 3 && el.type === 'rectangle') {
-              // TL handle → radius drag
               isRadiusDragRef.current = true
               radiusStartRef.current = el.radius ?? 0
               const pixel = screenToPixel(e.clientX, e.clientY)
@@ -334,7 +380,6 @@ export default function SDFCanvas() {
             const parentOfEl = el.parentId ? elements.find((p) => p.id === el.parentId) : null
             const isManagedChild = el.parentId && parentOfEl?.layoutDirection !== 'free' && parentOfEl?.layoutDirection !== undefined
             if (corner === 1 && !isManagedChild) {
-              // BR handle → resize (disabled for layout-managed children)
               const cornerPositions = [
                 { x: el.x, y: el.y + el.height },
                 { x: el.x + el.width, y: el.y + el.height },
@@ -350,43 +395,64 @@ export default function SDFCanvas() {
               ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
               return
             }
-            // corners 0, 2 — reserved, no action
-            // corner 1 on child — disabled (layout manages size)
           }
         }
 
-        // 2. Element select / drag
+        // 3. Element select / drag
         const hitId = raycastElement(e.clientX, e.clientY)
-        if (hitId && hitId === selectedId) {
+
+        if (hitId) {
           const els = useChoanStore.getState().elements
-          const groupIds = resolveGroup(els, selectedId)
+          const currentSelectedIds = useChoanStore.getState().selectedIds
 
-          isDraggingRef.current = true
-          dragGroupIdsRef.current = groupIds
-          const pixel = screenToPixel(e.clientX, e.clientY)
-          if (pixel) dragStartPixelRef.current = pixel
-
-          // Store start positions for all group members
-          const startMap = new Map<string, { x: number; y: number }>()
-          for (const gid of groupIds) {
-            const ge = els.find((e) => e.id === gid)
-            if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
-          }
-          dragGroupStartRef.current = startMap
-
-          // Find the snap reference element in the group
-          const el = els.find((e) => e.id === selectedId)!
-          if (el.role === 'container' && groupIds.includes(el.id)) {
-            dragContainerIdRef.current = el.id
-          } else if (el.parentId && groupIds.includes(el.parentId)) {
-            dragContainerIdRef.current = el.parentId
-          } else {
+          if (currentSelectedIds.includes(hitId)) {
+            // Clicked on already-selected element → drag all selected elements
+            isDraggingRef.current = true
+            dragGroupIdsRef.current = currentSelectedIds
+            const pixel = screenToPixel(e.clientX, e.clientY)
+            if (pixel) dragStartPixelRef.current = pixel
+            const startMap = new Map<string, { x: number; y: number }>()
+            for (const sid of currentSelectedIds) {
+              const ge = els.find((e) => e.id === sid)
+              if (ge) startMap.set(sid, { x: ge.x, y: ge.y })
+            }
+            dragGroupStartRef.current = startMap
             dragContainerIdRef.current = null
+          } else {
+            // Clicked on new element → single select + drag with group
+            selectElement(hitId)
+            const groupIds = resolveGroup(els, hitId)
+            isDraggingRef.current = true
+            dragGroupIdsRef.current = groupIds
+            const pixel = screenToPixel(e.clientX, e.clientY)
+            if (pixel) dragStartPixelRef.current = pixel
+            const startMap = new Map<string, { x: number; y: number }>()
+            for (const gid of groupIds) {
+              const ge = els.find((e) => e.id === gid)
+              if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
+            }
+            dragGroupStartRef.current = startMap
+            const el = els.find((e) => e.id === hitId)!
+            if (el.role === 'container' && groupIds.includes(el.id)) {
+              dragContainerIdRef.current = el.id
+            } else if (el.parentId && groupIds.includes(el.parentId)) {
+              dragContainerIdRef.current = el.parentId
+            } else {
+              dragContainerIdRef.current = null
+            }
           }
-
           ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
         } else {
-          selectElement(hitId)
+          // Empty space → start drag-select box (deselect deferred to pointerup if no drag)
+          dragSelectHasMovedRef.current = false
+          isDragSelectRef.current = true
+          dragSelectPointerIdRef.current = e.pointerId
+          dragSelectAddModeRef.current = false
+          dragSelectPreSelectionRef.current = [...selectedIds]
+          dragSelectStartClientRef.current = { x: e.clientX, y: e.clientY }
+          const pixel = screenToPixel(e.clientX, e.clientY)
+          if (pixel) dragSelectStartPixelRef.current = pixel
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
         }
         return
       }
@@ -414,12 +480,12 @@ export default function SDFCanvas() {
       drawElIdRef.current = id
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
     },
-    [tool, raycastElement, selectElement, selectedId, elements, hitTestCorner, screenToPixel, drawColor, addElement],
+    [tool, raycastElement, selectElement, toggleSelectElement, setSelectedIds, selectedIds, elements, hitTestCorner, screenToPixel, drawColor, addElement],
   )
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      const { elements: els, selectedId: selId, updateElement: update } = useChoanStore.getState()
+      const { elements: els, selectedIds: selIds, selectedId: selId, updateElement: update } = useChoanStore.getState()
 
       // Color picker hover detection
       if (colorPickerOpenRef.current && selId) {
@@ -443,6 +509,45 @@ export default function SDFCanvas() {
             }
             colorPickerHoverRef.current = found
             setCursor(found >= 0 ? 'pointer' : 'default')
+          }
+        }
+        return
+      }
+
+      // Drag-select box — real-time element selection
+      if (isDragSelectRef.current) {
+        const mount = mountRef.current
+        if (mount) {
+          const rect = mount.getBoundingClientRect()
+          const startX = dragSelectStartClientRef.current.x - rect.left
+          const startY = dragSelectStartClientRef.current.y - rect.top
+          const currX = e.clientX - rect.left
+          const currY = e.clientY - rect.top
+          const boxW = Math.abs(currX - startX)
+          const boxH = Math.abs(currY - startY)
+          if (boxW > 4 || boxH > 4) dragSelectHasMovedRef.current = true
+          setDragSelectBox({
+            left: Math.min(startX, currX),
+            top: Math.min(startY, currY),
+            width: boxW,
+            height: boxH,
+          })
+        }
+        const currPixel = screenToPixel(e.clientX, e.clientY)
+        if (currPixel) {
+          const sp = dragSelectStartPixelRef.current
+          const boxL = Math.min(sp.x, currPixel.x)
+          const boxT = Math.min(sp.y, currPixel.y)
+          const boxR = Math.max(sp.x, currPixel.x)
+          const boxB = Math.max(sp.y, currPixel.y)
+          const intersecting = els
+            .filter((el) => !(el.x + el.width < boxL || el.x > boxR || el.y + el.height < boxT || el.y > boxB))
+            .map((el) => el.id)
+          if (dragSelectAddModeRef.current) {
+            const pre = dragSelectPreSelectionRef.current
+            setSelectedIds([...new Set([...pre, ...intersecting])])
+          } else {
+            setSelectedIds(intersecting)
           }
         }
         return
@@ -500,8 +605,8 @@ export default function SDFCanvas() {
         return
       }
 
-      // Group drag
-      if (isDraggingRef.current && tool === 'select' && selId) {
+      // Group drag (single or multi-select)
+      if (isDraggingRef.current && tool === 'select') {
         const pixel = screenToPixel(e.clientX, e.clientY)
         if (!pixel) return
         const dx = pixel.x - dragStartPixelRef.current.x
@@ -510,8 +615,8 @@ export default function SDFCanvas() {
         const groupIds = dragGroupIdsRef.current
         const groupSet = new Set(groupIds)
 
-        // Use container (or the dragged element) as snap reference
-        const refId = dragContainerIdRef.current ?? selId
+        // Use container (or first element) as snap reference
+        const refId = dragContainerIdRef.current ?? groupIds[0]
         const refStart = dragGroupStartRef.current.get(refId)
         if (!refStart) return
         const refEl = els.find((e) => e.id === refId)
@@ -540,8 +645,8 @@ export default function SDFCanvas() {
         return
       }
 
-      // Hover cursor — only when idle
-      if (tool === 'select' && selId) {
+      // Hover cursor — only when idle and single selection
+      if (tool === 'select' && selIds.length === 1 && selId) {
         const corner = hitTestCorner(e.clientX, e.clientY)
         if (corner === 2) {
           setCursor('pointer')
@@ -558,11 +663,32 @@ export default function SDFCanvas() {
         }
       }
     },
-    [tool, selectedId, updateElement, screenToPixel, hitTestCorner],
+    [tool, selectedIds, updateElement, screenToPixel, hitTestCorner, setSelectedIds],
   )
 
-  const handlePointerUp = useCallback(() => {
-    const { elements: els, selectedId: selId, reparentElement, runLayout } = useChoanStore.getState()
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    // End drag-select
+    if (isDragSelectRef.current) {
+      // Ignore pointerup from a different pointer than the one that started the lasso
+      if (e.pointerId !== dragSelectPointerIdRef.current) return
+      const start = dragSelectStartClientRef.current
+      const hasMoved = Math.abs(e.clientX - start.x) > 4 || Math.abs(e.clientY - start.y) > 4
+      const wasAddMode = dragSelectAddModeRef.current
+      isDragSelectRef.current = false
+      dragSelectPointerIdRef.current = -1
+      dragSelectAddModeRef.current = false
+      dragSelectHasMovedRef.current = false
+      dragSelectPreSelectionRef.current = []
+      setDragSelectBox(null)
+      // If no significant drag (just a click on empty space), deselect all
+      if (!hasMoved && !wasAddMode) {
+        setSelectedIds([])
+      }
+      return
+    }
+
+    const { elements: els, selectedIds: selIds, reparentElement, runLayout } = useChoanStore.getState()
+    const selId = selIds[0] ?? null
 
     // After draw-to-create: apply default size if too small, check containment
     if (isDrawingRef.current && drawElIdRef.current) {
@@ -602,8 +728,8 @@ export default function SDFCanvas() {
       }
     }
 
-    // After drag: re-evaluate containment (enter/exit/switch container)
-    if (isDraggingRef.current && selId) {
+    // After drag: re-evaluate containment (only for single-element drag)
+    if (isDraggingRef.current && selIds.length === 1 && selId) {
       const el = els.find((e) => e.id === selId)
       if (el && el.role !== 'container') {
         const containers = els.filter((e) => e.role === 'container' && e.id !== selId)
@@ -611,7 +737,6 @@ export default function SDFCanvas() {
         if (newParentId !== el.parentId) {
           const oldParentId = el.parentId
           reparentElement(selId, newParentId)
-          // Re-run layout on old parent if child left
           if (oldParentId) runLayout(oldParentId)
         }
       }
@@ -654,7 +779,7 @@ export default function SDFCanvas() {
     dragContainerIdRef.current = null
     isRadiusDragRef.current = false
     snapLinesRef.current = []
-  }, [])
+  }, [setSelectedIds])
 
   // ── Keyboard shortcuts ──
 
@@ -669,11 +794,11 @@ export default function SDFCanvas() {
         return
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        const { selectedId } = useChoanStore.getState()
-        if (selectedId) removeElement(selectedId)
+        const { selectedIds: sIds } = useChoanStore.getState()
+        for (const id of sIds) removeElement(id)
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        const { selectedId, elements } = useChoanStore.getState()
-        if (selectedId) copiedRef.current = elements.find((el) => el.id === selectedId) ?? null
+        const { selectedIds: sIds, elements } = useChoanStore.getState()
+        if (sIds.length > 0) copiedRef.current = elements.find((el) => el.id === sIds[0]) ?? null
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         const src = copiedRef.current
         if (src) {
@@ -714,14 +839,15 @@ export default function SDFCanvas() {
   }, [])
 
   useEffect(() => {
-    if (!altPressed || !selectedId) {
+    const primaryId = selectedIds[0] ?? null
+    if (!altPressed || !primaryId) {
       setDistanceLabels([])
       distMeasuresRef.current = []
       return
     }
-    const el = elements.find((e) => e.id === selectedId)
+    const el = elements.find((e) => e.id === primaryId)
     if (!el) return
-    const others = elements.filter((e) => e.id !== selectedId)
+    const others = elements.filter((e) => e.id !== primaryId)
     const { left, right, top, bottom } = computeDistances(el, others)
     const measures = [left, right, top, bottom]
     distMeasuresRef.current = measures
@@ -733,7 +859,7 @@ export default function SDFCanvas() {
       if (screen) labels.push({ x: screen.x, y: screen.y, text: `${Math.round(m.distance)}` })
     }
     setDistanceLabels(labels)
-  }, [altPressed, selectedId, elements, pixelToWorld, worldToScreen])
+  }, [altPressed, selectedIds, elements, pixelToWorld, worldToScreen])
 
   // ── Initialize renderer ──
 
@@ -898,32 +1024,25 @@ export default function SDFCanvas() {
       // Zoom compensation factor for overlay sizes
       const zs = zoomScaleRef.current
 
-      // Selection anchors on object front face
-      if (state.selectedId) {
-        const el = state.elements.find(e => e.id === state.selectedId)
-        if (el) {
-          const frontZ = el.z * rs.extrudeDepth + rs.extrudeDepth / 2
-          ov.setZ(frontZ)
-
-          const tl = p2w(el.x, el.y)
-          const tr = p2w(el.x + el.width, el.y)
-          const br = p2w(el.x + el.width, el.y + el.height)
-          const bl = p2w(el.x, el.y + el.height)
-
-          // Dashed edge lines connecting anchors
-          ov.drawDashedLoop(
-            new Float32Array([...tl, ...tr, ...br, ...bl]),
-            [0.26, 0.52, 0.96, 1],
-          )
-
-          // Corner handles: blue outline + white fill
-          const hWorld = 8 * (2 * FRUSTUM) / h * zs
-          const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
-          ov.drawQuads(handles, hWorld, [0.26, 0.52, 0.96, 1])
-          ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
-
-          ov.setZ(0)
-        }
+      // Selection outlines
+      const isSingleSel = state.selectedIds.length === 1
+      for (const selId of state.selectedIds) {
+        const el = state.elements.find(e => e.id === selId)
+        if (!el) continue
+        const frontZ = el.z * rs.extrudeDepth + rs.extrudeDepth / 2
+        ov.setZ(frontZ)
+        const tl = p2w(el.x, el.y)
+        const tr = p2w(el.x + el.width, el.y)
+        const br = p2w(el.x + el.width, el.y + el.height)
+        const bl = p2w(el.x, el.y + el.height)
+        // drawLines (solid) instead of drawDashedLoop — test if dash shader is the issue
+        ov.drawLines(new Float32Array([...tl, ...tr, ...tr, ...br, ...br, ...bl, ...bl, ...tl]), [0.26, 0.52, 0.96, 1])
+        // Corner handles (resize only for single, but visually shown for all)
+        const hWorld = 8 * (2 * FRUSTUM) / h * zs
+        const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
+        ov.drawQuads(handles, hWorld, [0.26, 0.52, 0.96, 1])
+        ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
+        ov.setZ(0)
       }
 
       // Snap guide lines (cyan)
@@ -959,9 +1078,9 @@ export default function SDFCanvas() {
         ov.drawLines(new Float32Array(dVerts), [0.97, 0.45, 0.09, 1])
       }
 
-      // ── WebGL Color Picker (concentric rings) ──
-      if (colorPickerOpenRef.current && state.selectedId) {
-        const pickEl = state.elements.find(e => e.id === state.selectedId)
+      // ── WebGL Color Picker (concentric rings) — single selection only ──
+      if (colorPickerOpenRef.current && state.selectedIds.length === 1) {
+        const pickEl = state.elements.find(e => e.id === state.selectedIds[0])
         if (pickEl) {
           const frontZ = pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
           ov.setZ(frontZ)
@@ -1042,6 +1161,22 @@ export default function SDFCanvas() {
         onPointerUp={handlePointerUp}
         onContextMenu={(e) => e.preventDefault()}
       />
+      {/* Drag-select box */}
+      {dragSelectBox && (
+        <div
+          style={{
+            position: 'absolute',
+            left: dragSelectBox.left,
+            top: dragSelectBox.top,
+            width: dragSelectBox.width,
+            height: dragSelectBox.height,
+            border: '1.5px solid rgba(66,133,244,0.8)',
+            background: 'rgba(66,133,244,0.08)',
+            borderRadius: 2,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
       {/* Canvas floating toolbar */}
       <div className="canvas-toolbar">
         <button className={`canvas-tool ${tool === 'select' ? 'active' : ''}`} onClick={() => setTool('select')} title="Select (V)">

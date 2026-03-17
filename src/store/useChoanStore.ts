@@ -44,7 +44,7 @@ export type Tool = 'select' | 'rectangle' | 'circle' | 'line'
 interface ChoanStore {
   // canvas state
   elements: ChoanElement[]
-  selectedId: string | null
+  selectedIds: string[]
   tool: Tool
   drawColor: number
 
@@ -60,6 +60,8 @@ interface ChoanStore {
   updateElement: (id: string, patch: Partial<ChoanElement>) => void
   removeElement: (id: string) => void
   selectElement: (id: string | null) => void
+  toggleSelectElement: (id: string) => void
+  setSelectedIds: (ids: string[]) => void
 
   // container operations
   reparentElement: (childId: string, parentId: string | null) => void
@@ -129,7 +131,7 @@ const LABEL_MAP: Record<string, string> = {
 
 const initialState = {
   elements: [] as ChoanElement[],
-  selectedId: null as string | null,
+  selectedIds: [] as string[],
   tool: 'select' as Tool,
   drawColor: 0xE6F8F0,
   animationClips: [] as AnimationClip[],
@@ -179,12 +181,19 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
 
       return {
         elements: updated,
-        selectedId: s.selectedId === id ? null : s.selectedId,
+        selectedIds: s.selectedIds.filter((sid) => sid !== id),
         animationBundles: cleanedBundles,
       }
     }),
 
-  selectElement: (id) => set({ selectedId: id }),
+  selectElement: (id) => set({ selectedIds: id ? [id] : [] }),
+  toggleSelectElement: (id) =>
+    set((s) => ({
+      selectedIds: s.selectedIds.includes(id)
+        ? s.selectedIds.filter((x) => x !== id)
+        : [...s.selectedIds, id],
+    })),
+  setSelectedIds: (ids) => set({ selectedIds: ids }),
 
   reparentElement: (childId, parentId) =>
     set((s) => {
@@ -284,7 +293,7 @@ export const useChoanStore = create<ChoanStore>((set, get) => ({
       elements: updated,
       animationClips: animationClips ?? [],
       animationBundles: animationBundles ?? [],
-      selectedId: null,
+      selectedIds: [],
       elementCounters: counters,
     })
   },

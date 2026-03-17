@@ -9,9 +9,10 @@ const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 
 export default function PropertiesPanel() {
-  const { elements, selectedId, updateElement, removeElement, runLayout, animationBundles } = useChoanStore()
+  const { elements, selectedIds, updateElement, removeElement, runLayout, animationBundles } = useChoanStore()
   const [newTriggerEvent, setNewTriggerEvent] = useState<'click' | 'hover'>('click')
   const [newTriggerBundle, setNewTriggerBundle] = useState('')
+  const selectedId = selectedIds[0] ?? null
   const el = elements.find((e) => e.id === selectedId)
 
   if (!el) {
