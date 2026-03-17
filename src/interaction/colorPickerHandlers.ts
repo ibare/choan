@@ -3,6 +3,7 @@
 import type { ChoanElement } from '../store/useChoanStore'
 import { COLOR_FAMILIES } from '../canvas/materials'
 import { applyToSiblings } from './elementHelpers'
+import { useUIStore } from '../store/useUIStore'
 import {
   COLOR_PICKER_HIT_RADIUS, COLOR_PICKER_RING_BASE, COLOR_PICKER_RING_STEP,
 } from '../constants'
@@ -31,7 +32,9 @@ export function handleColorPickerClick(
       const { sx, sy } = swatch(fi, si, ax, ay, zoomScale)
       const dx = pixel.x - sx, dy = pixel.y - sy
       if (dx * dx + dy * dy <= hitR * hitR) {
-        applyToSiblings(update, elements, selectedId, { color: COLOR_FAMILIES[fi].shades[si] }, altKey)
+        const chosenColor = COLOR_FAMILIES[fi].shades[si]
+        applyToSiblings(update, elements, selectedId, { color: chosenColor }, altKey)
+        useUIStore.getState().setDrawColor(chosenColor)
         return true
       }
     }

@@ -14,7 +14,7 @@ interface UIStore {
 
 const initialState = {
   tool: 'select' as Tool,
-  drawColor: 0xE6F8F0,
+  drawColor: 0xFFFFFF,
 }
 
 export const useUIStore = create<UIStore>((set) => ({

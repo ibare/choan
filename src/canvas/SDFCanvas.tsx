@@ -21,7 +21,7 @@ export default function SDFCanvas() {
   const zoomScaleRef = useRef(1)
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
 
-  const { elements, selectedIds, tool, drawColor, setTool, setDrawColor } = useChoanStore()
+  const { elements, selectedIds, tool, setTool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
   const [altPressed, setAltPressed] = useState(false)
 
@@ -116,7 +116,7 @@ export default function SDFCanvas() {
         onContextMenu={(e) => e.preventDefault()}
       />
       <DragSelectBox box={dragSelectBox} />
-      <CanvasToolbar tool={tool} drawColor={drawColor} onSetTool={setTool} onSetDrawColor={setDrawColor} />
+      <CanvasToolbar tool={tool} onSetTool={setTool} />
       <DistanceLabels labels={distanceLabels} />
       <FrameIndicator />
       <RenderSettingsPanel />
