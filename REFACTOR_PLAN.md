@@ -11,7 +11,7 @@
 - [x] 단계 3: 애니메이션 평가 순수 함수화 ✓ 완료 (animationEvaluator, autoKeyframe 디커플링)
 - [x] 단계 4: SDFCanvas 인터랙션 분리 (`interaction/` 디렉토리) ✓ 완료
 - [x] 단계 5: rAF 루프 분리 (`rendering/` 디렉토리, window.__choanKF 제거) ✓ 완료
-- [ ] 단계 6: TimelinePanel 분리 (TimelineCanvas + TimelineSidebar)
+- [x] 단계 6: TimelinePanel 분리 (TimelineCanvas + TimelineSidebar) ✓ 완료
 - [ ] 단계 7: JSX 컴포넌트 분리 (CanvasToolbar, DragSelectBox, DistanceLabels)
 
 ---
