@@ -2,6 +2,8 @@
 // Renders ruler, track bars, keyframe diamonds, and playhead on a single <canvas>.
 // All hit testing is coordinate-based (no DOM nodes).
 
+import { drawDiamond } from './timeline2dPrimitives'
+
 // ── Types ──
 
 export interface TimelineHit {
@@ -46,7 +48,6 @@ export interface Timeline2D {
 // ── Constants ──
 
 const DIAMOND_SIZE = 15
-const DIAMOND_HALF = DIAMOND_SIZE / 2
 const DIAMOND_HIT = 10
 const BAR_HEIGHT = 3
 const DPR = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1
@@ -64,9 +65,6 @@ const C = {
   layerBg: '#f2efe9',
   layerBorder: '#e0d8d0',
   trackBar: '#ece9ff',
-  diamond: '#5b4fcf',
-  diamondBorder: '#ffffff',
-  diamondHover: '#7b6fef',
   playhead: '#1a1a2e',
   playheadHandle: '#1a1a2e',
 }
@@ -285,75 +283,6 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
     ctx.beginPath()
     ctx.arc(px, rh * 0.55, 5, 0, Math.PI * 2)
     ctx.fill()
-  }
-
-  // ── Diamond primitive ──
-
-  function drawDiamond(c: CanvasRenderingContext2D, cx: number, cy: number, hover: boolean, easing?: string) {
-    const s = hover ? DIAMOND_HALF * 1.3 : DIAMOND_HALF
-    c.save()
-    c.translate(cx, cy)
-    c.rotate(Math.PI / 4)
-
-    // Shadow
-    c.shadowColor = 'rgba(0,0,0,0.15)'
-    c.shadowBlur = 3
-    c.shadowOffsetY = 1
-
-    // Fill
-    c.fillStyle = hover ? C.diamondHover : C.diamond
-    c.fillRect(-s / Math.SQRT2, -s / Math.SQRT2, (s * 2) / Math.SQRT2, (s * 2) / Math.SQRT2)
-
-    // Border
-    c.shadowColor = 'transparent'
-    c.strokeStyle = C.diamondBorder
-    c.lineWidth = 1.5
-    c.strokeRect(-s / Math.SQRT2, -s / Math.SQRT2, (s * 2) / Math.SQRT2, (s * 2) / Math.SQRT2)
-
-    c.restore()
-
-    // Easing curve icon below diamond
-    if (easing) {
-      drawEasingIcon(c, cx, cy + DIAMOND_HALF + 6, easing)
-    }
-  }
-
-  // Mini easing curve icon (12x8px area)
-  function drawEasingIcon(c: CanvasRenderingContext2D, cx: number, cy: number, easing: string) {
-    const w = 10, h = 6
-    const x0 = cx - w / 2, y0 = cy - h / 2
-    c.save()
-    c.strokeStyle = '#888'
-    c.lineWidth = 1.2
-    c.lineCap = 'round'
-    c.beginPath()
-    switch (easing) {
-      case 'linear':
-        c.moveTo(x0, y0 + h)
-        c.lineTo(x0 + w, y0)
-        break
-      case 'ease-in':
-        c.moveTo(x0, y0 + h)
-        c.quadraticCurveTo(x0 + w * 0.7, y0 + h, x0 + w, y0)
-        break
-      case 'ease-out':
-        c.moveTo(x0, y0 + h)
-        c.quadraticCurveTo(x0 + w * 0.3, y0, x0 + w, y0)
-        break
-      case 'ease-in-out':
-        c.moveTo(x0, y0 + h)
-        c.bezierCurveTo(x0 + w * 0.4, y0 + h, x0 + w * 0.6, y0, x0 + w, y0)
-        break
-      case 'spring':
-        c.moveTo(x0, y0 + h)
-        c.bezierCurveTo(x0 + w * 0.3, y0 - h * 0.3, x0 + w * 0.7, y0 + h * 0.2, x0 + w, y0)
-        break
-      default:
-        c.moveTo(x0, y0 + h)
-        c.lineTo(x0 + w, y0)
-    }
-    c.stroke()
-    c.restore()
   }
 
   // ── Main render ──
