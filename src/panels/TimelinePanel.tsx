@@ -14,10 +14,7 @@ import { buildLayerTree } from '../animation/buildLayerTree'
 import { kfAnimator } from '../rendering/kfAnimator'
 import TimelineCanvas from './TimelineCanvas'
 import TimelineSidebar from './TimelineSidebar'
-import {
-  DisplayClipEntry, PX_PER_MS,
-  RULER_HEIGHT, TRACK_HEIGHT, LAYER_HEADER_HEIGHT,
-} from './timelineTypes'
+import { type DisplayClipEntry, PX_PER_MS, RULER_HEIGHT, TRACK_HEIGHT, LAYER_HEADER_HEIGHT } from './timelineTypes'
 
 function getPropertyValue(el: ChoanElement, prop: AnimatableProperty): number {
   switch (prop) {

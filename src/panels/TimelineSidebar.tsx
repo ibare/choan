@@ -2,10 +2,7 @@
 
 import type { AnimatableProperty } from '../animation/types'
 import { X } from '@phosphor-icons/react'
-import {
-  DisplayClipEntry, formatValue,
-  TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, INDENT_PX, ANIMATABLE_PROPERTIES,
-} from './timelineTypes'
+import { type DisplayClipEntry, formatValue, TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, INDENT_PX, ANIMATABLE_PROPERTIES } from './timelineTypes'
 
 interface TimelineSidebarProps {
   displayClips: DisplayClipEntry[]
