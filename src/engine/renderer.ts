@@ -74,13 +74,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const uNormalEdgeThreshold = getUniformLocation(gl, edgeProgram, 'uNormalEdgeThreshold')
   const uIdEdgeThreshold = getUniformLocation(gl, edgeProgram, 'uIdEdgeThreshold')
 
-  // 2x supersampling for edge AA
-  const SS = 2
-
   // GBuffer (created at initial size, resized later)
   const gbuffer = createGBuffer(gl, 1, 1)
 
-  // Resolve FBO — edge pass renders here at 2x, then blits down to canvas
+  // Resolve FBO — edge pass renders here at SS×, then blits down to canvas
   let resolveFB = gl.createFramebuffer()!
   let resolveTex = gl.createTexture()!
   let ssW = 1, ssH = 1
@@ -122,8 +119,11 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     pendingCanvasW = cw
     pendingCanvasH = ch
 
-    const sw = cw * SS
-    const sh = ch * SS
+    // HiDPI (DPR≥2): DPR already provides sub-pixel sharpness — skip 2× SS
+    // to avoid rendering at 4× logical pixel count (DPR × SS).
+    const ss = dpr >= 2 ? 1 : 2
+    const sw = cw * ss
+    const sh = ch * ss
     gbuffer.resize(gl, sw, sh)
     resizeResolve(sw, sh)
   }

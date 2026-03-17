@@ -80,28 +80,31 @@ vec2 sceneSDF(vec3 p) {
   for (int i = 0; i < MAX_OBJECTS; i++) {
     if (i >= numObj) break;
 
-    vec3 objPos = uPosType[i].xyz;
-    float shapeType = uPosType[i].w;
-    vec3 halfSize = uSizeRadius[i].xyz;
-    float radius = uSizeRadius[i].w;
+    vec3 lp = p - uPosType[i].xyz;
+    vec3 hs = uSizeRadius[i].xyz;
 
-    vec3 lp = p - objPos;
+    // Bounding sphere pre-reject — L1 radius with 1.5× safety slack
+    float rBound = (hs.x + hs.y + hs.z) * 1.5 + 0.1;
+    if (dot(lp, lp) > rBound * rBound) continue;
+
+    float shapeType = uPosType[i].w;
+    float radius = uSizeRadius[i].w;
     float d;
 
     if (shapeType < 0.5) {
       // Rectangle: radius maps 0-1 → 0-min(halfSize.xy), XY only
-      float maxR = min(halfSize.x, halfSize.y);
+      float maxR = min(hs.x, hs.y);
       float r = radius * maxR;
-      d = sdExtrudedRoundRect(lp, halfSize, r);
+      d = sdExtrudedRoundRect(lp, hs, r);
     } else if (shapeType < 1.5) {
       // Circle: fully rounded XY, sharp Z extrusion
-      float r = min(halfSize.x, halfSize.y);
-      d = sdExtrudedRoundRect(lp, halfSize, r);
+      float r = min(hs.x, hs.y);
+      d = sdExtrudedRoundRect(lp, hs, r);
     } else {
       // Line: capsule along x-axis
-      vec3 a = vec3(-halfSize.x, 0.0, 0.0);
-      vec3 b = vec3( halfSize.x, 0.0, 0.0);
-      d = sdCapsule(lp, a, b, halfSize.y);
+      vec3 a = vec3(-hs.x, 0.0, 0.0);
+      vec3 b = vec3( hs.x, 0.0, 0.0);
+      d = sdCapsule(lp, a, b, hs.y);
     }
 
     if (d < res.x) res = vec2(d, float(i));
@@ -110,22 +113,49 @@ vec2 sceneSDF(vec3 p) {
   return res;
 }
 
-// ─── Normal (tetrahedron technique) ───────────────
+// ─── Normal (analytical per-shape, zero extra sceneSDF calls) ─────
 
-vec3 calcNormal(vec3 p) {
-  const float h = 0.001;
-  const vec2 k = vec2(1.0, -1.0);
-  return normalize(
-    k.xyy * sceneSDF(p + k.xyy * h).x +
-    k.yyx * sceneSDF(p + k.yyx * h).x +
-    k.yxy * sceneSDF(p + k.yxy * h).x +
-    k.xxx * sceneSDF(p + k.xxx * h).x
-  );
+vec3 calcNormal(vec3 p, int objId) {
+  float stype  = uPosType[objId].w;
+  vec3  hs     = uSizeRadius[objId].xyz;
+  float radius = uSizeRadius[objId].w;
+  vec3  lp     = p - uPosType[objId].xyz;
+
+  if (stype < 1.5) {
+    // sdExtrudedRoundRect (rect & circle)
+    float r   = (stype < 0.5) ? radius * min(hs.x, hs.y) : min(hs.x, hs.y);
+    vec2  q   = abs(lp.xy) - hs.xy + r;
+    float d2d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    float dz  = abs(lp.z) - hs.z;
+
+    // Top / bottom face
+    if (dz >= d2d - 1e-4) return vec3(0.0, 0.0, sign(lp.z));
+
+    // Side / corner — 2D gradient of the rounded-rect SDF
+    vec2  qc = max(q, 0.0);
+    float l  = length(qc);
+    vec2 n2;
+    if (l > 1e-6) {
+      n2 = sign(lp.xy) * qc / l;   // rounded corner arc
+    } else if (q.x >= q.y) {
+      n2 = vec2(sign(lp.x), 0.0);  // left / right side
+    } else {
+      n2 = vec2(0.0, sign(lp.y));  // front / back side
+    }
+    return normalize(vec3(n2, 0.0));
+  } else {
+    // sdCapsule — gradient is direction from closest axis point to p
+    vec3 a  = vec3(-hs.x, 0.0, 0.0);
+    vec3 ba = vec3(2.0 * hs.x, 0.0, 0.0);
+    vec3 pa = lp - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return normalize(pa - ba * h);
+  }
 }
 
 // ─── Ray March ────────────────────────────────────
 
-const int MAX_STEPS = 256;
+const int MAX_STEPS = 128;
 const float MAX_DIST = 100.0;
 const float EPSILON = 0.001;
 
@@ -201,7 +231,7 @@ void main() {
   }
 
   vec3 p = ro + rd * hit.x;
-  vec3 normal = calcNormal(p);
+  vec3 normal = calcNormal(p, int(hit.y));
   vec3 baseColor = getObjectColor(hit.y);
   float opacity = getObjectOpacity(hit.y);
 
