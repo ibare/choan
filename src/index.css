@@ -321,6 +321,37 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .color-swatch:hover { border-color: var(--text-muted); transform: scale(1.15); }
 .color-swatch.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
 
+/* ── Frame Indicator ────────────────────────── */
+.frame-indicator {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  backdrop-filter: blur(4px);
+  z-index: 5;
+  pointer-events: none;
+  user-select: none;
+}
+.frame-indicator-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.frame-indicator-fps { font-weight: 700; color: rgba(255, 255, 255, 0.9); }
+.frame-indicator-sep { color: rgba(255, 255, 255, 0.25); }
+.frame-indicator-frame { color: rgba(255, 255, 255, 0.5); }
+
 /* ── Render Settings Panel ──────────────────── */
 .rs-toggle {
   position: absolute;

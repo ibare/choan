@@ -11,6 +11,7 @@ import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import CanvasToolbar from './CanvasToolbar'
 import DragSelectBox from './DragSelectBox'
 import DistanceLabels from './DistanceLabels'
+import FrameIndicator from './FrameIndicator'
 
 export default function SDFCanvas() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -117,6 +118,7 @@ export default function SDFCanvas() {
       <DragSelectBox box={dragSelectBox} />
       <CanvasToolbar tool={tool} drawColor={drawColor} onSetTool={setTool} onSetDrawColor={setDrawColor} />
       <DistanceLabels labels={distanceLabels} />
+      <FrameIndicator />
       <RenderSettingsPanel />
     </div>
   )
