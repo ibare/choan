@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createTimeline2D, type Timeline2D, type DisplayLayer, type RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimatableProperty, EasingType } from '../animation/types'
-import { DisplayClipEntry, PX_PER_MS } from './timelineTypes'
+import { type DisplayClipEntry, PX_PER_MS } from './timelineTypes'
 import EasingPopover from './EasingPopover'
 import KfValueEditor from './KfValueEditor'
 
