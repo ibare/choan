@@ -7,7 +7,7 @@ import { useEffect, type MutableRefObject } from 'react'
 import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
 import type { SnapLine, DistanceMeasure } from '../canvas/snapUtils'
-import { useChoanStore } from '../store/useChoanStore'
+import { useChoanStore, type ChoanElement } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { evaluateAnimation } from '../animation/animationEvaluator'
@@ -32,6 +32,7 @@ export function useAnimateLoop({
   snapLinesRef,
   colorPickerOpenRef,
   colorPickerHoverRef,
+  animatedElementsRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
@@ -47,6 +48,7 @@ export function useAnimateLoop({
   snapLinesRef: MutableRefObject<SnapLine[]>
   colorPickerOpenRef: MutableRefObject<boolean>
   colorPickerHoverRef: MutableRefObject<number>
+  animatedElementsRef: MutableRefObject<ChoanElement[]>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -85,6 +87,8 @@ export function useAnimateLoop({
         springParams: { stiffness: rs.springStiffness, damping: rs.springDamping, squashIntensity: rs.squashIntensity },
         manipulatedIds,
       })
+
+      animatedElementsRef.current = animatedElements
 
       if (preview.ghostPreview && preview.editingBundleId && preview.previewState === 'stopped') {
         const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)

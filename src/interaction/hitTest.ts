@@ -13,6 +13,7 @@ export function raycastElement(
   clientY: number,
   renderer: SDFRenderer,
   canvasSize: { w: number; h: number },
+  elementsOverride?: ChoanElement[],
 ): string | null {
   const ray = getCameraRayParams(renderer.camera)
   const rect = renderer.canvas.getBoundingClientRect()
@@ -20,7 +21,7 @@ export function raycastElement(
   const { ro, rd } = screenToRay(
     clientX, clientY, rect, ray.ro, ray.forward, ray.right, ray.up, ray.fovScale, w, h,
   )
-  const { elements } = useChoanStore.getState()
+  const elements = elementsOverride ?? useChoanStore.getState().elements
   const hit = cpuRayMarch(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h)
   if (!hit || hit.objectIndex < 0 || hit.objectIndex >= elements.length) return null
   return elements[hit.objectIndex].id

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
 import { worldToPixel as worldToPixelCS, pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
-import { useChoanStore } from '../store/useChoanStore'
+import { useChoanStore, type ChoanElement } from '../store/useChoanStore'
 import { computeDistances, type DistanceMeasure } from './snapUtils'
 import { usePointerHandlers } from '../interaction/usePointerHandlers'
 import { useKeyboardHandlers } from '../interaction/useKeyboardHandlers'
@@ -20,6 +20,7 @@ export default function SDFCanvas() {
   const canvasSizeRef = useRef({ w: 1, h: 1 })
   const zoomScaleRef = useRef(1)
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
+  const animatedElementsRef = useRef<ChoanElement[]>([])
 
   const { elements, selectedIds, tool, setTool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
@@ -33,7 +34,7 @@ export default function SDFCanvas() {
     isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef,
     snapLinesRef,
-  } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef })
+  } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef })
 
   useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef)
 
@@ -41,6 +42,7 @@ export default function SDFCanvas() {
     rendererRef, controlsRef, canvasSizeRef, zoomScaleRef, distMeasuresRef,
     isDraggingRef, dragGroupIdsRef, isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef, snapLinesRef, colorPickerOpenRef, colorPickerHoverRef,
+    animatedElementsRef,
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {

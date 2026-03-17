@@ -46,11 +46,13 @@ export function usePointerHandlers({
   canvasSizeRef,
   zoomScaleRef,
   mountRef,
+  animatedElementsRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
   zoomScaleRef: MutableRefObject<number>
   mountRef: MutableRefObject<HTMLDivElement | null>
+  animatedElementsRef: MutableRefObject<ChoanElement[]>
 }): UsePointerHandlersResult {
   const screenToPixel = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
     const renderer = rendererRef.current
@@ -122,7 +124,7 @@ export function usePointerHandlers({
     if (usePreviewStore.getState().previewState === 'playing') {
       const renderer = rendererRef.current
       if (!renderer) return
-      const hitId = raycastElement(e.clientX, e.clientY, renderer, canvasSizeRef.current)
+      const hitId = raycastElement(e.clientX, e.clientY, renderer, canvasSizeRef.current, animatedElementsRef.current)
       if (hitId) {
         const { elements: els, animationBundles: bundles } = useChoanStore.getState()
         const el = els.find((el) => el.id === hitId)
@@ -157,7 +159,7 @@ export function usePointerHandlers({
 
     if (tool === 'select') {
       if (e.shiftKey) {
-        const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current) : null
+        const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current, animatedElementsRef.current) : null
         if (hitId) {
           toggleSelectElement(hitId)
         } else {
@@ -207,16 +209,17 @@ export function usePointerHandlers({
         }
       }
 
-      const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current) : null
+      const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current, animatedElementsRef.current) : null
       if (hitId) {
         const freshEls = useChoanStore.getState().elements
+        const animEls = animatedElementsRef.current
         const currentSelectedIds = useChoanStore.getState().selectedIds
         const pixel = screenToPixel(e.clientX, e.clientY)
         const startMap = new Map<string, { x: number; y: number }>()
         if (currentSelectedIds.includes(hitId)) {
           if (pixel) dragStartPixelRef.current = pixel
           for (const sid of currentSelectedIds) {
-            const ge = freshEls.find((el) => el.id === sid)
+            const ge = animEls.find((el) => el.id === sid)
             if (ge) startMap.set(sid, { x: ge.x, y: ge.y })
           }
           isDraggingRef.current = true
@@ -228,7 +231,7 @@ export function usePointerHandlers({
           const groupIds = resolveGroup(freshEls, hitId)
           if (pixel) dragStartPixelRef.current = pixel
           for (const gid of groupIds) {
-            const ge = freshEls.find((el) => el.id === gid)
+            const ge = animEls.find((el) => el.id === gid)
             if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
           }
           isDraggingRef.current = true
@@ -382,18 +385,29 @@ export function usePointerHandlers({
       finalizeDrag(selIds[0], selIds, els, reparentElement, runLayout)
     }
 
-    // Auto-keyframe when editing a bundle
+    // Auto-keyframe when editing a bundle — use animated (scrub) coordinates
     const { editingBundleId } = usePreviewStore.getState()
     if (editingBundleId) {
-      const freshEls = useChoanStore.getState().elements
+      const animEls = animatedElementsRef.current
       const selId = selIds[0] ?? null
       if (isDraggingRef.current && selId) {
-        const el = freshEls.find((el) => el.id === selId)
         const orig = dragGroupStartRef.current.get(selId)
-        if (el && orig) { autoKeyframe(selId, 'x', el.x, orig.x); autoKeyframe(selId, 'y', el.y, orig.y) }
+        if (orig) {
+          const endPixel = screenToPixel(e.clientX, e.clientY)
+          const startPixel = dragStartPixelRef.current
+          const hasMoved = endPixel && (Math.abs(endPixel.x - startPixel.x) > 2 || Math.abs(endPixel.y - startPixel.y) > 2)
+          if (hasMoved) {
+            const el = animEls.find((el) => el.id === selId)
+            if (el) { autoKeyframe(selId, 'x', el.x, orig.x); autoKeyframe(selId, 'y', el.y, orig.y) }
+          } else {
+            // Click only — keyframe at current scrub position (no jump)
+            autoKeyframe(selId, 'x', orig.x, orig.x)
+            autoKeyframe(selId, 'y', orig.y, orig.y)
+          }
+        }
       }
       if (isResizingRef.current && resizeElIdRef.current) {
-        const el = freshEls.find((el) => el.id === resizeElIdRef.current)
+        const el = animEls.find((el) => el.id === resizeElIdRef.current)
         if (el) {
           autoKeyframe(resizeElIdRef.current, 'x', el.x)
           autoKeyframe(resizeElIdRef.current, 'y', el.y)
@@ -402,7 +416,7 @@ export function usePointerHandlers({
         }
       }
       if (isRadiusDragRef.current && selId) {
-        const el = freshEls.find((el) => el.id === selId)
+        const el = animEls.find((el) => el.id === selId)
         if (el) autoKeyframe(selId, 'radius', el.radius ?? 0, radiusStartRef.current)
       }
     }

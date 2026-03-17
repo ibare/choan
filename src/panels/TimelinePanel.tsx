@@ -212,7 +212,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           displayLayers={displayLayers}
           renderOptions={renderOptions}
           scrollX={scrollX}
-          onPlayheadChange={setPlayheadTime}
+          onPlayheadChange={(time) => { setPlayheadTime(time); useChoanStore.getState().setSelectedIds([]) }}
           onMutateClip={mutateClip}
           onScrollX={(delta) => setScrollX((prev) => Math.max(0, prev + delta))}
           canvasWrapRef={canvasWrapRef}

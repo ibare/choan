@@ -68,6 +68,7 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
         overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
       }
       return elements.map((el) => {
+        if (manipulatedIds.has(el.id)) return el
         const patch = overrides.get(el.id)
         return patch ? { ...el, ...patch } : el
       })
