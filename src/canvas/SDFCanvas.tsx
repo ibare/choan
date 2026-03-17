@@ -22,6 +22,25 @@ import { usePreviewStore } from '../store/usePreviewStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import { Cursor, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
+import {
+  HANDLE_HIT_RADIUS,
+  MIN_ELEMENT_SIZE,
+  GHOST_OPACITY_INBETWEEN,
+  GHOST_KEYFRAME_EPSILON,
+  GHOST_FPS_MS,
+  SELECTION_COLOR,
+  SNAP_COLOR,
+  DISTANCE_COLOR,
+  MULTI_SELECT_TINT,
+  MULTI_SELECT_OPACITY,
+  COLOR_PICKER_RING_BASE,
+  COLOR_PICKER_RING_STEP,
+  COLOR_PICKER_DISC_RADIUS,
+  COLOR_PICKER_HIT_RADIUS,
+  HANDLE_SIZE_PX,
+  DISTANCE_TICK_PX,
+} from '../constants'
+import { MAX_OBJECTS } from '../engine/scene'
 
 // Apply a property patch to an element and (if altKey) to its siblings.
 // Position fields (x, y) are always excluded from sibling propagation.
@@ -44,9 +63,6 @@ function applyToSiblings(
     }
   }
 }
-
-const HANDLE_HIT_RADIUS = 16
-const MIN_ELEMENT_SIZE = 10
 
 const DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   rectangle: { w: 120, h: 90 },
@@ -310,11 +326,11 @@ export default function SDFCanvas() {
           if (el) {
             const ax = el.x + el.width, ay = el.y
             const zsPick = zoomScaleRef.current
-            const pickHitR = 12 * zsPick
+            const pickHitR = COLOR_PICKER_HIT_RADIUS * zsPick
             for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
               for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
                 const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-                const ring = (48 + si * 28) * zsPick
+                const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * zsPick
                 const sx = ax + Math.cos(angle) * ring
                 const sy = ay + Math.sin(angle) * ring
                 const dx = pixel.x - sx, dy = pixel.y - sy
@@ -496,12 +512,12 @@ export default function SDFCanvas() {
           if (el) {
             const ax = el.x + el.width, ay = el.y
             const zsHover = zoomScaleRef.current
-            const hoverHitR = 12 * zsHover
+            const hoverHitR = COLOR_PICKER_HIT_RADIUS * zsHover
             let found = -1
             for (let fi = 0; fi < COLOR_FAMILIES.length && found < 0; fi++) {
               for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
                 const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-                const ring = (48 + si * 28) * zsHover
+                const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * zsHover
                 const sx = ax + Math.cos(angle) * ring
                 const sy = ay + Math.sin(angle) * ring
                 const dx = pixel.x - sx, dy = pixel.y - sy
@@ -962,10 +978,10 @@ export default function SDFCanvas() {
           // Compute max ghost frames: fill available object slots
           const animatedElCount = bundle.clips.filter((c) => c.tracks.length > 0).length
           const baseElCount = state.elements.length
-          const availableSlots = 128 - baseElCount // MAX_OBJECTS = 128
+          const availableSlots = MAX_OBJECTS - baseElCount
           const maxGhostFrames = animatedElCount > 0 ? Math.floor(availableSlots / animatedElCount) : 0
-          // Use 60fps equivalent: 1 frame per ~16ms, capped by available slots
-          const idealSteps = Math.max(2, Math.ceil(maxDur / 16))
+          // Use 60fps equivalent: 1 frame per GHOST_FPS_MS, capped by available slots
+          const idealSteps = Math.max(2, Math.ceil(maxDur / GHOST_FPS_MS))
           const ghostSteps = Math.min(idealSteps, maxGhostFrames)
 
           const ghostElements: typeof state.elements = []
@@ -975,13 +991,13 @@ export default function SDFCanvas() {
           }
           // Also add exact keyframe times
           for (const kt of kfTimes) {
-            if (!allTimes.some((t) => Math.abs(t - kt) < 5)) allTimes.push(kt)
+            if (!allTimes.some((t) => Math.abs(t - kt) < GHOST_KEYFRAME_EPSILON)) allTimes.push(kt)
           }
           allTimes.sort((a, b) => a - b)
 
           for (const t of allTimes) {
-            if (Math.abs(t - preview.playheadTime) < maxDur / (GHOST_STEPS * 2)) continue
-            const isKeyframeTime = [...kfTimes].some((kt) => Math.abs(kt - t) < 5)
+            if (Math.abs(t - preview.playheadTime) < maxDur / (ghostSteps * 2)) continue
+            const isKeyframeTime = [...kfTimes].some((kt) => Math.abs(kt - t) < GHOST_KEYFRAME_EPSILON)
             const ghostOverrides = new Map<string, Partial<ChoanElement>>()
             for (const clip of bundle.clips) {
               if (clip.tracks.length === 0) continue
@@ -999,7 +1015,7 @@ export default function SDFCanvas() {
                 ghostElements.push({
                   ...el, ...patch,
                   id: `__ghost_${el.id}_${Math.round(t)}`,
-                  opacity: isKeyframeTime ? (el.opacity ?? 1) : 0.5 * (el.opacity ?? 1),
+                  opacity: isKeyframeTime ? (el.opacity ?? 1) : GHOST_OPACITY_INBETWEEN * (el.opacity ?? 1),
                 })
               }
             }
@@ -1012,7 +1028,7 @@ export default function SDFCanvas() {
       const multiSelected = state.selectedIds.length > 1 ? new Set(state.selectedIds) : null
       const renderElements = multiSelected
         ? animatedElements.map((el) =>
-            multiSelected.has(el.id) ? { ...el, color: 0xff2222, opacity: 0.8 } : el,
+            multiSelected.has(el.id) ? { ...el, color: MULTI_SELECT_TINT, opacity: MULTI_SELECT_OPACITY } : el,
           )
         : animatedElements
       renderer.updateScene(renderElements, rs.extrudeDepth)
@@ -1044,11 +1060,11 @@ export default function SDFCanvas() {
         const br = p2w(el.x + el.width, el.y + el.height)
         const bl = p2w(el.x, el.y + el.height)
         // drawLines (solid) instead of drawDashedLoop — test if dash shader is the issue
-        ov.drawLines(new Float32Array([...tl, ...tr, ...tr, ...br, ...br, ...bl, ...bl, ...tl]), [0.26, 0.52, 0.96, 1])
+        ov.drawLines(new Float32Array([...tl, ...tr, ...tr, ...br, ...br, ...bl, ...bl, ...tl]), SELECTION_COLOR)
         // Corner handles (resize only for single, but visually shown for all)
-        const hWorld = 8 * (2 * FRUSTUM) / h * zs
+        const hWorld = HANDLE_SIZE_PX * (2 * FRUSTUM) / h * zs
         const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
-        ov.drawQuads(handles, hWorld, [0.26, 0.52, 0.96, 1])
+        ov.drawQuads(handles, hWorld, SELECTION_COLOR)
         ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
         ov.setZ(0)
       }
@@ -1060,7 +1076,7 @@ export default function SDFCanvas() {
         for (const s of snaps) {
           verts.push(...p2w(s.x1, s.y1), ...p2w(s.x2, s.y2))
         }
-        ov.drawLines(new Float32Array(verts), [0.0, 0.82, 0.82, 1])
+        ov.drawLines(new Float32Array(verts), SNAP_COLOR)
       }
 
       // Distance measurement lines + tick marks (orange)
@@ -1071,19 +1087,19 @@ export default function SDFCanvas() {
         const a = p2w(m.x1, m.y1)
         const b = p2w(m.x2, m.y2)
         dVerts.push(...a, ...b)
-        const tick = 4 * (2 * FRUSTUM) / h * zs
+        const tick = DISTANCE_TICK_PX * (2 * FRUSTUM) / h * zs
         const isHoriz = Math.abs(m.y1 - m.y2) < 1
         if (isHoriz) {
           dVerts.push(a[0], a[1] - tick, a[0], a[1] + tick)
           dVerts.push(b[0], b[1] - tick, b[0], b[1] + tick)
         } else {
-          const tickX = 4 * (2 * FRUSTUM * aspect) / w * zs
+          const tickX = DISTANCE_TICK_PX * (2 * FRUSTUM * aspect) / w * zs
           dVerts.push(a[0] - tickX, a[1], a[0] + tickX, a[1])
           dVerts.push(b[0] - tickX, b[1], b[0] + tickX, b[1])
         }
       }
       if (dVerts.length > 0) {
-        ov.drawLines(new Float32Array(dVerts), [0.97, 0.45, 0.09, 1])
+        ov.drawLines(new Float32Array(dVerts), DISTANCE_COLOR)
       }
 
       // ── WebGL Color Picker (concentric rings) — single selection only ──
@@ -1096,7 +1112,7 @@ export default function SDFCanvas() {
           const ax = pickEl.x + pickEl.width
           const ay = pickEl.y
           const pxToW = (2 * FRUSTUM) / h * zs
-          const discR = 11 * pxToW
+          const discR = COLOR_PICKER_DISC_RADIUS * pxToW
           const borderR = discR * 1.22
           const hoverIdx = colorPickerHoverRef.current
 
@@ -1104,7 +1120,7 @@ export default function SDFCanvas() {
             const family = COLOR_FAMILIES[fi]
             for (let si = 0; si < family.shades.length; si++) {
               const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-              const ring = (48 + si * 28) * zs
+              const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * zs
               const px = ax + Math.cos(angle) * ring
               const py = ay + Math.sin(angle) * ring
               const [wx, wy] = p2w(px, py)

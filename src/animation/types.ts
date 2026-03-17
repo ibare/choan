@@ -2,7 +2,9 @@
 
 export type AnimatableProperty = 'x' | 'y' | 'width' | 'height' | 'opacity' | 'color' | 'radius'
 
-export type EasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'spring'
+// Per-keyframe granular easing (Keyframe.easing) and clip-level fallback (AnimationClip.easing).
+// 'ease' maps to CSS cubic-bezier(0.25, 0.1, 0.25, 1.0) — resolveEasing() handles all values.
+export type EasingType = 'linear' | 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'spring'
 
 export interface Keyframe {
   time: number    // ms offset from animation start (0 = start)
@@ -19,7 +21,7 @@ export interface AnimationClip {
   id: string
   elementId: string
   duration: number        // ms, derived from max keyframe time
-  easing: 'spring' | 'ease' | 'linear'
+  easing: EasingType
   tracks: KeyframeTrack[]
 }
 
