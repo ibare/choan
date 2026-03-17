@@ -485,7 +485,8 @@ export default function SDFCanvas() {
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
-      const { elements: els, selectedIds: selIds, selectedId: selId, updateElement: update } = useChoanStore.getState()
+      const { elements: els, selectedIds: selIds, updateElement: update } = useChoanStore.getState()
+      const selId = selIds[0] ?? null
 
       // Color picker hover detection
       if (colorPickerOpenRef.current && selId) {
