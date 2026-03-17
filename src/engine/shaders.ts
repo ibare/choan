@@ -82,18 +82,6 @@ vec2 sceneSDF(vec3 p) {
 
     vec3 lp = p - uPosType[i].xyz;
     vec3 hs = uSizeRadius[i].xyz;
-
-    // Bounding sphere acceleration — L1 radius with 1.5× safety slack.
-    // When p is OUTSIDE the sphere, use sphere-surface distance as a valid
-    // SDF lower bound so the ray still marches toward the object correctly.
-    // (A plain skip would return 1e10, causing the ray to overshoot.)
-    float rBound = (hs.x + hs.y + hs.z) * 1.5 + 0.1;
-    float outDist = length(lp) - rBound;
-    if (outDist > 0.0) {
-      if (outDist < res.x) res.x = outDist;
-      continue;
-    }
-
     float shapeType = uPosType[i].w;
     float radius = uSizeRadius[i].w;
     float d;
