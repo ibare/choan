@@ -4,8 +4,6 @@
 import { createProgram } from './gl'
 import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG } from './overlayShaders'
 
-export { buildViewProjMatrix } from './camera'
-
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void

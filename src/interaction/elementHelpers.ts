@@ -29,7 +29,7 @@ export function applyToSiblings(
   }
 }
 
-export function collectDescendants(els: ChoanElement[], parentId: string): string[] {
+function collectDescendants(els: ChoanElement[], parentId: string): string[] {
   const result: string[] = []
   for (const e of els) {
     if (e.parentId === parentId) {
@@ -40,13 +40,13 @@ export function collectDescendants(els: ChoanElement[], parentId: string): strin
   return result
 }
 
-export function findRootAncestor(els: ChoanElement[], elId: string): string {
+function findRootAncestor(els: ChoanElement[], elId: string): string {
   const el = els.find((e) => e.id === elId)
   if (!el || !el.parentId) return elId
   return findRootAncestor(els, el.parentId)
 }
 
-export function isInFreeLayout(els: ChoanElement[], elId: string): boolean {
+function isInFreeLayout(els: ChoanElement[], elId: string): boolean {
   const el = els.find((e) => e.id === elId)
   if (!el?.parentId) return false
   const parent = els.find((e) => e.id === el.parentId)
