@@ -2,79 +2,9 @@
 // Renders lines and quads on top of the SDF scene (depth test disabled)
 
 import { createProgram } from './gl'
+import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG } from './overlayShaders'
 
-const OVERLAY_VERT = /* glsl */ `#version 300 es
-layout(location = 0) in vec2 aPosition;
-uniform mat4 uViewProj;
-uniform float uZ;
-void main() {
-  gl_Position = uViewProj * vec4(aPosition, uZ, 1.0);
-}
-`
-
-const OVERLAY_FRAG = /* glsl */ `#version 300 es
-precision highp float;
-uniform vec4 uColor;
-out vec4 fragColor;
-void main() {
-  fragColor = uColor;
-}
-`
-
-const DASH_FRAG = /* glsl */ `#version 300 es
-precision highp float;
-uniform vec4 uColor;
-uniform float uDashTotal;
-out vec4 fragColor;
-flat in float vStartDist;
-in float vDist;
-void main() {
-  float d = vDist - vStartDist;
-  float phase = mod(d, uDashTotal);
-  if (phase > uDashTotal * 0.66) discard;
-  fragColor = uColor;
-}
-`
-
-const DASH_VERT = /* glsl */ `#version 300 es
-layout(location = 0) in vec2 aPosition;
-uniform mat4 uViewProj;
-uniform float uZ;
-uniform vec2 uResolution;
-flat out float vStartDist;
-out float vDist;
-void main() {
-  gl_Position = uViewProj * vec4(aPosition, uZ, 1.0);
-  // Approximate screen distance for dash pattern
-  vec2 screenPos = gl_Position.xy / gl_Position.w * uResolution * 0.5;
-  vDist = length(screenPos);
-  vStartDist = vDist;
-}
-`
-
-const DISC_VERT = /* glsl */ `#version 300 es
-layout(location = 0) in vec4 aData; // xy = position, zw = UV
-uniform mat4 uViewProj;
-uniform float uZ;
-out vec2 vUV;
-void main() {
-  gl_Position = uViewProj * vec4(aData.xy, uZ, 1.0);
-  vUV = aData.zw;
-}
-`
-
-const DISC_FRAG = /* glsl */ `#version 300 es
-precision highp float;
-uniform vec4 uColor;
-out vec4 fragColor;
-in vec2 vUV;
-void main() {
-  float d = length(vUV - 0.5) * 2.0;
-  if (d > 1.0) discard;
-  float aa = 1.0 - smoothstep(0.92, 1.0, d);
-  fragColor = vec4(uColor.rgb, uColor.a * aa);
-}
-`
+export { buildViewProjMatrix } from './camera'
 
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
@@ -232,62 +162,4 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   }
 
   return { drawLines, drawDashedLoop, drawQuads, drawDisc, beginFrame, setZ, dispose }
-}
-
-// ── View-Projection matrix builder ──
-
-export function buildViewProjMatrix(
-  camPos: [number, number, number],
-  camTarget: [number, number, number],
-  camUp: [number, number, number],
-  fov: number, // degrees
-  aspect: number,
-  near: number,
-  far: number,
-): Float32Array {
-  // View matrix
-  const [ex, ey, ez] = camPos
-  const [cx, cy, cz] = camTarget
-
-  let fx = cx - ex, fy = cy - ey, fz = cz - ez
-  let fl = Math.sqrt(fx * fx + fy * fy + fz * fz)
-  fx /= fl; fy /= fl; fz /= fl
-
-  let rx = fy * camUp[2] - fz * camUp[1]
-  let ry = fz * camUp[0] - fx * camUp[2]
-  let rz = fx * camUp[1] - fy * camUp[0]
-  let rl = Math.sqrt(rx * rx + ry * ry + rz * rz)
-  rx /= rl; ry /= rl; rz /= rl
-
-  const ux = ry * fz - rz * fy
-  const uy = rz * fx - rx * fz
-  const uz = rx * fy - ry * fx
-
-  // Perspective matrix
-  const f = 1.0 / Math.tan(fov * Math.PI / 180 * 0.5)
-  const nf = 1 / (near - far)
-
-  // VP = P * V (column-major)
-  // V:
-  const v00 = rx, v01 = ux, v02 = -fx
-  const v10 = ry, v11 = uy, v12 = -fy
-  const v20 = rz, v21 = uz, v22 = -fz
-  const v30 = -(rx * ex + ry * ey + rz * ez)
-  const v31 = -(ux * ex + uy * ey + uz * ez)
-  const v32 = -(-fx * ex + -fy * ey + -fz * ez)
-
-  // P:
-  const p00 = f / aspect
-  const p11 = f
-  const p22 = (far + near) * nf
-  const p23 = -1
-  const p32 = 2 * far * near * nf
-
-  // VP = P * V (column-major result)
-  return new Float32Array([
-    p00 * v00, p11 * v01, p22 * v02,       -v02,
-    p00 * v10, p11 * v11, p22 * v12,       -v12,
-    p00 * v20, p11 * v21, p22 * v22,       -v22,
-    p00 * v30, p11 * v31, p22 * v32 + p32, -v32,
-  ])
 }
