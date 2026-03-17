@@ -1,4 +1,4 @@
-// Pointer event handlers hook — owns all interaction refs and the three pointer handlers.
+// Pointer event handlers hook — owns all interaction refs and routes to sub-handlers.
 // Returns handlers for the canvas element + refs needed by the rAF render loop.
 
 import { useRef, useState, useCallback, type MutableRefObject } from 'react'
@@ -8,20 +8,18 @@ import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
 import { nanoid } from '../canvas/nanoid'
-import { detectContainment } from '../layout/containment'
-import { computeSnapMove, computeSnapResize } from '../canvas/snapUtils'
 import { kfAnimator } from '../rendering/kfAnimator'
-import { COLOR_FAMILIES } from '../canvas/materials'
-import {
-  MIN_ELEMENT_SIZE, COLOR_PICKER_HIT_RADIUS,
-  COLOR_PICKER_RING_BASE, COLOR_PICKER_RING_STEP,
-} from '../constants'
 import { raycastElement, hitTestCorner } from './hitTest'
-import { applyToSiblings, resolveGroup, DEFAULT_SIZE } from './elementHelpers'
+import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
 import { worldToPixel as worldToPixelCS } from '../coords/coordinateSystem'
 import { getCameraRayParams } from '../engine/camera'
 import { screenToRay } from '../engine/sdf'
+import { handleColorPickerClick, computeColorPickerHover } from './colorPickerHandlers'
+import { handleDragMove, finalizeDrag } from './dragHandlers'
+import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
+import { handleDrawMove, finalizeDrawn } from './drawHandlers'
+import { handleDragSelectMove } from './dragSelectHandlers'
 
 export interface InteractionRefs {
   colorPickerOpenRef: MutableRefObject<boolean>
@@ -54,7 +52,6 @@ export function usePointerHandlers({
   zoomScaleRef: MutableRefObject<number>
   mountRef: MutableRefObject<HTMLDivElement | null>
 }): UsePointerHandlersResult {
-  // Screen → pseudo-pixel (canvas layout space) conversion
   const screenToPixel = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
     const renderer = rendererRef.current
     if (!renderer) return null
@@ -111,7 +108,6 @@ export function usePointerHandlers({
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
 
-    // Reset any stale drag-select state
     if (isDragSelectRef.current) {
       const originalPointerId = dragSelectPointerIdRef.current
       isDragSelectRef.current = false
@@ -122,9 +118,8 @@ export function usePointerHandlers({
       if (originalPointerId !== -1 && e.pointerId !== originalPointerId) return
     }
 
-    // Preview mode: trigger animations directly from element triggers
-    const previewState = usePreviewStore.getState().previewState
-    if (previewState === 'playing') {
+    // Preview mode: trigger click animations
+    if (usePreviewStore.getState().previewState === 'playing') {
       const renderer = rendererRef.current
       if (!renderer) return
       const hitId = raycastElement(e.clientX, e.clientY, renderer, canvasSizeRef.current)
@@ -134,9 +129,7 @@ export function usePointerHandlers({
         for (const trigger of el?.triggers ?? []) {
           if (trigger.event === 'click') {
             const bundle = bundles.find((b) => b.id === trigger.animationBundleId)
-            if (bundle) {
-              for (const clip of bundle.clips) kfAnimator.start(clip, clip.id, performance.now())
-            }
+            if (bundle) for (const clip of bundle.clips) kfAnimator.start(clip, clip.id, performance.now())
           }
         }
       }
@@ -149,26 +142,10 @@ export function usePointerHandlers({
       const { elements: els, selectedIds, updateElement: update } = useChoanStore.getState()
       const selId = selectedIds[0] ?? null
       if (pixel && selId) {
-        const el = els.find((el) => el.id === selId)
-        if (el) {
-          const ax = el.x + el.width
-          const ay = el.y
-          const zs = zoomScaleRef.current
-          const pickHitR = COLOR_PICKER_HIT_RADIUS * zs
-          for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
-            for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
-              const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-              const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * zs
-              const dx = pixel.x - (ax + Math.cos(angle) * ring)
-              const dy = pixel.y - (ay + Math.sin(angle) * ring)
-              if (dx * dx + dy * dy <= pickHitR * pickHitR) {
-                applyToSiblings(update, els, selId, { color: COLOR_FAMILIES[fi].shades[si] }, e.altKey)
-                colorPickerOpenRef.current = false
-                colorPickerHoverRef.current = -1
-                return
-              }
-            }
-          }
+        if (handleColorPickerClick(pixel, els, selId, e.altKey, zoomScaleRef.current, update)) {
+          colorPickerOpenRef.current = false
+          colorPickerHoverRef.current = -1
+          return
         }
       }
       colorPickerOpenRef.current = false
@@ -176,13 +153,11 @@ export function usePointerHandlers({
       return
     }
 
-    const { tool, selectedIds, elements: els, selectElement, toggleSelectElement, setSelectedIds, addElement, drawColor } = useChoanStore.getState()
+    const { tool, selectedIds, elements: els, selectElement, toggleSelectElement, addElement, drawColor } = useChoanStore.getState()
 
     if (tool === 'select') {
-      // Shift+click/drag
       if (e.shiftKey) {
-        const renderer = rendererRef.current
-        const hitId = renderer ? raycastElement(e.clientX, e.clientY, renderer, canvasSizeRef.current) : null
+        const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current) : null
         if (hitId) {
           toggleSelectElement(hitId)
         } else {
@@ -199,16 +174,11 @@ export function usePointerHandlers({
         return
       }
 
-      // Handle hit test (single selection only)
       const selId = selectedIds[0] ?? null
       if (selectedIds.length === 1 && selId) {
         const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
         if (corner >= 0) {
-          if (corner === 2) {
-            colorPickerOpenRef.current = true
-            colorPickerHoverRef.current = -1
-            return
-          }
+          if (corner === 2) { colorPickerOpenRef.current = true; colorPickerHoverRef.current = -1; return }
           if (corner === 3 && els.find((el) => el.id === selId)?.type === 'rectangle') {
             isRadiusDragRef.current = true
             radiusStartRef.current = els.find((el) => el.id === selId)?.radius ?? 0
@@ -221,54 +191,48 @@ export function usePointerHandlers({
           const parentOfEl = el.parentId ? els.find((p) => p.id === el.parentId) : null
           const isManagedChild = el.parentId && parentOfEl?.layoutDirection !== 'free' && parentOfEl?.layoutDirection !== undefined
           if (corner === 1 && !isManagedChild) {
-            const cornerPositions = [
-              { x: el.x, y: el.y + el.height },
-              { x: el.x + el.width, y: el.y + el.height },
-              { x: el.x + el.width, y: el.y },
-              { x: el.x, y: el.y },
+            const cp = [
+              { x: el.x, y: el.y + el.height }, { x: el.x + el.width, y: el.y + el.height },
+              { x: el.x + el.width, y: el.y }, { x: el.x, y: el.y },
             ]
             isResizingRef.current = true
             resizeElIdRef.current = el.id
             const pixel = screenToPixel(e.clientX, e.clientY)
             if (pixel) resizeStartPixelRef.current = pixel
-            resizeCornerStartRef.current = cornerPositions[corner]
-            resizeAnchorRef.current = cornerPositions[(corner + 2) % 4]
+            resizeCornerStartRef.current = cp[corner]
+            resizeAnchorRef.current = cp[(corner + 2) % 4]
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
         }
       }
 
-      // Element select/drag
-      const renderer = rendererRef.current
-      const hitId = renderer ? raycastElement(e.clientX, e.clientY, renderer, canvasSizeRef.current) : null
+      const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current) : null
       if (hitId) {
         const freshEls = useChoanStore.getState().elements
         const currentSelectedIds = useChoanStore.getState().selectedIds
+        const pixel = screenToPixel(e.clientX, e.clientY)
+        const startMap = new Map<string, { x: number; y: number }>()
         if (currentSelectedIds.includes(hitId)) {
-          isDraggingRef.current = true
-          dragGroupIdsRef.current = currentSelectedIds
-          const pixel = screenToPixel(e.clientX, e.clientY)
           if (pixel) dragStartPixelRef.current = pixel
-          const startMap = new Map<string, { x: number; y: number }>()
           for (const sid of currentSelectedIds) {
             const ge = freshEls.find((el) => el.id === sid)
             if (ge) startMap.set(sid, { x: ge.x, y: ge.y })
           }
+          isDraggingRef.current = true
+          dragGroupIdsRef.current = currentSelectedIds
           dragGroupStartRef.current = startMap
           dragContainerIdRef.current = null
         } else {
           selectElement(hitId)
           const groupIds = resolveGroup(freshEls, hitId)
-          isDraggingRef.current = true
-          dragGroupIdsRef.current = groupIds
-          const pixel = screenToPixel(e.clientX, e.clientY)
           if (pixel) dragStartPixelRef.current = pixel
-          const startMap = new Map<string, { x: number; y: number }>()
           for (const gid of groupIds) {
             const ge = freshEls.find((el) => el.id === gid)
             if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
           }
+          isDraggingRef.current = true
+          dragGroupIdsRef.current = groupIds
           dragGroupStartRef.current = startMap
           const el = freshEls.find((el) => el.id === hitId)!
           dragContainerIdRef.current =
@@ -278,7 +242,6 @@ export function usePointerHandlers({
         }
         ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
       } else {
-        // Empty space → start drag-select box
         dragSelectHasMovedRef.current = false
         isDragSelectRef.current = true
         dragSelectPointerIdRef.current = e.pointerId
@@ -297,16 +260,13 @@ export function usePointerHandlers({
     if (!pixel) return
     drawStartPixelRef.current = pixel
     const id = nanoid()
-    const el: ChoanElement = {
-      id,
-      type: tool,
+    const newEl: ChoanElement = {
+      id, type: tool,
       label: tool === 'rectangle' ? 'Box' : tool === 'circle' ? 'Circle' : 'Line',
       role: tool === 'rectangle' ? 'container' : undefined,
-      color: drawColor,
-      x: pixel.x, y: pixel.y, z: 0,
-      width: 1, height: 1, opacity: 1,
+      color: drawColor, x: pixel.x, y: pixel.y, z: 0, width: 1, height: 1, opacity: 1,
     }
-    addElement(el)
+    addElement(newEl)
     selectElement(id)
     isDrawingRef.current = true
     drawElIdRef.current = id
@@ -318,137 +278,61 @@ export function usePointerHandlers({
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     const { elements: els, selectedIds: selIds, updateElement: update } = useChoanStore.getState()
     const selId = selIds[0] ?? null
+    const setSnap = (lines: SnapLine[]) => { snapLinesRef.current = lines }
 
-    // Color picker hover
     if (colorPickerOpenRef.current && selId) {
       const pixel = screenToPixel(e.clientX, e.clientY)
       if (pixel) {
-        const el = els.find((el) => el.id === selId)
-        if (el) {
-          const ax = el.x + el.width, ay = el.y
-          const zs = zoomScaleRef.current
-          const hoverHitR = COLOR_PICKER_HIT_RADIUS * zs
-          let found = -1
-          for (let fi = 0; fi < COLOR_FAMILIES.length && found < 0; fi++) {
-            for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
-              const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-              const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * zs
-              const dx = pixel.x - (ax + Math.cos(angle) * ring)
-              const dy = pixel.y - (ay + Math.sin(angle) * ring)
-              if (dx * dx + dy * dy <= hoverHitR * hoverHitR) { found = fi * 5 + si; break }
-            }
-          }
-          colorPickerHoverRef.current = found
-          setCursor(found >= 0 ? 'pointer' : 'default')
-        }
+        const hover = computeColorPickerHover(pixel, els, selId, zoomScaleRef.current)
+        colorPickerHoverRef.current = hover
+        setCursor(hover >= 0 ? 'pointer' : 'default')
       }
       return
     }
 
-    // Drag-select box — real-time element selection
     if (isDragSelectRef.current) {
-      const mount = mountRef.current
-      if (mount) {
-        const rect = mount.getBoundingClientRect()
-        const startX = dragSelectStartClientRef.current.x - rect.left
-        const startY = dragSelectStartClientRef.current.y - rect.top
-        const currX = e.clientX - rect.left
-        const currY = e.clientY - rect.top
-        const boxW = Math.abs(currX - startX)
-        const boxH = Math.abs(currY - startY)
-        if (boxW > 4 || boxH > 4) dragSelectHasMovedRef.current = true
-        setDragSelectBox({ left: Math.min(startX, currX), top: Math.min(startY, currY), width: boxW, height: boxH })
-      }
+      const mountRect = mountRef.current?.getBoundingClientRect()
       const currPixel = screenToPixel(e.clientX, e.clientY)
-      if (currPixel) {
-        const sp = dragSelectStartPixelRef.current
-        const boxL = Math.min(sp.x, currPixel.x), boxT = Math.min(sp.y, currPixel.y)
-        const boxR = Math.max(sp.x, currPixel.x), boxB = Math.max(sp.y, currPixel.y)
-        const intersecting = els
-          .filter((el) => !(el.x + el.width < boxL || el.x > boxR || el.y + el.height < boxT || el.y > boxB))
-          .map((el) => el.id)
-        const { setSelectedIds } = useChoanStore.getState()
-        if (dragSelectAddModeRef.current) {
-          setSelectedIds([...new Set([...dragSelectPreSelectionRef.current, ...intersecting])])
-        } else {
-          setSelectedIds(intersecting)
-        }
+      if (mountRect && currPixel) {
+        const result = handleDragSelectMove(
+          e.clientX, e.clientY,
+          dragSelectStartClientRef.current.x, dragSelectStartClientRef.current.y,
+          mountRect, currPixel, dragSelectStartPixelRef.current,
+          els, dragSelectPreSelectionRef.current, dragSelectAddModeRef.current,
+        )
+        if (result.hasMoved) dragSelectHasMovedRef.current = true
+        setDragSelectBox(result.box)
+        useChoanStore.getState().setSelectedIds(result.selectedIds)
       }
       return
     }
 
-    // Draw-to-create
     if (isDrawingRef.current && drawElIdRef.current) {
       const pixel = screenToPixel(e.clientX, e.clientY)
-      if (!pixel) return
-      const sx = drawStartPixelRef.current.x, sy = drawStartPixelRef.current.y
-      update(drawElIdRef.current, {
-        x: Math.min(sx, pixel.x), y: Math.min(sy, pixel.y),
-        width: Math.max(MIN_ELEMENT_SIZE, Math.abs(pixel.x - sx)),
-        height: Math.max(MIN_ELEMENT_SIZE, Math.abs(pixel.y - sy)),
-      })
+      if (pixel) handleDrawMove(pixel, drawStartPixelRef.current, drawElIdRef.current, update)
       return
     }
 
-    // Radius drag
     if (isRadiusDragRef.current && selId) {
       const pixel = screenToPixel(e.clientX, e.clientY)
-      if (!pixel) return
-      const el = els.find((el) => el.id === selId)
-      if (!el) return
-      const dx = pixel.x - radiusDragStartPixelRef.current.x
-      const dy = pixel.y - radiusDragStartPixelRef.current.y
-      const delta = (dx + dy) / Math.min(el.width, el.height)
-      applyToSiblings(update, els, selId, { radius: Math.max(0, Math.min(1, radiusStartRef.current + delta)) }, e.altKey)
+      if (pixel) handleRadiusDragMove(pixel, radiusDragStartPixelRef.current, radiusStartRef.current, els, selId, e.altKey, update)
       return
     }
 
-    // Resize
-    if (isResizingRef.current && selId) {
+    if (isResizingRef.current && resizeElIdRef.current) {
       const pixel = screenToPixel(e.clientX, e.clientY)
-      if (!pixel) return
-      const dx = pixel.x - resizeStartPixelRef.current.x
-      const dy = pixel.y - resizeStartPixelRef.current.y
-      const anchor = resizeAnchorRef.current
-      const proposed = { x: resizeCornerStartRef.current.x + dx, y: resizeCornerStartRef.current.y + dy }
-      const snap = computeSnapResize(anchor, proposed, els.filter((el) => el.id !== selId))
-      snapLinesRef.current = snap.lines
-      applyToSiblings(update, els, selId, {
-        x: Math.min(anchor.x, snap.x), y: Math.min(anchor.y, snap.y),
-        width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x)),
-        height: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y)),
-      }, e.altKey)
+      if (pixel) handleResizeMove(pixel, resizeStartPixelRef.current, resizeCornerStartRef.current, resizeAnchorRef.current, els, resizeElIdRef.current, e.altKey, update, setSnap)
       return
     }
 
-    // Group drag (single or multi-select)
     const { tool } = useChoanStore.getState()
     if (isDraggingRef.current && tool === 'select') {
       const pixel = screenToPixel(e.clientX, e.clientY)
-      if (!pixel) return
-      const dx = pixel.x - dragStartPixelRef.current.x
-      const dy = pixel.y - dragStartPixelRef.current.y
-      const groupIds = dragGroupIdsRef.current
-      const groupSet = new Set(groupIds)
-      const refId = dragContainerIdRef.current ?? groupIds[0]
-      const refStart = dragGroupStartRef.current.get(refId)
-      if (!refStart) return
-      const refEl = els.find((el) => el.id === refId)
-      if (!refEl) return
-      const snap = computeSnapMove(
-        { x: refStart.x + dx, y: refStart.y + dy, width: refEl.width, height: refEl.height },
-        els.filter((el) => !groupSet.has(el.id)),
-      )
-      snapLinesRef.current = snap.lines
-      const finalDx = dx + snap.dx, finalDy = dy + snap.dy
-      for (const gid of groupIds) {
-        const start = dragGroupStartRef.current.get(gid)
-        if (start) update(gid, { x: start.x + finalDx, y: start.y + finalDy })
-      }
+      if (pixel) handleDragMove(pixel, dragStartPixelRef.current, dragGroupIdsRef.current, dragGroupStartRef.current, dragContainerIdRef.current, els, update, setSnap)
       return
     }
 
-    // Hover cursor (idle, single selection)
+    // Hover cursor
     if (tool === 'select' && selIds.length === 1 && selId) {
       const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
       if (corner === 2) {
@@ -468,7 +352,6 @@ export function usePointerHandlers({
   // ── handlePointerUp ──
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    // End drag-select
     if (isDragSelectRef.current) {
       if (e.pointerId !== dragSelectPointerIdRef.current) return
       const start = dragSelectStartClientRef.current
@@ -484,58 +367,30 @@ export function usePointerHandlers({
       return
     }
 
-    const { elements: els, selectedIds: selIds, reparentElement, runLayout } = useChoanStore.getState()
-    const selId = selIds[0] ?? null
+    const { elements: els, selectedIds: selIds, reparentElement, runLayout, updateElement: update } = useChoanStore.getState()
 
-    // After draw-to-create
     if (isDrawingRef.current && drawElIdRef.current) {
-      const drawId = drawElIdRef.current
-      const el = els.find((el) => el.id === drawId)
-      if (el) {
-        if (el.width <= MIN_ELEMENT_SIZE && el.height <= MIN_ELEMENT_SIZE) {
-          const size = DEFAULT_SIZE[el.type]
-          const sx = drawStartPixelRef.current.x, sy = drawStartPixelRef.current.y
-          useChoanStore.getState().updateElement(drawId, { x: sx - size.w / 2, y: sy - size.h / 2, width: size.w, height: size.h })
-        }
-        const freshEls = useChoanStore.getState().elements
-        const freshEl = freshEls.find((el) => el.id === drawId)
-        if (freshEl) {
-          const parentId = detectContainment(freshEl, freshEls.filter((el) => el.role === 'container' && el.id !== drawId))
-          if (parentId) reparentElement(drawId, parentId)
-        }
-      }
+      finalizeDrawn(drawElIdRef.current, drawStartPixelRef.current, () => useChoanStore.getState().elements, update, reparentElement)
     }
 
-    // After resize: run layout if container
     if (isResizingRef.current && resizeElIdRef.current) {
       const el = els.find((el) => el.id === resizeElIdRef.current)
       if (el?.role === 'container') runLayout(el.id)
     }
 
-    // After drag: re-evaluate containment (single-element drag only)
-    if (isDraggingRef.current && selIds.length === 1 && selId) {
-      const el = els.find((el) => el.id === selId)
-      if (el && el.role !== 'container') {
-        const newParentId = detectContainment(el, els.filter((el) => el.role === 'container' && el.id !== selId))
-        if (newParentId !== el.parentId) {
-          const oldParentId = el.parentId
-          reparentElement(selId, newParentId)
-          if (oldParentId) runLayout(oldParentId)
-        }
-      }
+    if (isDraggingRef.current && selIds.length === 1 && selIds[0]) {
+      finalizeDrag(selIds[0], selIds, els, reparentElement, runLayout)
     }
 
-    // Auto-keyframe: record property changes when editing an animation bundle
+    // Auto-keyframe when editing a bundle
     const { editingBundleId } = usePreviewStore.getState()
     if (editingBundleId) {
       const freshEls = useChoanStore.getState().elements
+      const selId = selIds[0] ?? null
       if (isDraggingRef.current && selId) {
         const el = freshEls.find((el) => el.id === selId)
         const orig = dragGroupStartRef.current.get(selId)
-        if (el && orig) {
-          autoKeyframe(selId, 'x', el.x, orig.x)
-          autoKeyframe(selId, 'y', el.y, orig.y)
-        }
+        if (el && orig) { autoKeyframe(selId, 'x', el.x, orig.x); autoKeyframe(selId, 'y', el.y, orig.y) }
       }
       if (isResizingRef.current && resizeElIdRef.current) {
         const el = freshEls.find((el) => el.id === resizeElIdRef.current)
@@ -552,15 +407,9 @@ export function usePointerHandlers({
       }
     }
 
-    // Reset all state
-    isDrawingRef.current = false
-    drawElIdRef.current = null
-    isResizingRef.current = false
-    resizeElIdRef.current = null
-    isDraggingRef.current = false
-    dragGroupIdsRef.current = []
-    dragGroupStartRef.current.clear()
-    dragContainerIdRef.current = null
+    isDrawingRef.current = false; drawElIdRef.current = null
+    isResizingRef.current = false; resizeElIdRef.current = null
+    isDraggingRef.current = false; dragGroupIdsRef.current = []; dragGroupStartRef.current.clear(); dragContainerIdRef.current = null
     isRadiusDragRef.current = false
     snapLinesRef.current = []
   }, [])
@@ -569,16 +418,11 @@ export function usePointerHandlers({
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: handlePointerUp,
-    dragSelectBox,
-    cursor,
-    colorPickerOpenRef,
-    colorPickerHoverRef,
-    isDraggingRef,
-    dragGroupIdsRef,
-    isResizingRef,
-    resizeElIdRef,
-    isDrawingRef,
-    drawElIdRef,
+    dragSelectBox, cursor,
+    colorPickerOpenRef, colorPickerHoverRef,
+    isDraggingRef, dragGroupIdsRef,
+    isResizingRef, resizeElIdRef,
+    isDrawingRef, drawElIdRef,
     snapLinesRef,
   }
 }
