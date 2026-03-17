@@ -120,44 +120,38 @@ vec2 sceneSDF(vec3 p) {
   return res;
 }
 
-// ─── Normal (analytical per-shape, zero extra sceneSDF calls) ─────
+// ─── Single-object SDF (for normal calculation) ───
+
+float singleSDF(vec3 p, int objId) {
+  float shapeType = uPosType[objId].w;
+  vec3  hs        = uSizeRadius[objId].xyz;
+  float radius    = uSizeRadius[objId].w;
+  vec3  lp        = p - uPosType[objId].xyz;
+
+  if (shapeType < 0.5) {
+    float r = radius * min(hs.x, hs.y);
+    return sdExtrudedRoundRect(lp, hs, r);
+  } else if (shapeType < 1.5) {
+    float r = min(hs.x, hs.y);
+    return sdExtrudedRoundRect(lp, hs, r);
+  } else {
+    vec3 a = vec3(-hs.x, 0.0, 0.0);
+    vec3 b = vec3( hs.x, 0.0, 0.0);
+    return sdCapsule(lp, a, b, hs.y);
+  }
+}
+
+// ─── Normal (tetrahedron on hit object only — O(1) regardless of N) ─
 
 vec3 calcNormal(vec3 p, int objId) {
-  float stype  = uPosType[objId].w;
-  vec3  hs     = uSizeRadius[objId].xyz;
-  float radius = uSizeRadius[objId].w;
-  vec3  lp     = p - uPosType[objId].xyz;
-
-  if (stype < 1.5) {
-    // sdExtrudedRoundRect (rect & circle)
-    float r   = (stype < 0.5) ? radius * min(hs.x, hs.y) : min(hs.x, hs.y);
-    vec2  q   = abs(lp.xy) - hs.xy + r;
-    float d2d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-    float dz  = abs(lp.z) - hs.z;
-
-    // Top / bottom face
-    if (dz >= d2d - 1e-4) return vec3(0.0, 0.0, sign(lp.z));
-
-    // Side / corner — 2D gradient of the rounded-rect SDF
-    vec2  qc = max(q, 0.0);
-    float l  = length(qc);
-    vec2 n2;
-    if (l > 1e-6) {
-      n2 = sign(lp.xy) * qc / l;   // rounded corner arc
-    } else if (q.x >= q.y) {
-      n2 = vec2(sign(lp.x), 0.0);  // left / right side
-    } else {
-      n2 = vec2(0.0, sign(lp.y));  // front / back side
-    }
-    return normalize(vec3(n2, 0.0));
-  } else {
-    // sdCapsule — gradient is direction from closest axis point to p
-    vec3 a  = vec3(-hs.x, 0.0, 0.0);
-    vec3 ba = vec3(2.0 * hs.x, 0.0, 0.0);
-    vec3 pa = lp - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    return normalize(pa - ba * h);
-  }
+  const float h = 0.001;
+  const vec2 k = vec2(1.0, -1.0);
+  return normalize(
+    k.xyy * singleSDF(p + k.xyy * h, objId) +
+    k.yyx * singleSDF(p + k.yyx * h, objId) +
+    k.yxy * singleSDF(p + k.yxy * h, objId) +
+    k.xxx * singleSDF(p + k.xxx * h, objId)
+  );
 }
 
 // ─── Ray March ────────────────────────────────────
