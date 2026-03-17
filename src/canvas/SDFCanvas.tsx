@@ -1007,7 +1007,14 @@ export default function SDFCanvas() {
         }
       }
 
-      renderer.updateScene(animatedElements, rs.extrudeDepth)
+      // Multi-select tint: override color/opacity to translucent red
+      const multiSelected = state.selectedIds.length > 1 ? new Set(state.selectedIds) : null
+      const renderElements = multiSelected
+        ? animatedElements.map((el) =>
+            multiSelected.has(el.id) ? { ...el, color: 0xff2222, opacity: 0.8 } : el,
+          )
+        : animatedElements
+      renderer.updateScene(renderElements, rs.extrudeDepth)
 
       renderer.render(rs)
 
