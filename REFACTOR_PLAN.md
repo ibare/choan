@@ -6,7 +6,7 @@
 ## 진행 상황
 
 - [x] 단계 0: 기반 정비 (constants, 버그 수정, 타입 통합) ✓ 완료
-- [ ] 단계 1: 좌표 변환 통합 (`coords/coordinateSystem.ts`)
+- [x] 단계 1: 좌표 변환 통합 (`coords/coordinateSystem.ts`) ✓ 완료
 - [ ] 단계 2: 스토어 분리 (useElementStore / useAnimationStore / useUIStore)
 - [ ] 단계 3: 애니메이션 평가 순수 함수화 (animationEvaluator, autoKeyframe 디커플링)
 - [ ] 단계 4: SDFCanvas 인터랙션 분리 (`interaction/` 디렉토리)

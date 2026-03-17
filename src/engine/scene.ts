@@ -2,6 +2,7 @@
 
 import type { ChoanElement } from '../store/useChoanStore'
 import { PALETTE } from '../canvas/materials'
+import { pixelToWorld, pixelWidthToWorld, pixelHeightToWorld } from '../coords/coordinateSystem'
 
 export const MAX_OBJECTS = 128
 export const EXTRUDE_DEPTH = 0.05
@@ -47,7 +48,6 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
   ) {
     const ed = extrudeDepthOverride ?? EXTRUDE_DEPTH
     const count = Math.min(elements.length, MAX_OBJECTS)
-    const aspect = canvasW / canvasH
 
     // Clear all data
     data.fill(0)
@@ -61,12 +61,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       // Center pixel → world
       const cx = el.x + el.width / 2
       const cy = el.y + el.height / 2
-      const wx = -FRUSTUM * aspect + (cx / canvasW) * 2 * FRUSTUM * aspect
-      const wy = FRUSTUM - (cy / canvasH) * 2 * FRUSTUM
+      const [wx, wy] = pixelToWorld(cx, cy, canvasW, canvasH)
 
       // Size: pixel → world half-size
-      const hw = ((el.width / canvasW) * 2 * FRUSTUM * aspect) / 2
-      const hh = ((el.height / canvasH) * 2 * FRUSTUM) / 2
+      const hw = pixelWidthToWorld(el.width, canvasW, canvasH) / 2
+      const hh = pixelHeightToWorld(el.height, canvasH) / 2
 
       // Shape type
       let shapeType = SHAPE_RECT

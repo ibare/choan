@@ -3,7 +3,8 @@ import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
 import { getCameraRayParams } from '../engine/camera'
 import { cpuRayMarch, screenToRay } from '../engine/sdf'
-import { FRUSTUM } from '../engine/scene'
+import { FRUSTUM, MAX_OBJECTS } from '../engine/scene'
+import { pixelToWorld as pixelToWorldCS, worldToPixel as worldToPixelCS } from '../coords/coordinateSystem'
 import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import type { ChoanElement, Tool } from '../store/useChoanStore'
@@ -40,7 +41,6 @@ import {
   HANDLE_SIZE_PX,
   DISTANCE_TICK_PX,
 } from '../constants'
-import { MAX_OBJECTS } from '../engine/scene'
 
 // Apply a property patch to an element and (if altKey) to its siblings.
 // Position fields (x, y) are always excluded from sibling propagation.
@@ -217,19 +217,14 @@ export default function SDFCanvas() {
 
   const worldToPixel = useCallback((wx: number, wy: number): { x: number; y: number } => {
     const { w, h } = canvasSizeRef.current
-    const aspect = w / h
-    const px = ((wx + FRUSTUM * aspect) / (2 * FRUSTUM * aspect)) * w
-    const py = ((FRUSTUM - wy) / (2 * FRUSTUM)) * h
+    const [px, py] = worldToPixelCS(wx, wy, w, h)
     return { x: px, y: py }
   }, [])
 
   const pixelToWorld = useCallback((px: number, py: number): { wx: number; wy: number } => {
     const { w, h } = canvasSizeRef.current
-    const aspect = w / h
-    return {
-      wx: -FRUSTUM * aspect + (px / w) * 2 * FRUSTUM * aspect,
-      wy: FRUSTUM - (py / h) * 2 * FRUSTUM,
-    }
+    const [wx, wy] = pixelToWorldCS(px, py, w, h)
+    return { wx, wy }
   }, [])
 
   const worldToScreen = useCallback((wx: number, wy: number): { x: number; y: number } | null => {
@@ -1040,10 +1035,7 @@ export default function SDFCanvas() {
       const aspect = w / h
       const ov = renderer.overlay
 
-      const p2w = (px: number, py: number): [number, number] => [
-        -FRUSTUM * aspect + (px / w) * 2 * FRUSTUM * aspect,
-        FRUSTUM - (py / h) * 2 * FRUSTUM,
-      ]
+      const p2w = (px: number, py: number): [number, number] => pixelToWorldCS(px, py, w, h)
 
       // Zoom compensation factor for overlay sizes
       const zs = zoomScaleRef.current
