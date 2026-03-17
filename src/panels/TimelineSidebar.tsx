@@ -28,19 +28,6 @@ export default function TimelineSidebar({
             <span className="tl-left-label">{entry.label}</span>
             {entry.bundleId && (
               <div className="tl-left-actions">
-                <select
-                  className="field-select field-select-small"
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value) onAddTrack(entry.bundleId!, entry.clip.id, e.target.value as AnimatableProperty)
-                    e.target.value = ''
-                  }}
-                >
-                  <option value="">+</option>
-                  {ANIMATABLE_PROPERTIES
-                    .filter((p) => !entry.clip.tracks.some((t) => t.property === p))
-                    .map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
                 <button className="btn-icon" onClick={() => onRemoveClip(entry.bundleId!, entry.clip.id)}><X size={10} /></button>
               </div>
             )}

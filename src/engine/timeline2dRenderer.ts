@@ -11,9 +11,9 @@ const C = {
   rulerBg0: '#f7f4ef',
   rulerBg1: '#ece8e1',
   rulerBorder: '#d6cfc5',
-  rulerMajorTick: '#aaa',
-  rulerMediumTick: '#ccc',
-  rulerMinorTick: '#ddd',
+  rulerMajorTick: '#888',
+  rulerMediumTick: '#aaa',
+  rulerMinorTick: '#bbb',
   rulerLabel: '#888',
   trackBg0: '#ffffff',
   trackBg1: '#f9f8f6',
@@ -27,13 +27,12 @@ const C = {
 const NICE_STEPS = [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000]
 
 export function computeTickInterval(pxPerMs: number): { major: number; medium: number; minor: number } {
-  const targetMs = 100 / pxPerMs
+  const targetMs = 60 / pxPerMs
   let major = NICE_STEPS[NICE_STEPS.length - 1]
   for (const step of NICE_STEPS) {
     if (step >= targetMs) { major = step; break }
   }
-  const minor = major <= 100 ? major / 4 : major / 5
-  return { major, medium: major / 2, minor }
+  return { major, medium: major / 2, minor: major / 8 }
 }
 
 export function formatTickLabel(ms: number): string {
@@ -68,8 +67,8 @@ export function renderRuler(
   const startMs = Math.max(0, Math.floor(opts.scrollX / opts.pxPerMs / minorInterval) * minorInterval)
   const endMs = Math.ceil((opts.scrollX + w) / opts.pxPerMs / minorInterval) * minorInterval
 
-  // Tick heights from bottom
-  const majorH = 14
+  // Tick heights from bottom (major : medium : minor = 1 : 2/3 : 1/3)
+  const majorH = 12
   const mediumH = 8
   const minorH = 4
 
@@ -82,18 +81,19 @@ export function renderRuler(
 
     const isMajor = rt % majorInterval === 0
     const isMedium = !isMajor && rt % mediumInterval === 0
-    let tickH: number
-    let color: string
+
     if (isMajor) {
-      tickH = majorH; color = C.rulerMajorTick
+      ctx.strokeStyle = C.rulerMajorTick
+      ctx.lineWidth = 1.5
     } else if (isMedium) {
-      tickH = mediumH; color = C.rulerMediumTick
+      ctx.strokeStyle = C.rulerMediumTick
+      ctx.lineWidth = 1
     } else {
-      tickH = minorH; color = C.rulerMinorTick
+      ctx.strokeStyle = C.rulerMinorTick
+      ctx.lineWidth = 1
     }
 
-    ctx.strokeStyle = color
-    ctx.lineWidth = 1
+    const tickH = isMajor ? majorH : isMedium ? mediumH : minorH
     ctx.beginPath()
     ctx.moveTo(px, rh - tickH)
     ctx.lineTo(px, rh - 1)
@@ -109,7 +109,7 @@ export function renderRuler(
   for (let t = majorStart; t <= endMs; t += majorInterval) {
     const x = msToX(t, opts)
     if (x < -40 || x > w + 40) continue
-    ctx.fillText(formatTickLabel(t), Math.round(x), 6)
+    ctx.fillText(formatTickLabel(t), Math.round(x), 4)
   }
   ctx.textAlign = 'left'
 }
@@ -207,10 +207,10 @@ export function renderPlayhead(
   const label = formatPlayheadLabel(opts.playheadTime)
   ctx.font = '500 9px Inter, system-ui, sans-serif'
   const textW = ctx.measureText(label).width
-  const handlePadX = 8
-  const handleW = Math.max(textW + handlePadX * 2, 38)
-  const handleBodyH = 27
-  const handleR = 4
+  const handlePadX = 6
+  const handleW = Math.max(textW + handlePadX * 2, 34)
+  const handleBodyH = 21
+  const handleR = 3
   const handleY = 2
   const tipY = rh - 2
 
@@ -244,8 +244,8 @@ export function renderPlayhead(
   ctx.closePath()
   ctx.fill()
 
-  // Inner box: white normally, green glow when snapped
-  const innerPad = 4
+  // Inner box: pale green normally, bright green glow when snapped
+  const innerPad = 3
   const innerR = 3
   const innerX = handleX + innerPad
   const innerY = handleY + innerPad
@@ -253,7 +253,6 @@ export function renderPlayhead(
   const innerH = handleBodyH - innerPad * 2
 
   if (isSnapped) {
-    // Green glow behind the box
     ctx.save()
     ctx.shadowColor = '#4ade80'
     ctx.shadowBlur = 6
@@ -263,14 +262,14 @@ export function renderPlayhead(
     ctx.fill()
     ctx.restore()
   } else {
-    ctx.fillStyle = '#fff'
+    ctx.fillStyle = '#e0f2e0'
     ctx.beginPath()
     ctx.roundRect(innerX, innerY, innerW, innerH, innerR)
     ctx.fill()
   }
 
   // Time label inside inner box
-  ctx.fillStyle = isSnapped ? '#fff' : '#222'
+  ctx.fillStyle = isSnapped ? '#fff' : '#2a5a2a'
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'center'
   ctx.fillText(label, handleX + handleW / 2, handleY + handleBodyH / 2)
