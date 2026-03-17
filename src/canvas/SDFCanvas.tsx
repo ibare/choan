@@ -3,7 +3,7 @@ import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
 import { getCameraRayParams } from '../engine/camera'
 import { cpuRayMarch, screenToRay } from '../engine/sdf'
-import { FRUSTUM, MAX_OBJECTS } from '../engine/scene'
+import { FRUSTUM } from '../engine/scene'
 import { pixelToWorld as pixelToWorldCS, worldToPixel as worldToPixelCS } from '../coords/coordinateSystem'
 import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
@@ -17,23 +17,19 @@ import {
 import { detectContainment } from '../layout/containment'
 import { createLayoutAnimator } from '../layout/animator'
 import { createKeyframeAnimator } from '../animation/keyframeEngine'
-import { evaluateTrack } from '../animation/interpolate'
-import { resolveEasing } from '../animation/easing'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
+import { evaluateAnimation } from '../animation/animationEvaluator'
+import { addGhostElements } from '../rendering/ghostPreview'
+import { applyMultiSelectTint } from '../rendering/multiSelectTint'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import { Cursor, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
 import {
   HANDLE_HIT_RADIUS,
   MIN_ELEMENT_SIZE,
-  GHOST_OPACITY_INBETWEEN,
-  GHOST_KEYFRAME_EPSILON,
-  GHOST_FPS_MS,
   SELECTION_COLOR,
   SNAP_COLOR,
   DISTANCE_COLOR,
-  MULTI_SELECT_TINT,
-  MULTI_SELECT_OPACITY,
   COLOR_PICKER_RING_BASE,
   COLOR_PICKER_RING_STEP,
   COLOR_PICKER_DISC_RADIUS,
@@ -921,111 +917,28 @@ export default function SDFCanvas() {
       const state = useChoanStore.getState()
       const preview = usePreviewStore.getState()
 
-      // During preview playback: skip spring, run keyframe engine
-      // During editing scrub: skip spring, apply bundle clips at playhead time
-      // Otherwise: spring physics for UI editing feedback
-      let animatedElements: typeof state.elements
-      if (preview.previewState === 'playing') {
-        animatedElements = kfAnimator.tick(state.elements, performance.now())
-      } else if (preview.editingBundleId && preview.previewState === 'stopped') {
-        // Scrub preview: compute element state at playhead time from bundle clips
-        const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)
-        if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
-          const overrides = new Map<string, Partial<ChoanElement>>()
-          for (const clip of bundle.clips) {
-            if (clip.tracks.length === 0) continue
-            const easingFn = resolveEasing(clip.easing)
-            const patch: Partial<ChoanElement> = {}
-            for (const track of clip.tracks) {
-              ;(patch as Record<string, number>)[track.property] = evaluateTrack(
-                track.keyframes, preview.playheadTime, easingFn, track.property as import('../animation/types').AnimatableProperty,
-              )
-            }
-            overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
-          }
-          animatedElements = state.elements.map((el) => {
-            const patch = overrides.get(el.id)
-            return patch ? { ...el, ...patch } : el
-          })
-        } else {
-          animatedElements = state.elements
-        }
-      } else {
-        animatedElements = animator.tick(state.elements, {
-          stiffness: rs.springStiffness,
-          damping: rs.springDamping,
-          squashIntensity: rs.squashIntensity,
-        }, manipulatedIds.size > 0 ? manipulatedIds : undefined)
-      }
-      // Ghost preview: add semi-transparent copies at intermediate times
+      // Evaluate animated element values for this frame
+      let animatedElements = evaluateAnimation({
+        elements: state.elements,
+        previewState: preview.previewState,
+        editingBundleId: preview.editingBundleId,
+        playheadTime: preview.playheadTime,
+        animationBundles: state.animationBundles,
+        kfAnimator,
+        layoutAnimator: animator,
+        springParams: { stiffness: rs.springStiffness, damping: rs.springDamping, squashIntensity: rs.squashIntensity },
+        manipulatedIds,
+      })
+
+      // Ghost preview (onion skin)
       if (preview.ghostPreview && preview.editingBundleId && preview.previewState === 'stopped') {
         const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)
-        if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
-          const maxDur = Math.max(...bundle.clips.map((c) => c.duration))
-          // Collect all keyframe times across clips
-          const kfTimes = new Set<number>()
-          for (const clip of bundle.clips) {
-            for (const track of clip.tracks) {
-              for (const kf of track.keyframes) kfTimes.add(kf.time)
-            }
-          }
-
-          // Compute max ghost frames: fill available object slots
-          const animatedElCount = bundle.clips.filter((c) => c.tracks.length > 0).length
-          const baseElCount = state.elements.length
-          const availableSlots = MAX_OBJECTS - baseElCount
-          const maxGhostFrames = animatedElCount > 0 ? Math.floor(availableSlots / animatedElCount) : 0
-          // Use 60fps equivalent: 1 frame per GHOST_FPS_MS, capped by available slots
-          const idealSteps = Math.max(2, Math.ceil(maxDur / GHOST_FPS_MS))
-          const ghostSteps = Math.min(idealSteps, maxGhostFrames)
-
-          const ghostElements: typeof state.elements = []
-          const allTimes: number[] = []
-          for (let step = 0; step <= ghostSteps; step++) {
-            allTimes.push(Math.round((step / ghostSteps) * maxDur))
-          }
-          // Also add exact keyframe times
-          for (const kt of kfTimes) {
-            if (!allTimes.some((t) => Math.abs(t - kt) < GHOST_KEYFRAME_EPSILON)) allTimes.push(kt)
-          }
-          allTimes.sort((a, b) => a - b)
-
-          for (const t of allTimes) {
-            if (Math.abs(t - preview.playheadTime) < maxDur / (ghostSteps * 2)) continue
-            const isKeyframeTime = [...kfTimes].some((kt) => Math.abs(kt - t) < GHOST_KEYFRAME_EPSILON)
-            const ghostOverrides = new Map<string, Partial<ChoanElement>>()
-            for (const clip of bundle.clips) {
-              if (clip.tracks.length === 0) continue
-              const patch: Partial<ChoanElement> = {}
-              for (const track of clip.tracks) {
-                ;(patch as Record<string, number>)[track.property] = evaluateTrack(
-                  track.keyframes, t, clip.easing, track.property as import('../animation/types').AnimatableProperty,
-                )
-              }
-              ghostOverrides.set(clip.elementId, { ...ghostOverrides.get(clip.elementId), ...patch })
-            }
-            for (const el of state.elements) {
-              const patch = ghostOverrides.get(el.id)
-              if (patch) {
-                ghostElements.push({
-                  ...el, ...patch,
-                  id: `__ghost_${el.id}_${Math.round(t)}`,
-                  opacity: isKeyframeTime ? (el.opacity ?? 1) : GHOST_OPACITY_INBETWEEN * (el.opacity ?? 1),
-                })
-              }
-            }
-          }
-          animatedElements = [...ghostElements, ...animatedElements]
+        if (bundle) {
+          animatedElements = addGhostElements(animatedElements, state.elements, bundle, preview.playheadTime)
         }
       }
 
-      // Multi-select tint: override color/opacity to translucent red
-      const multiSelected = state.selectedIds.length > 1 ? new Set(state.selectedIds) : null
-      const renderElements = multiSelected
-        ? animatedElements.map((el) =>
-            multiSelected.has(el.id) ? { ...el, color: MULTI_SELECT_TINT, opacity: MULTI_SELECT_OPACITY } : el,
-          )
-        : animatedElements
+      const renderElements = applyMultiSelectTint(animatedElements, state.selectedIds)
       renderer.updateScene(renderElements, rs.extrudeDepth)
 
       renderer.render(rs)
