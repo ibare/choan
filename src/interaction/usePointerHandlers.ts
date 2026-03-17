@@ -12,7 +12,8 @@ import { kfAnimator } from '../rendering/kfAnimator'
 import { raycastElement, hitTestCorner } from './hitTest'
 import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
-import { worldToPixel as worldToPixelCS } from '../coords/coordinateSystem'
+import { worldToPixel as worldToPixelCS, pixelToWorld } from '../coords/coordinateSystem'
+import { useRenderSettings } from '../store/useRenderSettings'
 import { getCameraRayParams } from '../engine/camera'
 import { screenToRay } from '../engine/sdf'
 import { handleColorPickerClick, computeColorPickerHover } from './colorPickerHandlers'
@@ -138,13 +139,22 @@ export function usePointerHandlers({
       return
     }
 
-    // Color picker click
+    // Color picker click (screen-space hit test)
     if (colorPickerOpenRef.current) {
-      const pixel = screenToPixel(e.clientX, e.clientY)
+      const renderer = rendererRef.current
       const { elements: els, selectedIds, updateElement: update } = useChoanStore.getState()
       const selId = selectedIds[0] ?? null
-      if (pixel && selId) {
-        if (handleColorPickerClick(pixel, els, selId, e.altKey, zoomScaleRef.current, update)) {
+      const el = selId ? els.find((e) => e.id === selId) : null
+      if (renderer && el && selId) {
+        const dpr = window.devicePixelRatio || 1
+        const rect = renderer.canvas.getBoundingClientRect()
+        const mouseCanvas = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr }
+        const { w, h } = canvasSizeRef.current
+        const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
+        const rs = useRenderSettings.getState()
+        const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+        const anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
+        if (handleColorPickerClick(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr, els, selId, e.altKey, update)) {
           colorPickerOpenRef.current = false
           colorPickerHoverRef.current = -1
           return
@@ -284,9 +294,18 @@ export function usePointerHandlers({
     const setSnap = (lines: SnapLine[]) => { snapLinesRef.current = lines }
 
     if (colorPickerOpenRef.current && selId) {
-      const pixel = screenToPixel(e.clientX, e.clientY)
-      if (pixel) {
-        const hover = computeColorPickerHover(pixel, els, selId, zoomScaleRef.current)
+      const renderer = rendererRef.current
+      const el = els.find((ee) => ee.id === selId)
+      if (renderer && el) {
+        const dpr = window.devicePixelRatio || 1
+        const rect = renderer.canvas.getBoundingClientRect()
+        const mouseCanvas = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr }
+        const { w, h } = canvasSizeRef.current
+        const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
+        const rs = useRenderSettings.getState()
+        const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+        const anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
+        const hover = computeColorPickerHover(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr)
         colorPickerHoverRef.current = hover
         setCursor(hover >= 0 ? 'pointer' : 'default')
       }
