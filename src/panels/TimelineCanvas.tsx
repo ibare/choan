@@ -24,6 +24,7 @@ export default function TimelineCanvas({
   onPlayheadChange, onMutateClip, onScrollX, canvasWrapRef,
 }: TimelineCanvasProps) {
   const tl2dRef = useRef<Timeline2D | null>(null)
+  const renderStateRef = useRef<{ layers: DisplayLayer[]; opts: RenderOptions } | null>(null)
   const dragRef = useRef<{
     layerIdx: number; trackIdx: number; kfIdx: number
     startX: number; startTime: number; bundleId?: string
@@ -45,7 +46,10 @@ export default function TimelineCanvas({
     if (!wrap) return
     const tl = createTimeline2D(wrap)
     tl2dRef.current = tl
-    const ro = new ResizeObserver(() => tl.resize(wrap.clientWidth, wrap.clientHeight))
+    const ro = new ResizeObserver(() => {
+      tl.resize(wrap.clientWidth, wrap.clientHeight)
+      if (renderStateRef.current) tl.render(renderStateRef.current.layers, renderStateRef.current.opts)
+    })
     ro.observe(wrap)
     tl.resize(wrap.clientWidth, wrap.clientHeight)
     return () => { ro.disconnect(); tl.dispose(); tl2dRef.current = null }
@@ -53,7 +57,9 @@ export default function TimelineCanvas({
 
   // Re-render canvas on every state/prop change
   useEffect(() => {
-    tl2dRef.current?.render(displayLayers, { ...renderOptions, hoverKf })
+    const opts = { ...renderOptions, hoverKf }
+    renderStateRef.current = { layers: displayLayers, opts }
+    tl2dRef.current?.render(displayLayers, opts)
   })
 
   // ── Edit commit ──
