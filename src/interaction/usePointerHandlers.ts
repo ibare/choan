@@ -10,7 +10,7 @@ import { autoKeyframe } from '../animation/autoKeyframe'
 import { nanoid } from '../canvas/nanoid'
 import { detectContainment } from '../layout/containment'
 import { computeSnapMove, computeSnapResize } from '../canvas/snapUtils'
-import { createKeyframeAnimator } from '../animation/keyframeEngine'
+import { kfAnimator } from '../rendering/kfAnimator'
 import { COLOR_FAMILIES } from '../canvas/materials'
 import {
   MIN_ELEMENT_SIZE, COLOR_PICKER_HIT_RADIUS,
@@ -131,12 +131,11 @@ export function usePointerHandlers({
       if (hitId) {
         const { elements: els, animationBundles: bundles } = useChoanStore.getState()
         const el = els.find((el) => el.id === hitId)
-        const kf = (window as unknown as Record<string, unknown>).__choanKF as ReturnType<typeof createKeyframeAnimator> | undefined
         for (const trigger of el?.triggers ?? []) {
           if (trigger.event === 'click') {
             const bundle = bundles.find((b) => b.id === trigger.animationBundleId)
-            if (bundle && kf) {
-              for (const clip of bundle.clips) kf.start(clip, clip.id, performance.now())
+            if (bundle) {
+              for (const clip of bundle.clips) kfAnimator.start(clip, clip.id, performance.now())
             }
           }
         }
