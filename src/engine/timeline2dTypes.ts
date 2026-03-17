@@ -36,5 +36,6 @@ export interface Timeline2D {
   resize(width: number, height: number): void
   render(layers: DisplayLayer[], opts: RenderOptions): void
   hitTest(x: number, y: number, layers: DisplayLayer[], opts: RenderOptions): TimelineHit
+  xToMs(x: number, opts: RenderOptions): number
   dispose(): void
 }

@@ -9,6 +9,7 @@ import { renderRuler, renderTracks, renderPlayhead } from './timeline2dRenderer'
 
 const DIAMOND_HIT = 10
 const DPR = typeof devicePixelRatio !== 'undefined' ? devicePixelRatio : 1
+const LEFT_PAD = 24  // px of space before t=0 so the playhead handle isn't clipped
 
 export function createTimeline2D(container: HTMLElement): Timeline2D {
   const canvas = document.createElement('canvas')
@@ -30,11 +31,11 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
   }
 
   function msToX(ms: number, opts: RenderOptions): number {
-    return ms * opts.pxPerMs - opts.scrollX
+    return ms * opts.pxPerMs - opts.scrollX + LEFT_PAD
   }
 
   function xToMs(x: number, opts: RenderOptions): number {
-    return Math.max(0, Math.round((x + opts.scrollX) / opts.pxPerMs))
+    return Math.max(0, Math.round((x - LEFT_PAD + opts.scrollX) / opts.pxPerMs))
   }
 
   function render(layers: DisplayLayer[], opts: RenderOptions) {
@@ -74,5 +75,5 @@ export function createTimeline2D(container: HTMLElement): Timeline2D {
     return none
   }
 
-  return { canvas, resize, render, hitTest, dispose: () => canvas.remove() }
+  return { canvas, resize, render, hitTest, xToMs, dispose: () => canvas.remove() }
 }

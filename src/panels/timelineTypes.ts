@@ -4,7 +4,7 @@ import type { AnimationClip, AnimatableProperty } from '../animation/types'
 
 export const TRACK_HEIGHT = 38
 export const LEFT_WIDTH = 190
-export const RULER_HEIGHT = 30
+export const RULER_HEIGHT = 44
 export const LAYER_HEADER_HEIGHT = 24
 export const INDENT_PX = 16
 export const PX_PER_MS = 0.8

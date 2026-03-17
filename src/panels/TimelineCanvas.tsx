@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { createTimeline2D, type Timeline2D, type DisplayLayer, type RenderOptions } from '../engine/timeline2d'
+import { computeTickInterval } from '../engine/timeline2dRenderer'
 import type { AnimationClip, AnimatableProperty, EasingType } from '../animation/types'
 import { type DisplayClipEntry, PX_PER_MS } from './timelineTypes'
 import EasingPopover from './EasingPopover'
@@ -157,7 +158,12 @@ export default function TimelineCanvas({
     if (!tl) return
     if (scrubRef.current) {
       const x = e.clientX - tl.canvas.getBoundingClientRect().left
-      onPlayheadChange(Math.max(0, Math.round((x + scrollX) / PX_PER_MS)))
+      const rawMs = tl.xToMs(x, renderOptions)
+      const { major: majorInterval } = computeTickInterval(PX_PER_MS)
+      const nearestMajor = Math.round(rawMs / majorInterval) * majorInterval
+      const snapThresholdMs = 8 / PX_PER_MS
+      const snappedMs = Math.abs(rawMs - nearestMajor) <= snapThresholdMs ? nearestMajor : rawMs
+      onPlayheadChange(snappedMs)
       return
     }
     if (dragRef.current) {

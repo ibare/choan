@@ -8,10 +8,12 @@ export const BAR_HEIGHT = 3
 const DIAMOND_SIZE = 15
 
 const C = {
-  rulerBg: '#f0ece6',
+  rulerBg0: '#f7f4ef',
+  rulerBg1: '#ece8e1',
   rulerBorder: '#d6cfc5',
-  rulerMajorTick: '#999',
-  rulerMinorTick: '#ccc',
+  rulerMajorTick: '#aaa',
+  rulerMediumTick: '#ccc',
+  rulerMinorTick: '#ddd',
   rulerLabel: '#888',
   trackBg0: '#ffffff',
   trackBg1: '#f9f8f6',
@@ -24,22 +26,19 @@ const C = {
 
 const NICE_STEPS = [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000]
 
-export function computeTickInterval(pxPerMs: number): { major: number; minor: number } {
+export function computeTickInterval(pxPerMs: number): { major: number; medium: number; minor: number } {
   const targetMs = 100 / pxPerMs
   let major = NICE_STEPS[NICE_STEPS.length - 1]
   for (const step of NICE_STEPS) {
     if (step >= targetMs) { major = step; break }
   }
-  return { major, minor: major <= 100 ? major / 4 : major / 5 }
+  const minor = major <= 100 ? major / 4 : major / 5
+  return { major, medium: major / 2, minor }
 }
 
 export function formatTickLabel(ms: number): string {
-  if (ms === 0) return '0'
-  if (ms >= 1000) {
-    const s = ms / 1000
-    return ms % 1000 === 0 ? `${s}s` : `${s.toFixed(1)}s`
-  }
-  return `${ms}ms`
+  const s = ms / 1000
+  return `${parseFloat(s.toFixed(2))}s`
 }
 
 export function renderRuler(
@@ -49,8 +48,15 @@ export function renderRuler(
   msToX: (ms: number, opts: RenderOptions) => number,
 ) {
   const rh = opts.rulerHeight
-  ctx.fillStyle = C.rulerBg
+
+  // Background gradient
+  const grad = ctx.createLinearGradient(0, 0, 0, rh)
+  grad.addColorStop(0, C.rulerBg0)
+  grad.addColorStop(1, C.rulerBg1)
+  ctx.fillStyle = grad
   ctx.fillRect(0, 0, w, rh)
+
+  // Bottom border
   ctx.strokeStyle = C.rulerBorder
   ctx.lineWidth = 1
   ctx.beginPath()
@@ -58,38 +64,54 @@ export function renderRuler(
   ctx.lineTo(w, rh - 0.5)
   ctx.stroke()
 
-  const { major: majorInterval, minor: minorInterval } = computeTickInterval(opts.pxPerMs)
+  const { major: majorInterval, medium: mediumInterval, minor: minorInterval } = computeTickInterval(opts.pxPerMs)
   const startMs = Math.max(0, Math.floor(opts.scrollX / opts.pxPerMs / minorInterval) * minorInterval)
   const endMs = Math.ceil((opts.scrollX + w) / opts.pxPerMs / minorInterval) * minorInterval
-  const midY = rh * 0.55
 
-  ctx.fillStyle = C.rulerMinorTick
-  for (let t = startMs; t <= endMs; t += minorInterval) {
+  // Tick heights from bottom
+  const majorH = 14
+  const mediumH = 8
+  const minorH = 4
+
+  // Draw ticks (all minor intervals, bottom-up)
+  for (let t = Math.floor(startMs / minorInterval) * minorInterval; t <= endMs; t += minorInterval) {
     const rt = Math.round(t)
-    if (rt % majorInterval === 0) continue
     const x = msToX(rt, opts)
     if (x < -1 || x > w + 1) continue
+    const px = Math.round(x) + 0.5
+
+    const isMajor = rt % majorInterval === 0
+    const isMedium = !isMajor && rt % mediumInterval === 0
+    let tickH: number
+    let color: string
+    if (isMajor) {
+      tickH = majorH; color = C.rulerMajorTick
+    } else if (isMedium) {
+      tickH = mediumH; color = C.rulerMediumTick
+    } else {
+      tickH = minorH; color = C.rulerMinorTick
+    }
+
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.arc(Math.round(x), midY, 1, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.moveTo(px, rh - tickH)
+    ctx.lineTo(px, rh - 1)
+    ctx.stroke()
   }
 
-  ctx.font = '10px Inter, system-ui, sans-serif'
-  ctx.textBaseline = 'middle'
+  // Draw labels at top (major ticks only)
+  ctx.font = '500 9px Inter, system-ui, sans-serif'
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'center'
+  ctx.fillStyle = C.rulerLabel
   const majorStart = Math.floor(startMs / majorInterval) * majorInterval
   for (let t = majorStart; t <= endMs; t += majorInterval) {
     const x = msToX(t, opts)
-    if (x < -20 || x > w + 20) continue
-    const px = Math.round(x) + 0.5
-    ctx.strokeStyle = C.rulerMajorTick
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(px, midY - 5)
-    ctx.lineTo(px, midY + 5)
-    ctx.stroke()
-    ctx.fillStyle = C.rulerLabel
-    ctx.fillText(formatTickLabel(t), px + 4, midY)
+    if (x < -40 || x > w + 40) continue
+    ctx.fillText(formatTickLabel(t), Math.round(x), 6)
   }
+  ctx.textAlign = 'left'
 }
 
 export function renderTracks(
@@ -151,6 +173,11 @@ export function renderTracks(
   }
 }
 
+function formatPlayheadLabel(ms: number): string {
+  const s = ms / 1000
+  return parseFloat(s.toFixed(2)).toString()
+}
+
 export function renderPlayhead(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -160,10 +187,15 @@ export function renderPlayhead(
 ) {
   if (opts.playheadTime === null) return
   const x = msToX(opts.playheadTime, opts)
-  if (x < -8 || x > w + 8) return
+  if (x < -80 || x > w + 80) return
   const px = Math.round(x) + 0.5
   const rh = opts.rulerHeight
 
+  // Snapped = exactly on a major tick
+  const { major: majorInterval } = computeTickInterval(opts.pxPerMs)
+  const isSnapped = opts.playheadTime % majorInterval === 0
+
+  // Vertical line over tracks
   ctx.strokeStyle = C.playhead
   ctx.lineWidth = 1.5
   ctx.beginPath()
@@ -171,14 +203,77 @@ export function renderPlayhead(
   ctx.lineTo(px, h)
   ctx.stroke()
 
-  ctx.lineWidth = 2
+  // Shield handle dimensions
+  const label = formatPlayheadLabel(opts.playheadTime)
+  ctx.font = '500 9px Inter, system-ui, sans-serif'
+  const textW = ctx.measureText(label).width
+  const handlePadX = 8
+  const handleW = Math.max(textW + handlePadX * 2, 38)
+  const handleBodyH = 27
+  const handleR = 4
+  const handleY = 2
+  const tipY = rh - 2
+
+  // Handle rect x: centered on px, clamped to canvas bounds
+  let handleX = px - handleW / 2
+  handleX = Math.max(2, Math.min(w - handleW - 2, handleX))
+
+  // Tip x: always px, clamped inside handle rect
+  const tipX = Math.max(handleX + handleR + 2, Math.min(handleX + handleW - handleR - 2, px))
+
+  // Vertical line inside ruler (tip → ruler bottom)
+  ctx.strokeStyle = C.playhead
+  ctx.lineWidth = 1.5
   ctx.beginPath()
-  ctx.moveTo(px, rh * 0.55 + 6)
-  ctx.lineTo(px, rh)
+  ctx.moveTo(tipX, tipY)
+  ctx.lineTo(tipX, rh)
   ctx.stroke()
 
-  ctx.fillStyle = C.playheadHandle
+  // Shield shape: rounded top corners, straight bottom corners → pointed tip
+  const bodyBottom = handleY + handleBodyH
+  ctx.fillStyle = '#222'
   ctx.beginPath()
-  ctx.arc(px, rh * 0.55, 5, 0, Math.PI * 2)
+  ctx.moveTo(handleX + handleR, handleY)
+  ctx.lineTo(handleX + handleW - handleR, handleY)
+  ctx.quadraticCurveTo(handleX + handleW, handleY, handleX + handleW, handleY + handleR)
+  ctx.lineTo(handleX + handleW, bodyBottom)
+  ctx.lineTo(tipX, tipY)
+  ctx.lineTo(handleX, bodyBottom)
+  ctx.lineTo(handleX, handleY + handleR)
+  ctx.quadraticCurveTo(handleX, handleY, handleX + handleR, handleY)
+  ctx.closePath()
   ctx.fill()
+
+  // Inner box: white normally, green glow when snapped
+  const innerPad = 4
+  const innerR = 3
+  const innerX = handleX + innerPad
+  const innerY = handleY + innerPad
+  const innerW = handleW - innerPad * 2
+  const innerH = handleBodyH - innerPad * 2
+
+  if (isSnapped) {
+    // Green glow behind the box
+    ctx.save()
+    ctx.shadowColor = '#4ade80'
+    ctx.shadowBlur = 6
+    ctx.fillStyle = '#4ade80'
+    ctx.beginPath()
+    ctx.roundRect(innerX, innerY, innerW, innerH, innerR)
+    ctx.fill()
+    ctx.restore()
+  } else {
+    ctx.fillStyle = '#fff'
+    ctx.beginPath()
+    ctx.roundRect(innerX, innerY, innerW, innerH, innerR)
+    ctx.fill()
+  }
+
+  // Time label inside inner box
+  ctx.fillStyle = isSnapped ? '#fff' : '#222'
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'center'
+  ctx.fillText(label, handleX + handleW / 2, handleY + handleBodyH / 2)
+
+  ctx.textAlign = 'left'
 }
