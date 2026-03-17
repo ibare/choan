@@ -2,13 +2,15 @@
 // Renders lines and quads on top of the SDF scene (depth test disabled)
 
 import { createProgram } from './gl'
-import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG } from './overlayShaders'
+import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT } from './overlayShaders'
 
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
   drawDisc(cx: number, cy: number, radius: number, color: [number, number, number, number]): void
+  drawDiscScreen(canvasPx: number, canvasPy: number, radiusPx: number, color: [number, number, number, number]): void
+  projectToScreen(wx: number, wy: number, z: number): { px: number; py: number }
   beginFrame(viewProj: Float32Array): void
   setZ(z: number): void
   dispose(): void
@@ -18,6 +20,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   const lineProgram = createProgram(gl, OVERLAY_VERT, OVERLAY_FRAG)
   const dashProgram = createProgram(gl, DASH_VERT, DASH_FRAG)
   const discProgram = createProgram(gl, DISC_VERT, DISC_FRAG)
+  const discScreenProgram = createProgram(gl, DISC_SCREEN_VERT, DISC_FRAG)
 
   // Line VAO
   const lineVao = gl.createVertexArray()!
@@ -123,22 +126,69 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindVertexArray(null)
   }
 
+  // Static billboard quad: 6 vertices, each = (cx, cy, offsetX, offsetY)
+  // cx/cy are filled per-call; offsets are corner directions (-1..1)
+  const discQuad = new Float32Array(6 * 4)
+  const offsets = [[-1,-1],[1,-1],[1,1],[-1,-1],[1,1],[-1,1]]
+  for (let i = 0; i < 6; i++) {
+    discQuad[i * 4 + 2] = offsets[i][0]
+    discQuad[i * 4 + 3] = offsets[i][1]
+  }
+
   function drawDisc(cx: number, cy: number, radius: number, color: [number, number, number, number]) {
     if (!currentViewProj) return
 
-    const data = new Float32Array([
-      cx - radius, cy - radius, 0, 0,
-      cx + radius, cy - radius, 1, 0,
-      cx + radius, cy + radius, 1, 1,
-      cx - radius, cy - radius, 0, 0,
-      cx + radius, cy + radius, 1, 1,
-      cx - radius, cy + radius, 0, 1,
-    ])
+    // Fill center for all 6 vertices
+    for (let i = 0; i < 6; i++) {
+      discQuad[i * 4 + 0] = cx
+      discQuad[i * 4 + 1] = cy
+    }
 
     gl.useProgram(discProgram)
     gl.uniformMatrix4fv(gl.getUniformLocation(discProgram, 'uViewProj'), false, currentViewProj)
     gl.uniform4fv(gl.getUniformLocation(discProgram, 'uColor'), color)
     gl.uniform1f(gl.getUniformLocation(discProgram, 'uZ'), currentZ)
+    gl.uniform1f(gl.getUniformLocation(discProgram, 'uRadius'), radius)
+
+    gl.bindVertexArray(discVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, discQuad, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    gl.bindVertexArray(null)
+  }
+
+  function projectToScreen(wx: number, wy: number, z: number): { px: number; py: number } {
+    if (!currentViewProj) return { px: 0, py: 0 }
+    const vp = currentViewProj
+    const cx = vp[0] * wx + vp[4] * wy + vp[8] * z + vp[12]
+    const cy = vp[1] * wx + vp[5] * wy + vp[9] * z + vp[13]
+    const cw = vp[3] * wx + vp[7] * wy + vp[11] * z + vp[15]
+    const canvas = gl.canvas as HTMLCanvasElement
+    return {
+      px: (cx / cw * 0.5 + 0.5) * canvas.width,
+      py: (0.5 - cy / cw * 0.5) * canvas.height,
+    }
+  }
+
+  function drawDiscScreen(canvasPx: number, canvasPy: number, radiusPx: number, color: [number, number, number, number]) {
+    const canvas = gl.canvas as HTMLCanvasElement
+    const cw = canvas.width, ch = canvas.height
+    const ndcX = canvasPx * 2 / cw - 1
+    const ndcY = 1 - canvasPy * 2 / ch
+    const ndcRX = radiusPx * 2 / cw
+    const ndcRY = radiusPx * 2 / ch
+
+    const data = new Float32Array([
+      ndcX - ndcRX, ndcY - ndcRY, 0, 0,
+      ndcX + ndcRX, ndcY - ndcRY, 1, 0,
+      ndcX + ndcRX, ndcY + ndcRY, 1, 1,
+      ndcX - ndcRX, ndcY - ndcRY, 0, 0,
+      ndcX + ndcRX, ndcY + ndcRY, 1, 1,
+      ndcX - ndcRX, ndcY + ndcRY, 0, 1,
+    ])
+
+    gl.useProgram(discScreenProgram)
+    gl.uniform4fv(gl.getUniformLocation(discScreenProgram, 'uColor'), color)
 
     gl.bindVertexArray(discVao)
     gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
@@ -151,6 +201,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteProgram(lineProgram)
     gl.deleteProgram(dashProgram)
     gl.deleteProgram(discProgram)
+    gl.deleteProgram(discScreenProgram)
     gl.deleteVertexArray(lineVao)
     gl.deleteBuffer(lineVbo)
     gl.deleteVertexArray(quadVao)
@@ -159,5 +210,5 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteBuffer(discVbo)
   }
 
-  return { drawLines, drawDashedLoop, drawQuads, drawDisc, beginFrame, setZ, dispose }
+  return { drawLines, drawDashedLoop, drawQuads, drawDisc, drawDiscScreen, projectToScreen, beginFrame, setZ, dispose }
 }

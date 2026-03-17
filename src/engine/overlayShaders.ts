@@ -50,12 +50,30 @@ void main() {
 `
 
 export const DISC_VERT = /* glsl */ `#version 300 es
-layout(location = 0) in vec4 aData; // xy = position, zw = UV
+layout(location = 0) in vec4 aData; // xy = world center, zw = corner offset (-1..1)
 uniform mat4 uViewProj;
 uniform float uZ;
+uniform float uRadius;
 out vec2 vUV;
 void main() {
-  gl_Position = uViewProj * vec4(aData.xy, uZ, 1.0);
+  // Billboard: transform center to clip space, then offset in NDC
+  vec4 cc = uViewProj * vec4(aData.xy, uZ, 1.0);
+  vec4 cr = uViewProj * vec4(aData.x + uRadius, aData.y, uZ, 1.0);
+  vec4 cu = uViewProj * vec4(aData.x, aData.y + uRadius, uZ, 1.0);
+  float ndcRX = abs(cr.x / cr.w - cc.x / cc.w);
+  float ndcRY = abs(cu.y / cu.w - cc.y / cc.w);
+  float ndcR = max(ndcRX, ndcRY);
+  gl_Position = vec4(cc.xy / cc.w + aData.zw * ndcR, cc.z / cc.w, 1.0);
+  vUV = aData.zw * 0.5 + 0.5;
+}
+`
+
+// Screen-space disc: positions are already in NDC, no viewProj needed
+export const DISC_SCREEN_VERT = /* glsl */ `#version 300 es
+layout(location = 0) in vec4 aData; // xy = NDC position, zw = UV (0..1)
+out vec2 vUV;
+void main() {
+  gl_Position = vec4(aData.xy, 0.0, 1.0);
   vUV = aData.zw;
 }
 `

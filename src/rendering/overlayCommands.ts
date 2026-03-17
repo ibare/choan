@@ -72,28 +72,31 @@ export function drawOverlay(
   }
   if (dVerts.length > 0) ov.drawLines(new Float32Array(dVerts), DISTANCE_COLOR)
 
-  // WebGL color picker (single selection only)
+  // WebGL color picker (single selection only) — rendered in screen space
   if (colorPickerOpen && selectedIds.length === 1) {
     const pickEl = elements.find((e) => e.id === selectedIds[0])
     if (pickEl) {
-      ov.setZ(pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01)
-      const ax = pickEl.x + pickEl.width, ay = pickEl.y
-      const pxToW = (2 * FRUSTUM) / h * zs
-      const discR = COLOR_PICKER_DISC_RADIUS * pxToW
+      // Project anchor (top-right corner) to screen pixel
+      const [anchorWx, anchorWy] = p2w(pickEl.x + pickEl.width, pickEl.y)
+      const anchorZ = pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+      const anchor = ov.projectToScreen(anchorWx, anchorWy, anchorZ)
+
+      const dpr = window.devicePixelRatio || 1
+      const discR = COLOR_PICKER_DISC_RADIUS * dpr
       const borderR = discR * 1.22
       for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
         for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
           const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-          const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * zs
-          const [wx, wy] = p2w(ax + Math.cos(angle) * ring, ay + Math.sin(angle) * ring)
+          const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * dpr
+          const sx = anchor.px + Math.cos(angle) * ring
+          const sy = anchor.py - Math.sin(angle) * ring
           const hex = COLOR_FAMILIES[fi].shades[si]
           const idx = fi * 5 + si
           const isHovered = idx === colorPickerHover, isActive = pickEl.color === hex
-          ov.drawDisc(wx, wy, isHovered ? borderR * 1.3 : isActive ? borderR * 1.2 : borderR, isActive ? [0.36, 0.31, 0.81, 1] : [1, 1, 1, 0.9])
-          ov.drawDisc(wx, wy, isHovered ? discR * 1.3 : discR, [((hex >> 16) & 0xFF) / 255, ((hex >> 8) & 0xFF) / 255, (hex & 0xFF) / 255, 1])
+          ov.drawDiscScreen(sx, sy, isHovered ? borderR * 1.3 : isActive ? borderR * 1.2 : borderR, isActive ? [0.36, 0.31, 0.81, 1] : [1, 1, 1, 0.9])
+          ov.drawDiscScreen(sx, sy, isHovered ? discR * 1.3 : discR, [((hex >> 16) & 0xFF) / 255, ((hex >> 8) & 0xFF) / 255, (hex & 0xFF) / 255, 1])
         }
       }
-      ov.setZ(0)
     }
   }
 }
