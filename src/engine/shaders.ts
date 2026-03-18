@@ -45,7 +45,10 @@ layout(std140) uniform SceneData {
   vec4 uSizeRadius[MAX_OBJECTS];
   vec4 uColorAlpha[MAX_OBJECTS];
   vec4 uEffect[MAX_OBJECTS];     // x = pulse intensity, y = flash intensity
+  vec4 uTexRect[MAX_OBJECTS];    // xy = atlas UV offset, zw = atlas UV scale (0 = no texture)
 };
+
+uniform sampler2D uAtlasTex;
 
 // Shape types
 #define SHAPE_RECT   0.0
@@ -236,6 +239,21 @@ void main() {
   int hitIdx = int(hit.y);
   float flash = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].y : 0.0;
   baseColor = mix(baseColor, vec3(1.0), flash * 0.5);
+
+  // Atlas texture on front face (Z+)
+  if (hitIdx >= 0 && hitIdx < MAX_OBJECTS) {
+    vec4 texRect = uTexRect[hitIdx];
+    if (texRect.z > 0.0) {
+      vec3 lp = p - uPosType[hitIdx].xyz;
+      vec3 hs = uSizeRadius[hitIdx].xyz;
+      if (lp.z > hs.z - 0.003) {
+        vec2 surfUV = vec2(lp.x / hs.x * 0.5 + 0.5, 1.0 - (lp.y / hs.y * 0.5 + 0.5));
+        vec2 atlasUV = texRect.xy + clamp(surfUV, 0.0, 1.0) * texRect.zw;
+        vec4 texColor = texture(uAtlasTex, atlasUV);
+        baseColor = mix(baseColor, texColor.rgb, texColor.a);
+      }
+    }
+  }
 
   // Toon shading (no outline — handled in edge detection pass)
   vec3 color = toonShade(p, normal, rd, baseColor);

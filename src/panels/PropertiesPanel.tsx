@@ -5,7 +5,7 @@ import type { AnimatableProperty } from '../animation/types'
 import ContainerLayoutSection from './ContainerLayoutSection'
 import TriggersSection from './TriggersSection'
 
-const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
+const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card', 'switch']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 
 export default function PropertiesPanel() {

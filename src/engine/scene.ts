@@ -22,7 +22,8 @@ const POS_OFFSET = 4                           // floats: skip numObjPad vec4
 const SIZE_OFFSET = POS_OFFSET + MAX_OBJECTS * 4
 const COLOR_OFFSET = SIZE_OFFSET + MAX_OBJECTS * 4
 const EFFECT_OFFSET = COLOR_OFFSET + MAX_OBJECTS * 4
-const UBO_FLOATS = EFFECT_OFFSET + MAX_OBJECTS * 4
+const TEXRECT_OFFSET = EFFECT_OFFSET + MAX_OBJECTS * 4
+const UBO_FLOATS = TEXRECT_OFFSET + MAX_OBJECTS * 4
 
 // Color-change effect tracking
 const EFFECT_DURATION = 300 // ms
@@ -32,7 +33,7 @@ const colorChangeTimes = new Map<string, number>()
 export interface SceneUBO {
   buffer: WebGLBuffer
   data: Float32Array
-  update(gl: WebGL2RenderingContext, elements: ChoanElement[], canvasW: number, canvasH: number, extrudeDepth?: number): void
+  update(gl: WebGL2RenderingContext, elements: ChoanElement[], canvasW: number, canvasH: number, extrudeDepth?: number, texRects?: Map<string, [number, number, number, number]>): void
   bind(gl: WebGL2RenderingContext, program: WebGLProgram): void
   dispose(gl: WebGL2RenderingContext): void
 }
@@ -51,6 +52,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     canvasW: number,
     canvasH: number,
     extrudeDepthOverride?: number,
+    texRects?: Map<string, [number, number, number, number]>,
   ) {
     const ed = extrudeDepthOverride ?? EXTRUDE_DEPTH
     const count = Math.min(elements.length, MAX_OBJECTS)
@@ -124,6 +126,16 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       const ei = EFFECT_OFFSET + i * 4
       data[ei + 0] = t * t          // pulse: quadratic ease-out
       data[ei + 1] = t * t * t      // flash: faster cubic decay
+
+      // uTexRect[i]: atlas UV rect (0 if no texture)
+      const tr = texRects?.get(el.id)
+      if (tr) {
+        const ti = TEXRECT_OFFSET + i * 4
+        data[ti + 0] = tr[0]
+        data[ti + 1] = tr[1]
+        data[ti + 2] = tr[2]
+        data[ti + 3] = tr[3]
+      }
     }
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, buffer)

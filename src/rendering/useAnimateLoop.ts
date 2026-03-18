@@ -16,6 +16,7 @@ import { applyMultiSelectTint } from './multiSelectTint'
 import { drawOverlay } from './overlayCommands'
 import { kfAnimator } from './kfAnimator'
 import { createLayoutAnimator } from '../layout/animator'
+import { paintComponent } from '../engine/painters'
 
 export function useAnimateLoop({
   rendererRef,
@@ -58,6 +59,7 @@ export function useAnimateLoop({
     }
 
     const animator = createLayoutAnimator()
+    const atlasDirty = new Map<string, string>() // id → stateKey for dirty tracking
     let frameId = 0
 
     const animate = () => {
@@ -95,6 +97,34 @@ export function useAnimateLoop({
       if (preview.ghostPreview && preview.editingBundleId && preview.previewState === 'stopped') {
         const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)
         if (bundle) animatedElements = addGhostElements(animatedElements, state.elements, bundle, preview.playheadTime)
+      }
+
+      // Paint component textures into atlas (rebuild when any component is dirty)
+      const dpr = window.devicePixelRatio || 1
+      const componentEls = animatedElements.filter(
+        (el) => el.role && el.role !== 'container' && el.role !== 'image',
+      )
+      let atlasNeedsRebuild = false
+      for (const el of componentEls) {
+        const texW = Math.round(el.width * dpr)
+        const texH = Math.round(el.height * dpr)
+        const stateKey = `${el.role}:${texW}x${texH}:${JSON.stringify(el.componentState ?? {})}`
+        if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
+      }
+      if (atlasNeedsRebuild) {
+        renderer.atlas.reset()
+        atlasDirty.clear()
+        for (const el of componentEls) {
+          const texW = Math.round(el.width * dpr)
+          const texH = Math.round(el.height * dpr)
+          if (texW < 1 || texH < 1) continue
+          const region = renderer.atlas.allocate(el.id, texW, texH)
+          if (region) {
+            const ctx = renderer.atlas.getContext(region)
+            paintComponent(el.role!, ctx, texW, texH, el.componentState ?? {})
+            atlasDirty.set(el.id, `${el.role}:${texW}x${texH}:${JSON.stringify(el.componentState ?? {})}`)
+          }
+        }
       }
 
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth)

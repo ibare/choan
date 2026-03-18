@@ -7,6 +7,7 @@ import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, type SceneUBO } from './scene'
+import { createTextureAtlas, type TextureAtlas } from './textureAtlas'
 import { createOverlayRenderer, type OverlayRenderer } from './overlay'
 import { buildViewProjMatrix } from './camera'
 import { createGBuffer } from './fbo'
@@ -18,6 +19,7 @@ export interface SDFRenderer {
   gl: WebGL2RenderingContext
   camera: Camera
   overlay: OverlayRenderer
+  atlas: TextureAtlas
   resize(width: number, height: number): void
   updateScene(elements: ChoanElement[], extrudeDepth?: number): void
   render(settings: RenderSettings): void
@@ -43,6 +45,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   // Overlay renderer
   const overlay = createOverlayRenderer(gl)
 
+  // Texture atlas for component faces
+  const atlas = createTextureAtlas(gl)
+
   // ── Pass 1: Geometry program (MRT → FBO) ──
   const geoProgram = createProgram(gl, RAYMARCH_VERT, RAYMARCH_FRAG)
   sceneUBO.bind(gl, geoProgram)
@@ -61,6 +66,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const uWarmTone = getUniformLocation(gl, geoProgram, 'uWarmTone')
   const uSideDarken = getUniformLocation(gl, geoProgram, 'uSideDarken')
   const uSideSmooth = getUniformLocation(gl, geoProgram, 'uSideSmooth')
+  const uAtlasTex = getUniformLocation(gl, geoProgram, 'uAtlasTex')
 
   // ── Pass 2: Edge detection program (FBO textures → Canvas) ──
   const edgeProgram = createProgram(gl, RAYMARCH_VERT, EDGE_FRAG)
@@ -129,7 +135,12 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   }
 
   function updateScene(elements: ChoanElement[], extrudeDepth?: number) {
-    sceneUBO.update(gl, elements, cssWidth, cssHeight, extrudeDepth)
+    const texRects = new Map<string, [number, number, number, number]>()
+    for (const el of elements) {
+      const rect = atlas.getTexRect(el.id)
+      if (rect) texRects.set(el.id, rect)
+    }
+    sceneUBO.update(gl, elements, cssWidth, cssHeight, extrudeDepth, texRects)
   }
 
   function render(s: RenderSettings) {
@@ -169,6 +180,12 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform3f(uWarmTone, s.warmTone[0], s.warmTone[1], s.warmTone[2])
     gl.uniform1f(uSideDarken, s.sideDarken)
     gl.uniform2f(uSideSmooth, s.sideSmooth[0], s.sideSmooth[1])
+
+    // Atlas texture
+    atlas.upload(gl)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, atlas.texture)
+    gl.uniform1i(uAtlasTex, 0)
 
     drawFullscreenQuad(gl, quad)
 
@@ -220,6 +237,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.deleteTexture(resolveTex)
     gl.deleteFramebuffer(resolveFB)
     sceneUBO.dispose(gl)
+    atlas.dispose(gl)
     overlay.dispose()
     gl.deleteProgram(geoProgram)
     gl.deleteProgram(edgeProgram)
@@ -228,5 +246,5 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   resize(container.clientWidth, container.clientHeight)
 
-  return { canvas, gl, camera, overlay, resize, updateScene, render, dispose }
+  return { canvas, gl, camera, overlay, atlas, resize, updateScene, render, dispose }
 }
