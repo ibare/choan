@@ -291,7 +291,8 @@ void main() {
 
     if (texColor.a > 0.01) {
       outColor = vec4(mix(outColor.rgb, texColor.rgb, texColor.a), 1.0);
-      outNormalId = vec4(0.0, 0.0, 1.0, float(i));
+      // Don't write outNormalId — edge detection would draw jagged outlines.
+      // The Canvas texture already has its own toon-style strokes.
     }
   }
 }
