@@ -35,7 +35,16 @@ export function useKeyboardHandlers(
     const el = store.elements.find((e) => e.id === elementId)
     if (!el) return
 
+    // Check if inside an auto-layout container
+    const parent = el.parentId ? store.elements.find((e) => e.id === el.parentId) : null
+    const isAutoLayout = parent && parent.layoutDirection !== 'free' && parent.layoutDirection !== undefined
+    const gap = isAutoLayout ? 0 : 8
+
     const sliceW = el.width / count
+    const totalW = sliceW * count + gap * (count - 1)
+    const startX = el.x - (totalW - el.width) / 2 // center the group at original position
+
+    // Create new elements at ORIGINAL position/size first (for spring animation)
     const newIds: string[] = []
     for (let i = 0; i < count; i++) {
       const id = nanoid()
@@ -43,15 +52,26 @@ export function useKeyboardHandlers(
       store.addElement({
         ...el,
         id,
-        x: el.x + sliceW * i,
-        width: sliceW,
+        x: el.x,
+        width: el.width,
         label: el.label,
         parentId: el.parentId,
       })
     }
 
     store.removeElement(elementId)
-    store.setSelectedIds(newIds)
+    store.setSelectedIds([])
+
+    // Next frame: update to final positions → spring detects delta → animation
+    requestAnimationFrame(() => {
+      const s = useChoanStore.getState()
+      for (let i = 0; i < newIds.length; i++) {
+        s.updateElement(newIds[i], {
+          x: startX + (sliceW + gap) * i,
+          width: sliceW,
+        })
+      }
+    })
   }, [])
 
   const builtinActions = useCallback((): Record<string, ActionHandler> => ({
