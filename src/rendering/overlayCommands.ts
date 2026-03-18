@@ -20,6 +20,7 @@ export interface SplitOverlay {
   active: boolean
   count: number
   elementId: string
+  direction: 'horizontal' | 'vertical'
 }
 
 export function drawOverlay(
@@ -114,11 +115,19 @@ export function drawOverlay(
       const SPLIT_COLOR: [number, number, number, number] = [0.9, 0.2, 0.2, 0.85]
       ov.setZ(splitEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.02)
       const verts: number[] = []
+      const isH = splitOverlay.direction !== 'vertical'
       for (let i = 1; i < splitOverlay.count; i++) {
-        const xPx = splitEl.x + (splitEl.width / splitOverlay.count) * i
-        const top = p2w(xPx, splitEl.y)
-        const bot = p2w(xPx, splitEl.y + splitEl.height)
-        verts.push(...top, ...bot)
+        if (isH) {
+          const xPx = splitEl.x + (splitEl.width / splitOverlay.count) * i
+          const top = p2w(xPx, splitEl.y)
+          const bot = p2w(xPx, splitEl.y + splitEl.height)
+          verts.push(...top, ...bot)
+        } else {
+          const yPx = splitEl.y + (splitEl.height / splitOverlay.count) * i
+          const left = p2w(splitEl.x, yPx)
+          const right = p2w(splitEl.x + splitEl.width, yPx)
+          verts.push(...left, ...right)
+        }
       }
       if (verts.length > 0) ov.drawLines(new Float32Array(verts), SPLIT_COLOR)
       ov.setZ(0)

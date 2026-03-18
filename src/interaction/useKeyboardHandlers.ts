@@ -12,6 +12,7 @@ export interface SplitMode {
   active: boolean
   count: number       // 1 = cancel, 2+ = split into N
   elementId: string
+  direction: 'horizontal' | 'vertical'
 }
 
 export function useKeyboardHandlers(
@@ -26,8 +27,8 @@ export function useKeyboardHandlers(
   customActionsRef.current = customActions
 
   const executeSplit = useCallback(() => {
-    const { count, elementId } = splitModeRef.current
-    splitModeRef.current = { active: false, count: 2, elementId: '' }
+    const { count, elementId, direction } = splitModeRef.current
+    splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
 
     if (count <= 1) return // 1 = cancel
 
@@ -35,41 +36,34 @@ export function useKeyboardHandlers(
     const el = store.elements.find((e) => e.id === elementId)
     if (!el) return
 
-    // Check if inside an auto-layout container
     const parent = el.parentId ? store.elements.find((e) => e.id === el.parentId) : null
     const isAutoLayout = parent && parent.layoutDirection !== 'free' && parent.layoutDirection !== undefined
     const gap = isAutoLayout ? 0 : 8
 
-    const sliceW = el.width / count
-    const totalW = sliceW * count + gap * (count - 1)
-    const startX = el.x - (totalW - el.width) / 2 // center the group at original position
+    const isH = direction === 'horizontal'
+    const sliceSize = (isH ? el.width : el.height) / count
+    const totalSize = sliceSize * count + gap * (count - 1)
+    const startPos = (isH ? el.x : el.y) - (totalSize - (isH ? el.width : el.height)) / 2
 
-    // Create new elements at ORIGINAL position/size first (for spring animation)
+    // Create at original position/size first (for spring animation)
     const newIds: string[] = []
     for (let i = 0; i < count; i++) {
       const id = nanoid()
       newIds.push(id)
-      store.addElement({
-        ...el,
-        id,
-        x: el.x,
-        width: el.width,
-        label: el.label,
-        parentId: el.parentId,
-      })
+      store.addElement({ ...el, id, x: el.x, y: el.y, width: el.width, height: el.height, label: el.label, parentId: el.parentId })
     }
 
     store.removeElement(elementId)
     store.setSelectedIds([])
 
-    // Next frame: update to final positions → spring detects delta → animation
+    // Next frame: update to final positions → spring animation
     requestAnimationFrame(() => {
       const s = useChoanStore.getState()
       for (let i = 0; i < newIds.length; i++) {
-        s.updateElement(newIds[i], {
-          x: startX + (sliceW + gap) * i,
-          width: sliceW,
-        })
+        s.updateElement(newIds[i], isH
+          ? { x: startPos + (sliceSize + gap) * i, width: sliceSize }
+          : { y: startPos + (sliceSize + gap) * i, height: sliceSize },
+        )
       }
     })
   }, [])
@@ -77,7 +71,7 @@ export function useKeyboardHandlers(
   const builtinActions = useCallback((): Record<string, ActionHandler> => ({
     'escape': () => {
       if (splitModeRef.current.active) {
-        splitModeRef.current = { active: false, count: 2, elementId: '' }
+        splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
         return
       }
       colorPickerOpenRef.current = false
@@ -109,7 +103,11 @@ export function useKeyboardHandlers(
     'split:enter': () => {
       const { selectedIds } = useChoanStore.getState()
       if (selectedIds.length !== 1) return
-      splitModeRef.current = { active: true, count: 2, elementId: selectedIds[0] }
+      splitModeRef.current = { active: true, count: 2, elementId: selectedIds[0], direction: 'horizontal' }
+    },
+    'split:toggle-dir': () => {
+      if (!splitModeRef.current.active) return
+      splitModeRef.current = { ...splitModeRef.current, direction: splitModeRef.current.direction === 'horizontal' ? 'vertical' : 'horizontal' }
     },
     'split:confirm': () => {
       if (!splitModeRef.current.active) return

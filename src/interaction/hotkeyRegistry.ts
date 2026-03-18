@@ -28,6 +28,7 @@ const bindings: HotkeyBinding[] = [
 
   // ── Split ──
   { key: 'n', action: 'split:enter',            label: 'Split selected element' },
+  { key: 'Shift', shift: true, action: 'split:toggle-dir', label: 'Toggle split direction' },
   { key: 'Enter', action: 'split:confirm',      label: 'Confirm split' },
   { key: '1', action: 'split:1',                label: 'Split: 1 (cancel)' },
   { key: '2', action: 'split:2',                label: 'Split: 2' },

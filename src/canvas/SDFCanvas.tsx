@@ -21,7 +21,7 @@ export default function SDFCanvas() {
   const zoomScaleRef = useRef(1)
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
   const animatedElementsRef = useRef<ChoanElement[]>([])
-  const splitModeRef = useRef<{ active: boolean; count: number; elementId: string }>({ active: false, count: 2, elementId: '' })
+  const splitModeRef = useRef<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>({ active: false, count: 2, elementId: '', direction: 'horizontal' })
 
   const { elements, selectedIds, tool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
