@@ -5,7 +5,7 @@
 import { create } from 'zustand'
 import { computeAutoLayout } from '../layout/autoLayout'
 
-export type ElementRole = 'container' | 'image' | 'button' | 'input' | 'card' | 'switch'
+export type ElementRole = 'container' | 'image' | 'button' | 'input' | 'card'
 export type ElementType = 'rectangle' | 'circle' | 'line'
 export type LineStyle = 'solid' | 'dashed'
 export type LineDirection = 'horizontal' | 'vertical' | 'diagonal'
@@ -36,6 +36,7 @@ export interface ChoanElement {
   layoutGap?: number
   layoutPadding?: number
   triggers?: ElementTrigger[]
+  skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')
   componentState?: Record<string, unknown>
 }
 

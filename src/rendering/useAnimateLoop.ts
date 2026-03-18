@@ -106,28 +106,26 @@ export function useAnimateLoop({
         color: `rgb(${Math.round(ec[0] * 255)},${Math.round(ec[1] * 255)},${Math.round(ec[2] * 255)})`,
         width: rs.outlineWidth * 0.5,
       }
-      const componentEls = animatedElements.filter(
-        (el) => el.role && el.role !== 'container' && el.role !== 'image',
-      )
+      const skinnedEls = animatedElements.filter((el) => !!el.skin)
       let atlasNeedsRebuild = false
-      for (const el of componentEls) {
+      for (const el of skinnedEls) {
         const texW = Math.round(el.width * dpr)
         const texH = Math.round(el.height * dpr)
-        const stateKey = `${el.role}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
+        const stateKey = `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
         if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
       }
       if (atlasNeedsRebuild) {
         renderer.atlas.reset()
         atlasDirty.clear()
-        for (const el of componentEls) {
+        for (const el of skinnedEls) {
           const texW = Math.round(el.width * dpr)
           const texH = Math.round(el.height * dpr)
           if (texW < 1 || texH < 1) continue
           const region = renderer.atlas.allocate(el.id, texW, texH)
           if (region) {
             const ctx = renderer.atlas.getContext(region)
-            paintComponent(el.role!, ctx, texW, texH, el.componentState ?? {}, strokeStyle)
-            atlasDirty.set(el.id, `${el.role}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`)
+            paintComponent(el.skin!, ctx, texW, texH, el.componentState ?? {}, strokeStyle)
+            atlasDirty.set(el.id, `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`)
           }
         }
       }

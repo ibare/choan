@@ -5,8 +5,9 @@ import type { AnimatableProperty } from '../animation/types'
 import ContainerLayoutSection from './ContainerLayoutSection'
 import TriggersSection from './TriggersSection'
 
-const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card', 'switch']
+const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
+const SKINS = ['', 'switch'] // '' = no skin
 
 export default function PropertiesPanel() {
   const { elements, selectedIds, updateElement, removeElement, runLayout, animationBundles } = useChoanStore()
@@ -69,7 +70,12 @@ export default function PropertiesPanel() {
         </>
       )}
 
-      {el.role === 'switch' && (
+      <label className="field-label">Skin</label>
+      <select className="field-select" value={el.skin ?? ''} onChange={(e) => updateElement(el.id, { skin: e.target.value || undefined })}>
+        {SKINS.map((s) => <option key={s} value={s}>{s || 'None'}</option>)}
+      </select>
+
+      {el.skin === 'switch' && (
         <>
           <label className="field-label">State</label>
           <div className="radio-group">
