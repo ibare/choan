@@ -75,6 +75,14 @@ export default function PropertiesPanel() {
         {SKINS.map((s) => <option key={s} value={s}>{s || 'None'}</option>)}
       </select>
 
+      {el.skin && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+          <input type="checkbox" id="skinOnly" checked={el.skinOnly ?? false}
+            onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked })} />
+          <label htmlFor="skinOnly" style={{ fontSize: 11 }}>Skin Only</label>
+        </div>
+      )}
+
       {el.skin === 'switch' && (
         <>
           <label className="field-label">State</label>

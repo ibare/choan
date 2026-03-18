@@ -37,6 +37,7 @@ export interface ChoanElement {
   layoutPadding?: number
   triggers?: ElementTrigger[]
   skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')
+  skinOnly?: boolean                      // hide SDF body, show only skin texture
   componentState?: Record<string, unknown>
 }
 

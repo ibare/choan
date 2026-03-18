@@ -122,10 +122,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       const elapsed = now - changeTime
       const t = Math.max(0, 1 - elapsed / EFFECT_DURATION)
 
-      // uEffect[i]: x = pulse intensity, y = flash intensity
+      // uEffect[i]: x = pulse, y = flash, z = (reserved), w = skinOnly
       const ei = EFFECT_OFFSET + i * 4
       data[ei + 0] = t * t          // pulse: quadratic ease-out
       data[ei + 1] = t * t * t      // flash: faster cubic decay
+      data[ei + 3] = el.skinOnly ? 1.0 : 0.0
 
       // uTexRect[i]: atlas UV rect (0 if no texture)
       const tr = texRects?.get(el.id)

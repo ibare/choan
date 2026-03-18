@@ -106,6 +106,9 @@ vec2 sceneSDF(vec3 p) {
       d = sdCapsule(lp, a, b, hs.y);
     }
 
+    // skinOnly: exclude from raymarching entirely (handled in main)
+    if (uEffect[i].w > 0.5) continue;
+
     // Pulse: expand SDF on color change
     d -= uEffect[i].x * 0.015;
 
@@ -124,15 +127,11 @@ float singleSDF(vec3 p, int objId) {
   vec3  lp        = p - uPosType[objId].xyz;
 
   if (shapeType < 0.5) {
-    float r = radius * min(hs.x, hs.y);
-    return sdExtrudedRoundRect(lp, hs, r);
+    return sdExtrudedRoundRect(lp, hs, radius * min(hs.x, hs.y));
   } else if (shapeType < 1.5) {
-    float r = min(hs.x, hs.y);
-    return sdExtrudedRoundRect(lp, hs, r);
+    return sdExtrudedRoundRect(lp, hs, min(hs.x, hs.y));
   } else {
-    vec3 a = vec3(-hs.x, 0.0, 0.0);
-    vec3 b = vec3( hs.x, 0.0, 0.0);
-    return sdCapsule(lp, a, b, hs.y);
+    return sdCapsule(lp, vec3(-hs.x,0,0), vec3(hs.x,0,0), hs.y);
   }
 }
 
@@ -224,42 +223,77 @@ void main() {
 
   vec2 hit = rayMarch(ro, rd);
 
-  if (hit.y < 0.0) {
-    outColor = vec4(uBgColor, 1.0);
-    outNormalId = vec4(0.0, 0.0, 0.0, -1.0);
-    return;
-  }
+  // Default to background
+  outColor = vec4(uBgColor, 1.0);
+  outNormalId = vec4(0.0, 0.0, 0.0, -1.0);
 
-  vec3 p = ro + rd * hit.x;
-  vec3 normal = calcNormal(p, int(hit.y));
-  vec3 baseColor = getObjectColor(hit.y);
-  float opacity = getObjectOpacity(hit.y);
+  if (hit.y >= 0.0) {
+    vec3 p = ro + rd * hit.x;
+    vec3 normal = calcNormal(p, int(hit.y));
+    vec3 baseColor = getObjectColor(hit.y);
+    float opacity = getObjectOpacity(hit.y);
 
-  // Flash: blend toward white on color change
-  int hitIdx = int(hit.y);
-  float flash = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].y : 0.0;
-  baseColor = mix(baseColor, vec3(1.0), flash * 0.5);
+    // Flash: blend toward white on color change
+    int hitIdx = int(hit.y);
+    float flash = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].y : 0.0;
+    baseColor = mix(baseColor, vec3(1.0), flash * 0.5);
 
-  // Atlas texture on front face (Z+)
-  if (hitIdx >= 0 && hitIdx < MAX_OBJECTS) {
-    vec4 texRect = uTexRect[hitIdx];
-    if (texRect.z > 0.0) {
-      vec3 lp = p - uPosType[hitIdx].xyz;
-      vec3 hs = uSizeRadius[hitIdx].xyz;
-      if (lp.z > hs.z - 0.003) {
-        vec2 surfUV = vec2(lp.x / hs.x * 0.5 + 0.5, 1.0 - (lp.y / hs.y * 0.5 + 0.5));
-        vec2 atlasUV = texRect.xy + clamp(surfUV, 0.0, 1.0) * texRect.zw;
-        vec4 texColor = texture(uAtlasTex, atlasUV);
-        baseColor = mix(baseColor, texColor.rgb, texColor.a);
+    // Atlas texture on front face (Z+) for non-skinOnly objects
+    if (hitIdx >= 0 && hitIdx < MAX_OBJECTS) {
+      vec4 texRect = uTexRect[hitIdx];
+      if (texRect.z > 0.0) {
+        vec3 lp = p - uPosType[hitIdx].xyz;
+        vec3 hs = uSizeRadius[hitIdx].xyz;
+        if (lp.z > hs.z - 0.003) {
+          vec2 surfUV = vec2(lp.x / hs.x * 0.5 + 0.5, 1.0 - (lp.y / hs.y * 0.5 + 0.5));
+          vec2 atlasUV = texRect.xy + clamp(surfUV, 0.0, 1.0) * texRect.zw;
+          vec4 texColor = texture(uAtlasTex, atlasUV);
+          baseColor = mix(baseColor, texColor.rgb, texColor.a);
+        }
       }
     }
+
+    // Toon shading
+    vec3 color = toonShade(p, normal, rd, baseColor);
+    outColor = vec4(color, opacity);
+    outNormalId = vec4(normal, hit.y);
   }
 
-  // Toon shading (no outline — handled in edge detection pass)
-  vec3 color = toonShade(p, normal, rd, baseColor);
+  // ── skinOnly overlay: ray-plane intersection for excluded objects ──
+  int numObj = int(uNumObjPad.x);
+  for (int i = 0; i < MAX_OBJECTS; i++) {
+    if (i >= numObj) break;
+    if (uEffect[i].w < 0.5) continue; // not skinOnly
+    vec4 texRect = uTexRect[i];
+    if (texRect.z <= 0.0) continue; // no texture
 
-  outColor = vec4(color, opacity);
-  outNormalId = vec4(normal, hit.y);
+    vec3 objPos = uPosType[i].xyz;
+    vec3 hs = uSizeRadius[i].xyz;
+    float frontZ = objPos.z + hs.z;
+
+    // Ray-plane intersection: plane at z = frontZ
+    if (abs(rd.z) < 1e-6) continue; // ray parallel to plane
+    float t = (frontZ - ro.z) / rd.z;
+    if (t < 0.0) continue; // behind camera
+    if (hit.y >= 0.0 && t > hit.x) continue; // behind existing hit
+
+    // Hit point on the plane
+    vec3 hp = ro + rd * t;
+    vec2 local = hp.xy - objPos.xy;
+
+    // Check XY bounds
+    if (abs(local.x) > hs.x || abs(local.y) > hs.y) continue;
+
+    // Sample texture
+    vec2 surfUV = vec2(local.x / hs.x * 0.5 + 0.5, 1.0 - (local.y / hs.y * 0.5 + 0.5));
+    vec2 atlasUV = texRect.xy + clamp(surfUV, 0.0, 1.0) * texRect.zw;
+    vec4 texColor = texture(uAtlasTex, atlasUV);
+
+    if (texColor.a > 0.01) {
+      outColor = vec4(mix(outColor.rgb, texColor.rgb, texColor.a), 1.0);
+      outNormalId = vec4(0.0, 0.0, 1.0, float(i));
+    }
+  }
 }
 `
 
