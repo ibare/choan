@@ -8,7 +8,6 @@ import { usePointerHandlers } from '../interaction/usePointerHandlers'
 import { useKeyboardHandlers } from '../interaction/useKeyboardHandlers'
 import { useAnimateLoop } from '../rendering/useAnimateLoop'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
-import CanvasToolbar from './CanvasToolbar'
 import DragSelectBox from './DragSelectBox'
 import DistanceLabels from './DistanceLabels'
 import FrameIndicator from './FrameIndicator'
@@ -23,7 +22,7 @@ export default function SDFCanvas() {
   const animatedElementsRef = useRef<ChoanElement[]>([])
   const splitModeRef = useRef<{ active: boolean; count: number; elementId: string }>({ active: false, count: 2, elementId: '' })
 
-  const { elements, selectedIds, tool, setTool } = useChoanStore()
+  const { elements, selectedIds, tool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
   const [altPressed, setAltPressed] = useState(false)
 
@@ -120,7 +119,6 @@ export default function SDFCanvas() {
         onContextMenu={(e) => e.preventDefault()}
       />
       <DragSelectBox box={dragSelectBox} />
-      <CanvasToolbar tool={tool} onSetTool={setTool} />
       <DistanceLabels labels={distanceLabels} />
       <FrameIndicator />
       <RenderSettingsPanel />

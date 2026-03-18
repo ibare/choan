@@ -1,5 +1,7 @@
 import { useRef, useState, useCallback } from 'react'
 import SDFCanvas from './canvas/SDFCanvas'
+import CanvasToolbar from './canvas/CanvasToolbar'
+import LayerPanel from './panels/LayerPanel'
 import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
@@ -8,7 +10,7 @@ import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
 
 export default function App() {
-  const { elements, animationBundles, loadFile, reset } = useChoanStore()
+  const { elements, animationBundles, tool, setTool, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -104,6 +106,10 @@ export default function App() {
       </div>
 
       <div className="main">
+        <div className="left-panel">
+          <CanvasToolbar tool={tool} onSetTool={setTool} />
+          <LayerPanel />
+        </div>
         <div className="main-center">
           <div className="canvas-area">
             <SDFCanvas />

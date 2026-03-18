@@ -118,6 +118,16 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 /* ── Main ────────────────────────────────────── */
 .main { display: flex; flex: 1; overflow: hidden; }
 
+.left-panel {
+  width: 200px;
+  background: var(--surface);
+  border-right: 1.5px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 .main-center { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 
 .canvas-area { flex: 1; position: relative; overflow: hidden; }
@@ -292,27 +302,22 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 input[type="range"] { accent-color: var(--accent); }
 input[type="checkbox"] { accent-color: var(--accent); }
 
-/* ── Canvas floating toolbar ─────────────────── */
-.canvas-toolbar {
-  position: absolute;
-  top: 12px;
-  left: 12px;
+/* ── Side toolbar (left panel) ───────────────── */
+.side-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 2px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 10px;
-  padding: 3px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  z-index: 5;
+  padding: 6px;
+  border-bottom: 1.5px solid var(--border);
+  flex-shrink: 0;
 }
 
-.canvas-tool {
+.side-tool {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: none;
   border-radius: 7px;
   background: transparent;
@@ -320,8 +325,66 @@ input[type="checkbox"] { accent-color: var(--accent); }
   cursor: pointer;
   transition: all 0.1s;
 }
-.canvas-tool:hover { background: var(--bg); color: var(--text); }
-.canvas-tool.active { background: var(--accent); color: #fff; }
+.side-tool:hover { background: var(--bg); color: var(--text); }
+.side-tool.active { background: var(--accent); color: #fff; }
+
+/* ── Layer panel ────────────────────────────── */
+.layer-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.layer-panel-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 10px 4px;
+  flex-shrink: 0;
+}
+
+.layer-panel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.layer-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 10px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 0 4px;
+  transition: background 0.1s;
+  user-select: none;
+}
+.layer-item:hover { background: var(--bg); }
+.layer-item.selected { background: var(--accent); color: #fff; }
+
+.layer-item-icon {
+  display: flex;
+  align-items: center;
+  width: 14px;
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+.layer-item.selected .layer-item-icon { opacity: 1; }
+
+.layer-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ── Color picker toolbar ───────────────────── */
 .color-picker-toolbar { top: 54px; gap: 3px; padding: 4px; }
