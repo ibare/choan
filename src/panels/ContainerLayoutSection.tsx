@@ -14,15 +14,15 @@ export default function ContainerLayoutSection({ el, childCount, onChange }: Pro
       <div className="sub-title">Container Layout</div>
 
       <label className="field-label">Direction</label>
-      <select
-        className="field-select"
-        value={el.layoutDirection ?? 'free'}
-        onChange={(e) => onChange({ layoutDirection: e.target.value })}
-      >
-        <option value="free">Free</option>
-        <option value="column">Column</option>
-        <option value="row">Row</option>
-      </select>
+      <div className="radio-group">
+        {(['free', 'column', 'row'] as const).map((dir) => (
+          <label key={dir} className={`radio-option ${(el.layoutDirection ?? 'free') === dir ? 'active' : ''}`}>
+            <input type="radio" name="layoutDirection" value={dir} checked={(el.layoutDirection ?? 'free') === dir}
+              onChange={() => onChange({ layoutDirection: dir })} />
+            {dir.charAt(0).toUpperCase() + dir.slice(1)}
+          </label>
+        ))}
+      </div>
 
       {(el.layoutDirection === 'row' || el.layoutDirection === 'column') && (
         <>

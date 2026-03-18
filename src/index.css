@@ -202,6 +202,24 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 
 .field-value { font-size: 12px; color: var(--text); padding: 4px 0; }
 
+.radio-group { display: flex; gap: 2px; }
+.radio-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+  font-size: 11px;
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.1s;
+}
+.radio-option input { display: none; }
+.radio-option:hover { border-color: var(--text-muted); }
+.radio-option.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
 /* ── State items ─────────────────────────────── */
 .state-item {
   display: flex;
