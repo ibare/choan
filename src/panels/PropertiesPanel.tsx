@@ -153,7 +153,14 @@ export default function PropertiesPanel() {
       })()}
 
       {isContainer && (
-        <ContainerLayoutSection el={el} childCount={childCount} onChange={handleContainerProp} />
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
+            <input type="checkbox" id="frameless" checked={!el.skin && (el.skinOnly ?? false)}
+              onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked, skin: e.target.checked ? undefined : el.skin })} />
+            <label htmlFor="frameless" style={{ fontSize: 11 }}>Frameless</label>
+          </div>
+          <ContainerLayoutSection el={el} childCount={childCount} onChange={handleContainerProp} />
+        </>
       )}
 
       {isChild && parentEl && (
