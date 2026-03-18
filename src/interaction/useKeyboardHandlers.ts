@@ -8,9 +8,16 @@ import { resolveHotkey } from './hotkeyRegistry'
 
 export type ActionHandler = () => void
 
+export interface SplitMode {
+  active: boolean
+  count: number       // 1 = cancel, 2+ = split into N
+  elementId: string
+}
+
 export function useKeyboardHandlers(
   colorPickerOpenRef: MutableRefObject<boolean>,
   colorPickerHoverRef: MutableRefObject<number>,
+  splitModeRef: MutableRefObject<SplitMode>,
   customActions?: Record<string, ActionHandler>,
 ): void {
   const { removeElement, setTool } = useChoanStore()
@@ -18,12 +25,46 @@ export function useKeyboardHandlers(
   const customActionsRef = useRef(customActions)
   customActionsRef.current = customActions
 
+  const executeSplit = useCallback(() => {
+    const { count, elementId } = splitModeRef.current
+    splitModeRef.current = { active: false, count: 2, elementId: '' }
+
+    if (count <= 1) return // 1 = cancel
+
+    const store = useChoanStore.getState()
+    const el = store.elements.find((e) => e.id === elementId)
+    if (!el) return
+
+    const sliceW = el.width / count
+    const newIds: string[] = []
+    for (let i = 0; i < count; i++) {
+      const id = nanoid()
+      newIds.push(id)
+      store.addElement({
+        ...el,
+        id,
+        x: el.x + sliceW * i,
+        width: sliceW,
+        label: el.label,
+        parentId: el.parentId,
+      })
+    }
+
+    store.removeElement(elementId)
+    store.setSelectedIds(newIds)
+  }, [])
+
   const builtinActions = useCallback((): Record<string, ActionHandler> => ({
     'escape': () => {
+      if (splitModeRef.current.active) {
+        splitModeRef.current = { active: false, count: 2, elementId: '' }
+        return
+      }
       colorPickerOpenRef.current = false
       colorPickerHoverRef.current = -1
     },
     'delete': () => {
+      if (splitModeRef.current.active) return
       const { selectedIds } = useChoanStore.getState()
       for (const id of selectedIds) removeElement(id)
     },
@@ -43,7 +84,27 @@ export function useKeyboardHandlers(
     },
     'tool:select': () => setTool('select'),
     'tool:rectangle': () => setTool('rectangle'),
-  }), [removeElement, setTool, colorPickerOpenRef, colorPickerHoverRef])
+
+    // Split mode
+    'split:enter': () => {
+      const { selectedIds } = useChoanStore.getState()
+      if (selectedIds.length !== 1) return
+      splitModeRef.current = { active: true, count: 2, elementId: selectedIds[0] }
+    },
+    'split:confirm': () => {
+      if (!splitModeRef.current.active) return
+      executeSplit()
+    },
+    'split:1': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 1 } },
+    'split:2': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 2 } },
+    'split:3': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 3 } },
+    'split:4': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 4 } },
+    'split:5': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 5 } },
+    'split:6': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 6 } },
+    'split:7': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 7 } },
+    'split:8': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 8 } },
+    'split:9': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 9 } },
+  }), [removeElement, setTool, colorPickerOpenRef, colorPickerHoverRef, executeSplit])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,7 +114,6 @@ export function useKeyboardHandlers(
       const binding = resolveHotkey(e)
       if (!binding) return
 
-      // Check custom actions first, then builtins
       const custom = customActionsRef.current?.[binding.action]
       if (custom) { custom(); return }
 

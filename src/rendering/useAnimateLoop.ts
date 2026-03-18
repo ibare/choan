@@ -33,6 +33,7 @@ export function useAnimateLoop({
   colorPickerOpenRef,
   colorPickerHoverRef,
   animatedElementsRef,
+  splitModeRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
@@ -49,6 +50,7 @@ export function useAnimateLoop({
   colorPickerOpenRef: MutableRefObject<boolean>
   colorPickerHoverRef: MutableRefObject<number>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
+  splitModeRef: MutableRefObject<{ active: boolean; count: number; elementId: string }>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -109,6 +111,7 @@ export function useAnimateLoop({
         canvasSizeRef.current,
         zoomScaleRef.current,
         rs,
+        splitModeRef.current,
       )
     }
     animate()

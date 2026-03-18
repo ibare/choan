@@ -25,6 +25,19 @@ const bindings: HotkeyBinding[] = [
   // ── Tools ──
   { key: 'v', action: 'tool:select',            label: 'Select tool' },
   { key: 'r', action: 'tool:rectangle',         label: 'Rectangle tool' },
+
+  // ── Split ──
+  { key: 'n', action: 'split:enter',            label: 'Split selected element' },
+  { key: 'Enter', action: 'split:confirm',      label: 'Confirm split' },
+  { key: '1', action: 'split:1',                label: 'Split: 1 (cancel)' },
+  { key: '2', action: 'split:2',                label: 'Split: 2' },
+  { key: '3', action: 'split:3',                label: 'Split: 3' },
+  { key: '4', action: 'split:4',                label: 'Split: 4' },
+  { key: '5', action: 'split:5',                label: 'Split: 5' },
+  { key: '6', action: 'split:6',                label: 'Split: 6' },
+  { key: '7', action: 'split:7',                label: 'Split: 7' },
+  { key: '8', action: 'split:8',                label: 'Split: 8' },
+  { key: '9', action: 'split:9',                label: 'Split: 9' },
 ]
 
 /** Test whether a keyboard event matches a binding. */

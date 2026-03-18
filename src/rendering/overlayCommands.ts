@@ -16,6 +16,12 @@ import {
 import { FRUSTUM } from '../engine/scene'
 import { pixelToWorld } from '../coords/coordinateSystem'
 
+export interface SplitOverlay {
+  active: boolean
+  count: number
+  elementId: string
+}
+
 export function drawOverlay(
   ov: OverlayRenderer,
   selectedIds: string[],
@@ -27,6 +33,7 @@ export function drawOverlay(
   canvasSize: { w: number; h: number },
   zoomScale: number,
   rs: RenderSettings,
+  splitOverlay?: SplitOverlay,
 ): void {
   const { w, h } = canvasSize
   const aspect = w / h
@@ -97,6 +104,24 @@ export function drawOverlay(
           ov.drawDiscScreen(sx, sy, isHovered ? discR * 1.3 : discR, [((hex >> 16) & 0xFF) / 255, ((hex >> 8) & 0xFF) / 255, (hex & 0xFF) / 255, 1])
         }
       }
+    }
+  }
+
+  // Split mode guide lines
+  if (splitOverlay?.active && splitOverlay.count > 1) {
+    const splitEl = elements.find((e) => e.id === splitOverlay.elementId)
+    if (splitEl) {
+      const SPLIT_COLOR: [number, number, number, number] = [0.9, 0.2, 0.2, 0.85]
+      ov.setZ(splitEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.02)
+      const verts: number[] = []
+      for (let i = 1; i < splitOverlay.count; i++) {
+        const xPx = splitEl.x + (splitEl.width / splitOverlay.count) * i
+        const top = p2w(xPx, splitEl.y)
+        const bot = p2w(xPx, splitEl.y + splitEl.height)
+        verts.push(...top, ...bot)
+      }
+      if (verts.length > 0) ov.drawLines(new Float32Array(verts), SPLIT_COLOR)
+      ov.setZ(0)
     }
   }
 }

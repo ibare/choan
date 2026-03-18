@@ -21,6 +21,7 @@ export default function SDFCanvas() {
   const zoomScaleRef = useRef(1)
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
   const animatedElementsRef = useRef<ChoanElement[]>([])
+  const splitModeRef = useRef<{ active: boolean; count: number; elementId: string }>({ active: false, count: 2, elementId: '' })
 
   const { elements, selectedIds, tool, setTool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
@@ -36,13 +37,14 @@ export default function SDFCanvas() {
     snapLinesRef,
   } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef })
 
-  useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef)
+  useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef)
 
   useAnimateLoop({
     rendererRef, controlsRef, canvasSizeRef, zoomScaleRef, distMeasuresRef,
     isDraggingRef, dragGroupIdsRef, isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef, snapLinesRef, colorPickerOpenRef, colorPickerHoverRef,
     animatedElementsRef,
+    splitModeRef,
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {
