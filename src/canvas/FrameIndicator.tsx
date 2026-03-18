@@ -4,22 +4,18 @@ import { useEffect, useRef, useState } from 'react'
 
 export default function FrameIndicator() {
   const [fps, setFps] = useState(0)
-  const [frame, setFrame] = useState(0)
   const rafRef = useRef(0)
   const frameCountRef = useRef(0)
   const lastTimeRef = useRef(performance.now())
-  const totalFrameRef = useRef(0)
 
   useEffect(() => {
     const tick = (now: number) => {
       rafRef.current = requestAnimationFrame(tick)
       frameCountRef.current++
-      totalFrameRef.current++
 
       const elapsed = now - lastTimeRef.current
       if (elapsed >= 500) {
         setFps(Math.round((frameCountRef.current / elapsed) * 1000))
-        setFrame(totalFrameRef.current)
         frameCountRef.current = 0
         lastTimeRef.current = now
       }
@@ -34,8 +30,6 @@ export default function FrameIndicator() {
     <div className="frame-indicator">
       <span className="frame-indicator-dot" style={{ background: dotColor }} />
       <span className="frame-indicator-fps">{fps} fps</span>
-      <span className="frame-indicator-sep">/</span>
-      <span className="frame-indicator-frame">f {frame}</span>
     </div>
   )
 }
