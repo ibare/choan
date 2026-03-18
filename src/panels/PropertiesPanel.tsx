@@ -7,7 +7,11 @@ import TriggersSection from './TriggersSection'
 
 const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
-const SKINS = ['', 'switch'] // '' = no skin
+const SKINS = [
+  '', 'switch', 'checkbox', 'radio', 'button', 'slider',
+  'text-input', 'progress', 'badge', 'star-rating', 'avatar',
+  'search', 'dropdown', 'text',
+]
 
 export default function PropertiesPanel() {
   const { elements, selectedIds, updateElement, removeElement, runLayout, animationBundles } = useChoanStore()
@@ -71,7 +75,10 @@ export default function PropertiesPanel() {
       )}
 
       <label className="field-label">Skin</label>
-      <select className="field-select" value={el.skin ?? ''} onChange={(e) => updateElement(el.id, { skin: e.target.value || undefined })}>
+      <select className="field-select" value={el.skin ?? ''} onChange={(e) => {
+        const skin = e.target.value || undefined
+        updateElement(el.id, { skin, skinOnly: !!skin })
+      }}>
         {SKINS.map((s) => <option key={s} value={s}>{s || 'None'}</option>)}
       </select>
 
@@ -83,23 +90,67 @@ export default function PropertiesPanel() {
         </div>
       )}
 
-      {el.skin === 'switch' && (
-        <>
-          <label className="field-label">State</label>
-          <div className="radio-group">
-            {(['Off', 'On'] as const).map((label, i) => {
-              const isActive = !!(el.componentState as Record<string, unknown> | undefined)?.on === (i === 1)
-              return (
-                <label key={label} className={`radio-option ${isActive ? 'active' : ''}`}>
-                  <input type="radio" name="switchState" checked={isActive}
-                    onChange={() => updateElement(el.id, { componentState: { on: i === 1 } })} />
-                  {label}
-                </label>
-              )
-            })}
-          </div>
+      {el.skin && (() => {
+        const cs = (el.componentState ?? {}) as Record<string, unknown>
+        const setCS = (patch: Record<string, unknown>) => updateElement(el.id, { componentState: { ...cs, ...patch } })
+        const toggle = (key: string) => <div className="radio-group">
+          {['Off', 'On'].map((l, i) => <label key={l} className={`radio-option ${!!cs[key] === (i === 1) ? 'active' : ''}`}>
+            <input type="radio" checked={!!cs[key] === (i === 1)} onChange={() => setCS({ [key]: i === 1 })} />{l}
+          </label>)}
+        </div>
+        const rangeUI = (key: string, label: string) => <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <input type="range" min={0} max={1} step={0.01} value={Number(cs[key]) || 0} style={{ flex: 1 }}
+            onChange={(e) => setCS({ [key]: Number(e.target.value) })} />
+          <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round((Number(cs[key]) || 0) * 100)}%</span>
+        </div>
+        const textUI = (key: string, placeholder: string) =>
+          <input className="field-input" value={(cs[key] as string) || ''} placeholder={placeholder}
+            onChange={(e) => setCS({ [key]: e.target.value })} />
+
+        return <>
+          {(el.skin === 'switch') && <><label className="field-label">State</label>{toggle('on')}</>}
+          {(el.skin === 'checkbox') && <><label className="field-label">Checked</label>{toggle('checked')}</>}
+          {(el.skin === 'radio') && <><label className="field-label">Selected</label>{toggle('selected')}</>}
+          {(el.skin === 'button') && <>
+            <label className="field-label">Label</label>{textUI('label', 'Button')}
+            <label className="field-label">Pressed</label>{toggle('pressed')}
+          </>}
+          {(el.skin === 'slider') && <><label className="field-label">Value</label>{rangeUI('value', 'Value')}</>}
+          {(el.skin === 'text-input') && <>
+            <label className="field-label">Placeholder</label>{textUI('placeholder', 'Type here...')}
+            <label className="field-label">Focused</label>{toggle('focused')}
+          </>}
+          {(el.skin === 'progress') && <><label className="field-label">Progress</label>{rangeUI('value', 'Progress')}</>}
+          {(el.skin === 'badge') && <><label className="field-label">Count</label>
+            <input className="field-input" type="number" min={0} value={Number(cs.count) || 0}
+              onChange={(e) => setCS({ count: Number(e.target.value) })} /></>}
+          {(el.skin === 'star-rating') && <><label className="field-label">Rating</label>
+            <input className="field-input" type="number" min={0} max={5} value={Number(cs.rating) || 0}
+              onChange={(e) => setCS({ rating: Number(e.target.value) })} /></>}
+          {(el.skin === 'avatar') && <>
+            <label className="field-label">Initials</label>{textUI('initials', 'AB')}
+            <label className="field-label">Online</label>{toggle('online')}
+          </>}
+          {(el.skin === 'search') && <><label className="field-label">Query</label>{textUI('query', 'Search...')}</>}
+          {(el.skin === 'dropdown') && <>
+            <label className="field-label">Label</label>{textUI('label', 'Select...')}
+            <label className="field-label">Open</label>{toggle('open')}
+          </>}
+          {(el.skin === 'text') && <>
+            <label className="field-label">Text</label>{textUI('text', 'Text')}
+            <label className="field-label">Font Size</label>
+            <input className="field-input" type="number" min={8} value={Number(cs.fontSize) || ''}
+              placeholder="auto" onChange={(e) => setCS({ fontSize: Number(e.target.value) || undefined })} />
+            <label className="field-label">Align</label>
+            <div className="radio-group">
+              {(['left', 'center', 'right'] as const).map((a) => <label key={a} className={`radio-option ${(cs.align || 'center') === a ? 'active' : ''}`}>
+                <input type="radio" checked={(cs.align || 'center') === a} onChange={() => setCS({ align: a })} />{a}
+              </label>)}
+            </div>
+            <label className="field-label">Bold</label>{toggle('bold')}
+          </>}
         </>
-      )}
+      })()}
 
       {isContainer && (
         <ContainerLayoutSection el={el} childCount={childCount} onChange={handleContainerProp} />
