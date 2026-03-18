@@ -7,6 +7,8 @@ import type { Camera } from './camera'
 export interface OrbitControls {
   update(): void
   dispose(): void
+  getAngles(): { theta: number; phi: number }
+  setAngles(theta: number, phi: number): void
 }
 
 export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): OrbitControls {
@@ -157,8 +159,11 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     canvas.removeEventListener('contextmenu', onContextMenu)
   }
 
+  function getAngles() { return { theta, phi } }
+  function setAngles(t: number, p: number) { theta = t; phi = p }
+
   // Initialize camera position
   update()
 
-  return { update, dispose }
+  return { update, dispose, getAngles, setAngles }
 }

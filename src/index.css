@@ -386,6 +386,15 @@ input[type="checkbox"] { accent-color: var(--accent); }
   white-space: nowrap;
 }
 
+/* ── Navigation Gizmo ───────────────────────── */
+.navigation-gizmo {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  cursor: pointer;
+  z-index: 5;
+}
+
 /* ── Color picker toolbar ───────────────────── */
 .color-picker-toolbar { top: 54px; gap: 3px; padding: 4px; }
 

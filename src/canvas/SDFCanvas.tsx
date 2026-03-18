@@ -11,6 +11,7 @@ import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import DragSelectBox from './DragSelectBox'
 import DistanceLabels from './DistanceLabels'
 import FrameIndicator from './FrameIndicator'
+import NavigationGizmo from './NavigationGizmo'
 
 export default function SDFCanvas() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -122,6 +123,7 @@ export default function SDFCanvas() {
       <DistanceLabels labels={distanceLabels} />
       <FrameIndicator />
       <RenderSettingsPanel />
+      <NavigationGizmo controlsRef={controlsRef} />
     </div>
   )
 }
