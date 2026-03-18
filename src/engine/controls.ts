@@ -80,7 +80,29 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
 
   function onWheel(e: WheelEvent) {
     e.preventDefault()
-    radiusVel += e.deltaY * zoomSpeed * radius
+
+    // Cursor-centered zoom: compute the world point under the cursor,
+    // apply zoom, then pan so that point stays under the cursor.
+    const rect = canvas.getBoundingClientRect()
+    const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    const ndcY = 1 - ((e.clientY - rect.top) / rect.height) * 2
+
+    // World-space offset of cursor relative to target at current radius
+    const aspect = rect.width / rect.height
+    const fovRad = camera.fov * Math.PI / 180
+    const halfH = Math.tan(fovRad / 2) * radius
+    const halfW = halfH * aspect
+    const cursorWX = ndcX * halfW
+    const cursorWY = ndcY * halfH
+
+    const delta = e.deltaY * zoomSpeed * radius
+    const newRadius = Math.max(1, Math.min(200, radius + delta))
+    const scale = 1 - newRadius / radius
+
+    // Pan toward cursor proportionally to zoom change
+    panX += cursorWX * scale
+    panY += cursorWY * scale
+    radius = newRadius
   }
 
   function onContextMenu(e: Event) {
