@@ -69,6 +69,24 @@ export default function PropertiesPanel() {
         </>
       )}
 
+      {el.role === 'switch' && (
+        <>
+          <label className="field-label">State</label>
+          <div className="radio-group">
+            {(['Off', 'On'] as const).map((label, i) => {
+              const isActive = !!(el.componentState as Record<string, unknown> | undefined)?.on === (i === 1)
+              return (
+                <label key={label} className={`radio-option ${isActive ? 'active' : ''}`}>
+                  <input type="radio" name="switchState" checked={isActive}
+                    onChange={() => updateElement(el.id, { componentState: { on: i === 1 } })} />
+                  {label}
+                </label>
+              )
+            })}
+          </div>
+        </>
+      )}
+
       {isContainer && (
         <ContainerLayoutSection el={el} childCount={childCount} onChange={handleContainerProp} />
       )}
