@@ -16,7 +16,7 @@ import { applyMultiSelectTint } from './multiSelectTint'
 import { drawOverlay } from './overlayCommands'
 import { kfAnimator } from './kfAnimator'
 import { createLayoutAnimator } from '../layout/animator'
-import { paintComponent } from '../engine/painters'
+import { paintComponent, type StrokeStyle } from '../engine/painters'
 
 export function useAnimateLoop({
   rendererRef,
@@ -101,6 +101,11 @@ export function useAnimateLoop({
 
       // Paint component textures into atlas (rebuild when any component is dirty)
       const dpr = window.devicePixelRatio || 1
+      const ec = rs.edgeColor
+      const strokeStyle: StrokeStyle = {
+        color: `rgb(${Math.round(ec[0] * 255)},${Math.round(ec[1] * 255)},${Math.round(ec[2] * 255)})`,
+        width: rs.outlineWidth * 0.5,
+      }
       const componentEls = animatedElements.filter(
         (el) => el.role && el.role !== 'container' && el.role !== 'image',
       )
@@ -108,7 +113,7 @@ export function useAnimateLoop({
       for (const el of componentEls) {
         const texW = Math.round(el.width * dpr)
         const texH = Math.round(el.height * dpr)
-        const stateKey = `${el.role}:${texW}x${texH}:${JSON.stringify(el.componentState ?? {})}`
+        const stateKey = `${el.role}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
         if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
       }
       if (atlasNeedsRebuild) {
@@ -121,8 +126,8 @@ export function useAnimateLoop({
           const region = renderer.atlas.allocate(el.id, texW, texH)
           if (region) {
             const ctx = renderer.atlas.getContext(region)
-            paintComponent(el.role!, ctx, texW, texH, el.componentState ?? {})
-            atlasDirty.set(el.id, `${el.role}:${texW}x${texH}:${JSON.stringify(el.componentState ?? {})}`)
+            paintComponent(el.role!, ctx, texW, texH, el.componentState ?? {}, strokeStyle)
+            atlasDirty.set(el.id, `${el.role}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`)
           }
         }
       }
