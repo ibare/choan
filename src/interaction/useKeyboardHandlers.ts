@@ -45,18 +45,29 @@ export function useKeyboardHandlers(
     const totalSize = sliceSize * count + gap * (count - 1)
     const startPos = (isH ? el.x : el.y) - (totalSize - (isH ? el.width : el.height)) / 2
 
+    // Collect children (for container duplication)
+    const children = store.elements.filter((e) => e.parentId === elementId)
+
     // Create at original position/size first (for spring animation)
     const newIds: string[] = []
     for (let i = 0; i < count; i++) {
       const id = nanoid()
       newIds.push(id)
       store.addElement({ ...el, id, x: el.x, y: el.y, width: el.width, height: el.height, label: el.label, parentId: el.parentId })
+
+      // Duplicate children into each new container
+      for (const child of children) {
+        const childId = nanoid()
+        store.addElement({ ...child, id: childId, parentId: id })
+      }
     }
 
+    // Remove original children then container
+    for (const child of children) store.removeElement(child.id)
     store.removeElement(elementId)
     store.setSelectedIds([])
 
-    // Next frame: update to final positions → spring animation
+    // Next frame: update to final positions → spring animation + re-layout children
     requestAnimationFrame(() => {
       const s = useChoanStore.getState()
       for (let i = 0; i < newIds.length; i++) {
@@ -64,6 +75,9 @@ export function useKeyboardHandlers(
           ? { x: startPos + (sliceSize + gap) * i, width: sliceSize }
           : { y: startPos + (sliceSize + gap) * i, height: sliceSize },
         )
+        if (el.layoutDirection && el.layoutDirection !== 'free') {
+          s.runLayout(newIds[i])
+        }
       }
     })
   }, [])

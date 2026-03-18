@@ -227,13 +227,15 @@ export function usePointerHandlers({
         const pixel = screenToPixel(e.clientX, e.clientY)
         const startMap = new Map<string, { x: number; y: number }>()
         if (currentSelectedIds.includes(hitId)) {
+          // Resolve group to include children even when already selected
+          const groupIds = resolveGroup(freshEls, hitId)
           if (pixel) dragStartPixelRef.current = pixel
-          for (const sid of currentSelectedIds) {
-            const ge = animEls.find((el) => el.id === sid)
-            if (ge) startMap.set(sid, { x: ge.x, y: ge.y })
+          for (const gid of groupIds) {
+            const ge = animEls.find((el) => el.id === gid)
+            if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
           }
           isDraggingRef.current = true
-          dragGroupIdsRef.current = currentSelectedIds
+          dragGroupIdsRef.current = groupIds
           dragGroupStartRef.current = startMap
           dragContainerIdRef.current = null
         } else {
