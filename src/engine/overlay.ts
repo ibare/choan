@@ -2,7 +2,7 @@
 // Renders lines and quads on top of the SDF scene (depth test disabled)
 
 import { createProgram } from './gl'
-import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT } from './overlayShaders'
+import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT, RECT_SCREEN_FRAG, TEX_SCREEN_VERT, TEX_SCREEN_FRAG } from './overlayShaders'
 
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
@@ -10,6 +10,8 @@ export interface OverlayRenderer {
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
   drawDisc(cx: number, cy: number, radius: number, color: [number, number, number, number]): void
   drawDiscScreen(canvasPx: number, canvasPy: number, radiusPx: number, color: [number, number, number, number]): void
+  drawRectScreen(canvasPx: number, canvasPy: number, widthPx: number, heightPx: number, color: [number, number, number, number]): void
+  drawTexturedScreen(canvasPx: number, canvasPy: number, sizePx: number, texture: WebGLTexture): void
   projectToScreen(wx: number, wy: number, z: number): { px: number; py: number }
   beginFrame(viewProj: Float32Array): void
   setZ(z: number): void
@@ -21,6 +23,8 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   const dashProgram = createProgram(gl, DASH_VERT, DASH_FRAG)
   const discProgram = createProgram(gl, DISC_VERT, DISC_FRAG)
   const discScreenProgram = createProgram(gl, DISC_SCREEN_VERT, DISC_FRAG)
+  const rectScreenProgram = createProgram(gl, DISC_SCREEN_VERT, RECT_SCREEN_FRAG)
+  const texScreenProgram = createProgram(gl, TEX_SCREEN_VERT, TEX_SCREEN_FRAG)
 
   // Line VAO
   const lineVao = gl.createVertexArray()!
@@ -157,6 +161,62 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindVertexArray(null)
   }
 
+  function drawTexturedScreen(canvasPx: number, canvasPy: number, sizePx: number, texture: WebGLTexture) {
+    const canvas = gl.canvas as HTMLCanvasElement
+    const cw = canvas.width, ch = canvas.height
+    const ndcX = canvasPx * 2 / cw - 1
+    const ndcY = 1 - canvasPy * 2 / ch
+    const ndcHW = sizePx / cw
+    const ndcHH = sizePx / ch
+
+    const data = new Float32Array([
+      ndcX - ndcHW, ndcY - ndcHH, 0, 1,
+      ndcX + ndcHW, ndcY - ndcHH, 1, 1,
+      ndcX + ndcHW, ndcY + ndcHH, 1, 0,
+      ndcX - ndcHW, ndcY - ndcHH, 0, 1,
+      ndcX + ndcHW, ndcY + ndcHH, 1, 0,
+      ndcX - ndcHW, ndcY + ndcHH, 0, 0,
+    ])
+
+    gl.useProgram(texScreenProgram)
+    gl.activeTexture(gl.TEXTURE3)
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.uniform1i(gl.getUniformLocation(texScreenProgram, 'uTex'), 3)
+
+    gl.bindVertexArray(discVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    gl.bindVertexArray(null)
+  }
+
+  function drawRectScreen(canvasPx: number, canvasPy: number, widthPx: number, heightPx: number, color: [number, number, number, number]) {
+    const canvas = gl.canvas as HTMLCanvasElement
+    const cw = canvas.width, ch = canvas.height
+    const ndcX = canvasPx * 2 / cw - 1
+    const ndcY = 1 - canvasPy * 2 / ch
+    const ndcHW = widthPx / cw
+    const ndcHH = heightPx / ch
+
+    const data = new Float32Array([
+      ndcX - ndcHW, ndcY - ndcHH, 0, 0,
+      ndcX + ndcHW, ndcY - ndcHH, 1, 0,
+      ndcX + ndcHW, ndcY + ndcHH, 1, 1,
+      ndcX - ndcHW, ndcY - ndcHH, 0, 0,
+      ndcX + ndcHW, ndcY + ndcHH, 1, 1,
+      ndcX - ndcHW, ndcY + ndcHH, 0, 1,
+    ])
+
+    gl.useProgram(rectScreenProgram)
+    gl.uniform4fv(gl.getUniformLocation(rectScreenProgram, 'uColor'), color)
+
+    gl.bindVertexArray(discVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    gl.bindVertexArray(null)
+  }
+
   function projectToScreen(wx: number, wy: number, z: number): { px: number; py: number } {
     if (!currentViewProj) return { px: 0, py: 0 }
     const vp = currentViewProj
@@ -202,6 +262,8 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteProgram(dashProgram)
     gl.deleteProgram(discProgram)
     gl.deleteProgram(discScreenProgram)
+    gl.deleteProgram(rectScreenProgram)
+    gl.deleteProgram(texScreenProgram)
     gl.deleteVertexArray(lineVao)
     gl.deleteBuffer(lineVbo)
     gl.deleteVertexArray(quadVao)
@@ -210,5 +272,5 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteBuffer(discVbo)
   }
 
-  return { drawLines, drawDashedLoop, drawQuads, drawDisc, drawDiscScreen, projectToScreen, beginFrame, setZ, dispose }
+  return { drawLines, drawDashedLoop, drawQuads, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
 }

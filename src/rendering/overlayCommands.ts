@@ -7,10 +7,8 @@ import type { OverlayRenderer } from '../engine/overlay'
 import type { ChoanElement } from '../store/useChoanStore'
 import type { SnapLine, DistanceMeasure } from '../canvas/snapUtils'
 import type { RenderSettings } from '../store/useRenderSettings'
-import { COLOR_FAMILIES } from '../canvas/materials'
 import {
   SELECTION_COLOR, SNAP_COLOR, DISTANCE_COLOR,
-  COLOR_PICKER_RING_BASE, COLOR_PICKER_RING_STEP, COLOR_PICKER_DISC_RADIUS,
   HANDLE_SIZE_PX, DISTANCE_TICK_PX,
 } from '../constants'
 import { FRUSTUM } from '../engine/scene'
@@ -35,6 +33,7 @@ export function drawOverlay(
   zoomScale: number,
   rs: RenderSettings,
   splitOverlay?: SplitOverlay,
+  colorWheelTex?: { texture: WebGLTexture; size: number; ringCount: number; getCellCenter: (fi: number, si: number) => { x: number; y: number } },
 ): void {
   const { w, h } = canvasSize
   const aspect = w / h
@@ -124,29 +123,31 @@ export function drawOverlay(
   }
   if (dVerts.length > 0) ov.drawLines(new Float32Array(dVerts), DISTANCE_COLOR)
 
-  // WebGL color picker (single selection only) — rendered in screen space
-  if (colorPickerOpen && selectedIds.length === 1) {
+  // WebGL color picker — color wheel texture, rendered in screen space
+  if (colorPickerOpen && selectedIds.length === 1 && colorWheelTex) {
     const pickEl = elements.find((e) => e.id === selectedIds[0])
     if (pickEl) {
-      // Project anchor (top-right corner) to screen pixel
       const [anchorWx, anchorWy] = p2w(pickEl.x + pickEl.width, pickEl.y)
       const anchorZ = pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
       const anchor = ov.projectToScreen(anchorWx, anchorWy, anchorZ)
 
       const dpr = window.devicePixelRatio || 1
-      const discR = COLOR_PICKER_DISC_RADIUS * dpr
-      const borderR = discR * 1.22
-      for (let fi = 0; fi < COLOR_FAMILIES.length; fi++) {
-        for (let si = 0; si < COLOR_FAMILIES[fi].shades.length; si++) {
-          const angle = (fi / COLOR_FAMILIES.length) * Math.PI * 2 - Math.PI / 2
-          const ring = (COLOR_PICKER_RING_BASE + si * COLOR_PICKER_RING_STEP) * dpr
-          const sx = anchor.px + Math.cos(angle) * ring
-          const sy = anchor.py - Math.sin(angle) * ring
-          const hex = COLOR_FAMILIES[fi].shades[si]
-          const idx = fi * 5 + si
-          const isHovered = idx === colorPickerHover, isActive = pickEl.color === hex
-          ov.drawDiscScreen(sx, sy, isHovered ? borderR * 1.3 : isActive ? borderR * 1.2 : borderR, isActive ? [0.36, 0.31, 0.81, 1] : [1, 1, 1, 0.9])
-          ov.drawDiscScreen(sx, sy, isHovered ? discR * 1.3 : discR, [((hex >> 16) & 0xFF) / 255, ((hex >> 8) & 0xFF) / 255, (hex & 0xFF) / 255, 1])
+      const wheelSizePx = colorWheelTex.size * dpr * 0.9
+      ov.drawTexturedScreen(anchor.px, anchor.py, wheelSizePx, colorWheelTex.texture)
+
+      // Highlight active/hovered swatch
+      if (colorPickerHover >= 0 || pickEl.color != null) {
+        const shadeCount = colorWheelTex.ringCount
+        const highlightIdx = colorPickerHover >= 0 ? colorPickerHover : -1
+
+        // Hover highlight
+        if (highlightIdx >= 0) {
+          const fi = Math.floor(highlightIdx / shadeCount)
+          const si = highlightIdx % shadeCount
+          const cell = colorWheelTex.getCellCenter(fi, si)
+          const cx = anchor.px + (cell.x - 0.5) * wheelSizePx * 2
+          const cy = anchor.py + (cell.y - 0.5) * wheelSizePx * 2
+          ov.drawDiscScreen(cx, cy, 8 * dpr, [1, 1, 1, 0.8])
         }
       }
     }

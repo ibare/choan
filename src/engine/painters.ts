@@ -733,6 +733,38 @@ function drawClouds(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number
   }
 }
 
+// ── Icon ──
+
+import { ICON_PATHS } from './iconPaths'
+
+function paintIcon(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, state: Record<string, unknown>, stroke: StrokeStyle) {
+  const name = (state.icon as string) || 'heart'
+  const pathData = ICON_PATHS[name]
+  if (!pathData) return
+
+  const padding = Math.min(w, h) * 0.15
+  const iconSize = Math.min(w - padding * 2, h - padding * 2)
+  const scale = iconSize / 256 // Phosphor icons use 256x256 viewBox
+  const offsetX = (w - iconSize) / 2
+  const offsetY = (h - iconSize) / 2
+
+  ctx.save()
+  ctx.translate(offsetX, offsetY)
+  ctx.scale(scale, scale)
+
+  const path = new Path2D(pathData)
+  const elColor = state._elColor as number | undefined
+  if (elColor != null) {
+    const r = (elColor >> 16) & 0xFF, g = (elColor >> 8) & 0xFF, b = elColor & 0xFF
+    ctx.fillStyle = `rgb(${r},${g},${b})`
+  } else {
+    ctx.fillStyle = stroke.color
+  }
+  ctx.fill(path)
+
+  ctx.restore()
+}
+
 // ── Registry ──
 
 export const painters: Record<string, PaintFn> = {
@@ -751,6 +783,7 @@ export const painters: Record<string, PaintFn> = {
   text: paintText,
   'table-skeleton': paintTableSkeleton,
   image: paintImage,
+  icon: paintIcon,
 }
 
 /** Paint a component into an atlas region context. Returns true if painter exists. */

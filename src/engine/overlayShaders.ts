@@ -78,6 +78,38 @@ void main() {
 }
 `
 
+// Screen-space rectangle: same vertex layout, no circular clip
+export const RECT_SCREEN_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 fragColor;
+void main() {
+  fragColor = uColor;
+}
+`
+
+// Screen-space textured quad: samples a texture instead of flat color
+export const TEX_SCREEN_VERT = /* glsl */ `#version 300 es
+layout(location = 0) in vec4 aData; // xy = NDC position, zw = UV (0..1)
+out vec2 vUV;
+void main() {
+  gl_Position = vec4(aData.xy, 0.0, 1.0);
+  vUV = aData.zw;
+}
+`
+
+export const TEX_SCREEN_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+out vec4 fragColor;
+in vec2 vUV;
+void main() {
+  vec4 c = texture(uTex, vUV);
+  if (c.a < 0.01) discard;
+  fragColor = c;
+}
+`
+
 export const DISC_FRAG = /* glsl */ `#version 300 es
 precision highp float;
 uniform vec4 uColor;

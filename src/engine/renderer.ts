@@ -8,6 +8,7 @@ import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, type SceneUBO } from './scene'
 import { createTextureAtlas, type TextureAtlas } from './textureAtlas'
+import { createColorWheel, type ColorWheelTexture } from './colorWheel'
 import { createOverlayRenderer, type OverlayRenderer } from './overlay'
 import { buildViewProjMatrix } from './camera'
 import { createGBuffer } from './fbo'
@@ -20,6 +21,7 @@ export interface SDFRenderer {
   camera: Camera
   overlay: OverlayRenderer
   atlas: TextureAtlas
+  colorWheel: ColorWheelTexture
   resize(width: number, height: number): void
   updateScene(elements: ChoanElement[], extrudeDepth?: number): void
   render(settings: RenderSettings): void
@@ -47,6 +49,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   // Texture atlas for component faces
   const atlas = createTextureAtlas(gl)
+  const colorWheel = createColorWheel(gl)
 
   // ── Pass 1: Geometry program (MRT → FBO) ──
   const geoProgram = createProgram(gl, RAYMARCH_VERT, RAYMARCH_FRAG)
@@ -238,6 +241,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.deleteFramebuffer(resolveFB)
     sceneUBO.dispose(gl)
     atlas.dispose(gl)
+    colorWheel.dispose(gl)
     overlay.dispose()
     gl.deleteProgram(geoProgram)
     gl.deleteProgram(edgeProgram)
@@ -246,5 +250,5 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   resize(container.clientWidth, container.clientHeight)
 
-  return { canvas, gl, camera, overlay, atlas, resize, updateScene, render, dispose }
+  return { canvas, gl, camera, overlay, atlas, colorWheel, resize, updateScene, render, dispose }
 }

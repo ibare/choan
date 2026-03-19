@@ -131,8 +131,9 @@ export function useAnimateLoop({
           const region = renderer.atlas.allocate(el.id, texW, texH)
           if (region) {
             const ctx = renderer.atlas.getContext(region)
-            paintComponent(el.skin!, ctx, texW, texH, el.componentState ?? {}, strokeStyle)
-            atlasDirty.set(el.id, `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`)
+            const compState = { ...el.componentState, _elColor: el.color }
+            paintComponent(el.skin!, ctx, texW, texH, compState, strokeStyle)
+            atlasDirty.set(el.id, `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${JSON.stringify(el.componentState ?? {})}`)
           }
         }
       }
@@ -152,6 +153,7 @@ export function useAnimateLoop({
         zoomScaleRef.current,
         rs,
         splitModeRef.current,
+        renderer.colorWheel,
       )
     }
     animate()

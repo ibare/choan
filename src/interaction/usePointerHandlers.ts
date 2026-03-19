@@ -159,7 +159,7 @@ export function usePointerHandlers({
         const rs = useRenderSettings.getState()
         const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
         const anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
-        if (handleColorPickerClick(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr, els, selId, e.altKey, update)) {
+        if (handleColorPickerClick(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr, els, selId, e.altKey, update, renderer.colorWheel)) {
           colorPickerOpenRef.current = false
           colorPickerHoverRef.current = -1
           return
@@ -341,7 +341,7 @@ export function usePointerHandlers({
         const rs = useRenderSettings.getState()
         const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
         const anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
-        const hover = computeColorPickerHover(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr)
+        const hover = computeColorPickerHover(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr, renderer.colorWheel)
         colorPickerHoverRef.current = hover
         setCursor(hover >= 0 ? 'pointer' : 'default')
       }

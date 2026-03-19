@@ -4,12 +4,13 @@ import { autoKeyframe } from '../animation/autoKeyframe'
 import type { AnimatableProperty } from '../animation/types'
 import ContainerLayoutSection from './ContainerLayoutSection'
 import TriggersSection from './TriggersSection'
+import { ICON_NAMES } from '../engine/iconPaths'
 
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 const SKINS = [
   '', 'switch', 'checkbox', 'radio', 'button', 'slider',
   'text-input', 'progress', 'badge', 'star-rating', 'avatar',
-  'search', 'dropdown', 'text', 'table-skeleton', 'image',
+  'search', 'dropdown', 'text', 'table-skeleton', 'image', 'icon',
 ]
 
 export default function PropertiesPanel() {
@@ -144,6 +145,13 @@ export default function PropertiesPanel() {
                 onChange={(e) => setCS({ seed: Number(e.target.value) })} />
               <button className="btn-small" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>Shuffle</button>
             </div>
+          </>}
+          {(el.skin === 'icon') && <>
+            <label className="field-label">Icon</label>
+            <select className="field-select" value={(cs.icon as string) || 'heart'}
+              onChange={(e) => setCS({ icon: e.target.value })}>
+              {ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </>}
         </>
       })()}

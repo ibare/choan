@@ -20,10 +20,10 @@ export const MULTI_SELECT_TINT = 0xff2222
 export const MULTI_SELECT_OPACITY = 0.8
 
 // ── Color picker geometry (pixel units, before zoom compensation) ──
-export const COLOR_PICKER_RING_BASE = 48    // radius of innermost ring
-export const COLOR_PICKER_RING_STEP = 28    // distance between rings
-export const COLOR_PICKER_DISC_RADIUS = 11  // colour swatch disc radius (px)
-export const COLOR_PICKER_HIT_RADIUS = 12   // pointer hit-test radius for a swatch (px)
+export const COLOR_PICKER_RING_BASE = 36    // radius of innermost ring center
+export const COLOR_PICKER_RING_STEP = 26    // distance between ring centers
+export const COLOR_PICKER_DISC_RADIUS = 13  // colour swatch half-size (px)
+export const COLOR_PICKER_HIT_RADIUS = 14   // pointer hit-test radius for a swatch (px)
 
 // ── Overlay geometry (pixel units, before zoom compensation) ──
 export const HANDLE_SIZE_PX = 8      // corner handle half-size
