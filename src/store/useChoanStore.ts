@@ -85,8 +85,10 @@ export function useChoanStore() {
     // UI store
     tool: ui.tool,
     drawColor: ui.drawColor,
+    pendingSkin: ui.pendingSkin,
     setTool: ui.setTool,
     setDrawColor: ui.setDrawColor,
+    setPendingSkin: ui.setPendingSkin,
 
     // Cross-store operations (stable module-level functions)
     removeElement,

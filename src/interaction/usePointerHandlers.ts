@@ -309,13 +309,16 @@ export function usePointerHandlers({
     if (!pixel) return
     drawStartPixelRef.current = pixel
     const id = nanoid()
+    const { pendingSkin, setPendingSkin } = useChoanStore.getState() as { pendingSkin: string | null; setPendingSkin: (s: string | null) => void }
     const newEl: ChoanElement = {
-      id, type: tool,
+      id, type: tool as ChoanElement['type'],
       label: tool === 'rectangle' ? 'Box' : tool === 'circle' ? 'Circle' : 'Line',
       role: tool === 'rectangle' ? 'container' : undefined,
       color: drawColor, x: pixel.x, y: pixel.y, z: 0, width: 1, height: 1, opacity: 1,
+      ...(pendingSkin ? { skin: pendingSkin, skinOnly: true } : {}),
     }
     addElement(newEl)
+    if (pendingSkin) setPendingSkin(null)
     selectElement(id)
     isDrawingRef.current = true
     drawElIdRef.current = id
