@@ -79,6 +79,10 @@ export function useKeyboardHandlers(
           s.runLayout(newIds[i])
         }
       }
+      // Re-layout parent container if it has auto layout
+      if (isAutoLayout && el.parentId) {
+        s.runLayout(el.parentId)
+      }
     })
   }, [])
 
