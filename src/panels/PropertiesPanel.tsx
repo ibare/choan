@@ -2,9 +2,12 @@ import { useChoanStore } from '../store/useChoanStore'
 import type { LineStyle } from '../store/useChoanStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
 import type { AnimatableProperty } from '../animation/types'
+import React from 'react'
 import ContainerLayoutSection from './ContainerLayoutSection'
 import TriggersSection from './TriggersSection'
-import { ICON_NAMES } from '../engine/iconPaths'
+import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
+import TilePopover, { type TileItem } from './TilePopover'
+import { paintComponent, type StrokeStyle } from '../engine/painters'
 
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 const SKINS = [
@@ -12,6 +15,40 @@ const SKINS = [
   'text-input', 'progress', 'badge', 'star-rating', 'avatar',
   'search', 'dropdown', 'text', 'table-skeleton', 'image', 'icon',
 ]
+
+function SkinPreview({ skin }: { skin: string }) {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null)
+  React.useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !skin) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const w = 60, h = 40
+    canvas.width = w * 2; canvas.height = h * 2
+    ctx.scale(2, 2)
+    ctx.clearRect(0, 0, w, h)
+    const stroke: StrokeStyle = { color: '#333', width: 1.5 }
+    paintComponent(skin, ctx as unknown as OffscreenCanvasRenderingContext2D, w, h, {}, stroke)
+  }, [skin])
+  if (!skin) return null
+  return <canvas ref={canvasRef} style={{ width: 60, height: 40, borderRadius: 3 }} />
+}
+
+const SKIN_TILES: TileItem[] = SKINS.map((s) => ({
+  value: s,
+  label: s || 'None',
+  icon: s ? <SkinPreview skin={s} /> : undefined,
+}))
+
+function IconSvg({ name, size = 16 }: { name: string; size?: number }) {
+  const d = ICON_PATHS[name]
+  if (!d) return null
+  return <svg viewBox="0 0 256 256" width={size} height={size} fill="currentColor"><path d={d} /></svg>
+}
+
+const ICON_TILES: TileItem[] = ICON_NAMES.map((n) => ({
+  value: n, label: n, icon: <IconSvg name={n} size={20} />,
+}))
 
 export default function PropertiesPanel() {
   const { elements, selectedIds, updateElement, removeElement, runLayout, animationBundles } = useChoanStore()
@@ -57,14 +94,18 @@ export default function PropertiesPanel() {
       <div className="field-value">{el.type}</div>
 
       <label className="field-label">Skin</label>
-      <select className="field-select" value={el.skin ?? ''} onChange={(e) => {
-        const skin = e.target.value || undefined
-        const patch: Record<string, unknown> = { skin, skinOnly: !!skin }
-        if (skin === 'image') patch.componentState = { seed: Math.floor(Math.random() * 9999) }
-        updateElement(el.id, patch)
-      }}>
-        {SKINS.map((s) => <option key={s} value={s}>{s || 'None'}</option>)}
-      </select>
+      <TilePopover
+        items={SKIN_TILES}
+        value={el.skin ?? ''}
+        columns={3}
+        placeholder="None"
+        onChange={(v) => {
+          const skin = v || undefined
+          const patch: Record<string, unknown> = { skin, skinOnly: !!skin }
+          if (skin === 'image') patch.componentState = { seed: Math.floor(Math.random() * 9999) }
+          updateElement(el.id, patch)
+        }}
+      />
 
       {el.skin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 0' }}>
@@ -148,10 +189,12 @@ export default function PropertiesPanel() {
           </>}
           {(el.skin === 'icon') && <>
             <label className="field-label">Icon</label>
-            <select className="field-select" value={(cs.icon as string) || 'heart'}
-              onChange={(e) => setCS({ icon: e.target.value })}>
-              {ICON_NAMES.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+            <TilePopover
+              items={ICON_TILES}
+              value={(cs.icon as string) || 'heart'}
+              columns={6}
+              onChange={(v) => setCS({ icon: v })}
+            />
           </>}
         </>
       })()}
