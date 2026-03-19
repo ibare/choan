@@ -5,6 +5,7 @@ import type { SnapLine } from '../canvas/snapUtils'
 import { computeSnapResize } from '../canvas/snapUtils'
 import { applyToSiblings } from './elementHelpers'
 import { MIN_ELEMENT_SIZE } from '../constants'
+import { FRAME_PRESETS } from '../engine/painters'
 
 /** Apply resize delta to the selected element with snap. */
 export function handleResizeMove(
@@ -23,10 +24,25 @@ export function handleResizeMove(
   const proposed = { x: cornerStart.x + dx, y: cornerStart.y + dy }
   const snap = computeSnapResize(anchor, proposed, elements.filter((e) => e.id !== selectedId))
   setSnapLines(snap.lines)
+
+  let newW = Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x))
+  let newH = Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y))
+
+  // Frame: lock aspect ratio
+  const el = elements.find((e) => e.id === selectedId)
+  if (el?.frame) {
+    const preset = FRAME_PRESETS[el.frame]
+    if (preset) {
+      const ratio = preset.ratio
+      if (newW / newH > ratio) newW = newH * ratio
+      else newH = newW / ratio
+    }
+  }
+
   applyToSiblings(update, elements, selectedId, {
-    x: Math.min(anchor.x, snap.x), y: Math.min(anchor.y, snap.y),
-    width: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x)),
-    height: Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y)),
+    x: Math.min(anchor.x, anchor.x + (snap.x > anchor.x ? 0 : -newW)),
+    y: Math.min(anchor.y, anchor.y + (snap.y > anchor.y ? 0 : -newH)),
+    width: newW, height: newH,
   }, altKey)
 }
 

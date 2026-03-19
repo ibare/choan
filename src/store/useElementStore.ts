@@ -39,6 +39,8 @@ export interface ChoanElement {
   layoutSizing?: 'equal' | 'fill' | 'fixed-ratio' | 'fixed-px'  // default: 'equal'
   layoutRatio?: number      // 0~1, used when sizing='fixed-ratio'
   triggers?: ElementTrigger[]
+  frame?: 'browser' | 'mobile'            // device frame (independent of skin, locked aspect ratio)
+  safeInset?: { top: number; bottom: number; left: number; right: number }
   skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')
   skinOnly?: boolean                      // hide SDF body, show only skin texture
   componentState?: Record<string, unknown>
@@ -94,6 +96,7 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
     direction,
     gap: container.layoutGap ?? 8,
     padding: container.layoutPadding ?? 8,
+    safeInset: container.safeInset,
     childCount: children.length,
     columns: container.layoutColumns ?? 2,
     sizings,

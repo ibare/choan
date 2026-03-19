@@ -7,10 +7,12 @@ import type { Tool } from './useElementStore'
 interface UIStore {
   tool: Tool
   drawColor: number
-  pendingSkin: string | null  // skin to apply on next draw-to-create
+  pendingSkin: string | null
+  pendingFrame: string | null
   setTool: (tool: Tool) => void
   setDrawColor: (color: number) => void
   setPendingSkin: (skin: string | null) => void
+  setPendingFrame: (frame: string | null) => void
   reset: () => void
 }
 
@@ -18,6 +20,7 @@ const initialState = {
   tool: 'select' as Tool,
   drawColor: 0xFFFFFF,
   pendingSkin: null as string | null,
+  pendingFrame: null as string | null,
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -25,5 +28,6 @@ export const useUIStore = create<UIStore>((set) => ({
   setTool: (tool) => set({ tool }),
   setDrawColor: (color) => set({ drawColor: color }),
   setPendingSkin: (skin) => set({ pendingSkin: skin }),
+  setPendingFrame: (frame) => set({ pendingFrame: frame }),
   reset: () => set(initialState),
 }))

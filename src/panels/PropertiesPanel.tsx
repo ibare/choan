@@ -93,7 +93,11 @@ export default function PropertiesPanel() {
       <label className="field-label">Type</label>
       <div className="field-value">{el.type}</div>
 
-      <label className="field-label">Skin</label>
+      {el.frame && (
+        <div className="field-value" style={{ fontWeight: 600 }}>Frame: {el.frame}</div>
+      )}
+
+      {!el.frame && <><label className="field-label">Skin</label>
       <TilePopover
         items={SKIN_TILES}
         value={el.skin ?? ''}
@@ -198,7 +202,7 @@ export default function PropertiesPanel() {
             />
           </>}
         </>
-      })()}
+      })()}</>}
 
       {isContainer && (
         <>

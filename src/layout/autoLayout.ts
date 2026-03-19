@@ -5,12 +5,12 @@ export interface LayoutInput {
   direction: 'free' | 'row' | 'column' | 'grid'
   gap: number
   padding: number
+  safeInset?: { top: number; bottom: number; left: number; right: number }
   childCount: number
   columns?: number
-  // Per-child sizing: 'equal' (default), 'fixed-ratio', 'fixed-px'
   sizings?: ('equal' | 'fill' | 'fixed-ratio' | 'fixed-px')[]
-  ratios?: (number | undefined)[]       // for fixed-ratio (0~1)
-  fixedSizes?: (number | undefined)[]   // for fixed-px (pixels)
+  ratios?: (number | undefined)[]
+  fixedSizes?: (number | undefined)[]
 }
 
 export interface LayoutRect {
@@ -86,13 +86,15 @@ function distribute(
 }
 
 export function computeAutoLayout(input: LayoutInput): LayoutRect[] {
-  const { container, direction, gap, padding, childCount, sizings, ratios, fixedSizes } = input
+  const { container, direction, gap, padding, childCount, sizings, ratios, fixedSizes, safeInset } = input
   if (childCount <= 0 || direction === 'free') return []
 
-  const innerX = container.x + padding
-  const innerY = container.y + padding
-  const innerW = container.width - 2 * padding
-  const innerH = container.height - 2 * padding
+  const st = safeInset?.top ?? 0, sb = safeInset?.bottom ?? 0
+  const sl = safeInset?.left ?? 0, sr = safeInset?.right ?? 0
+  const innerX = container.x + padding + sl
+  const innerY = container.y + padding + st
+  const innerW = container.width - 2 * padding - sl - sr
+  const innerH = container.height - 2 * padding - st - sb
 
   const results: LayoutRect[] = []
 

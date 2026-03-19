@@ -10,7 +10,7 @@ import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
 
 export default function App() {
-  const { elements, animationBundles, tool, setTool, pendingSkin, setPendingSkin, loadFile, reset } = useChoanStore()
+  const { elements, animationBundles, tool, setTool, pendingSkin, setPendingSkin, pendingFrame, setPendingFrame, loadFile, reset } = useChoanStore()
   const [projectName, setProjectName] = useState('My UI')
   const [exportMsg, setExportMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -107,7 +107,7 @@ export default function App() {
 
       <div className="main">
         <div className="left-panel">
-          <CanvasToolbar tool={tool} pendingSkin={pendingSkin} onSetTool={setTool} onSetPendingSkin={setPendingSkin} />
+          <CanvasToolbar tool={tool} pendingSkin={pendingSkin} pendingFrame={pendingFrame} onSetTool={setTool} onSetPendingSkin={setPendingSkin} onSetPendingFrame={setPendingFrame} />
           <LayerPanel />
         </div>
         <div className="main-center">

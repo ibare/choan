@@ -6,13 +6,16 @@ import {
   ToggleRight, CheckSquare, RadioButton, CursorClick, SlidersHorizontal,
   TextT, ChartBar, CircleHalf, Star, UserCircle,
   MagnifyingGlass, CaretDown, TextAa, Table, Image, Heart,
+  Browser, DeviceMobile,
 } from '@phosphor-icons/react'
 
 interface CanvasToolbarProps {
   tool: Tool
   pendingSkin: string | null
+  pendingFrame: string | null
   onSetTool: (t: Tool) => void
   onSetPendingSkin: (skin: string | null) => void
+  onSetPendingFrame: (frame: string | null) => void
 }
 
 const SKIN_TOOLS: { skin: string; icon: React.ReactNode; label: string }[] = [
@@ -34,16 +37,28 @@ const SKIN_TOOLS: { skin: string; icon: React.ReactNode; label: string }[] = [
   { skin: 'icon', icon: <Heart size={18} />, label: 'Icon' },
 ]
 
-export default function CanvasToolbar({ tool, pendingSkin, onSetTool, onSetPendingSkin }: CanvasToolbarProps) {
+export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTool, onSetPendingSkin, onSetPendingFrame }: CanvasToolbarProps) {
+  const clearAll = () => { onSetPendingSkin(null); onSetPendingFrame(null) }
   return (
     <div className="side-toolbar">
-      <button className={`side-tool ${tool === 'select' && !pendingSkin ? 'active' : ''}`}
-        onClick={() => { onSetTool('select'); onSetPendingSkin(null) }} title="Select (V)">
+      <button className={`side-tool ${tool === 'select' && !pendingSkin && !pendingFrame ? 'active' : ''}`}
+        onClick={() => { onSetTool('select'); clearAll() }} title="Select (V)">
         <Cursor size={18} />
       </button>
-      <button className={`side-tool ${tool === 'rectangle' && !pendingSkin ? 'active' : ''}`}
-        onClick={() => { onSetTool('rectangle'); onSetPendingSkin(null) }} title="Rectangle (R)">
+      <button className={`side-tool ${tool === 'rectangle' && !pendingSkin && !pendingFrame ? 'active' : ''}`}
+        onClick={() => { onSetTool('rectangle'); clearAll() }} title="Rectangle (R)">
         <Rectangle size={18} />
+      </button>
+
+      <div className="toolbar-separator" />
+
+      <button className={`side-tool ${pendingFrame === 'browser' ? 'active' : ''}`}
+        onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('browser') }} title="Browser Frame">
+        <Browser size={18} />
+      </button>
+      <button className={`side-tool ${pendingFrame === 'mobile' ? 'active' : ''}`}
+        onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('mobile') }} title="Mobile Frame">
+        <DeviceMobile size={18} />
       </button>
 
       <div className="toolbar-separator" />
@@ -52,7 +67,7 @@ export default function CanvasToolbar({ tool, pendingSkin, onSetTool, onSetPendi
         <button
           key={skin}
           className={`side-tool ${pendingSkin === skin ? 'active' : ''}`}
-          onClick={() => { onSetTool('rectangle'); onSetPendingSkin(skin) }}
+          onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingSkin(skin) }}
           title={label}
         >
           {icon}

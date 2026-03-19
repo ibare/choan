@@ -765,6 +765,109 @@ function paintIcon(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number,
   ctx.restore()
 }
 
+// ── Device Frames ──
+
+export const FRAME_PRESETS = {
+  browser: { width: 1280, height: 800, ratio: 1280 / 800 },
+  mobile: { width: 375, height: 812, ratio: 375 / 812 },
+} as const
+
+function paintBrowserFrame(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, _state: Record<string, unknown>, stroke: StrokeStyle) {
+  const barH = Math.min(h * 0.06, 36)
+  const r = Math.min(barH * 0.3, 6)
+
+  // Top bar background
+  ctx.fillStyle = '#f0f0f0'
+  ctx.fillRect(0, 0, w, barH)
+
+  // Bar bottom border
+  ctx.strokeStyle = stroke.color
+  ctx.lineWidth = stroke.width * 0.6
+  ctx.beginPath()
+  ctx.moveTo(0, barH)
+  ctx.lineTo(w, barH)
+  ctx.stroke()
+
+  // Traffic lights
+  const dotR = Math.min(barH * 0.15, 5)
+  const dotY = barH / 2
+  const dotStart = barH * 0.5
+  const colors = ['#ff5f57', '#febc2e', '#28c840']
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath()
+    ctx.arc(dotStart + i * dotR * 3, dotY, dotR, 0, Math.PI * 2)
+    ctx.fillStyle = colors[i]
+    ctx.fill()
+  }
+
+  // Address bar
+  const abX = dotStart + dotR * 12
+  const abW = w * 0.5
+  const abH = barH * 0.5
+  const abY = (barH - abH) / 2
+  ctx.beginPath()
+  ctx.roundRect(abX, abY, abW, abH, r)
+  ctx.fillStyle = '#e0e0e0'
+  ctx.fill()
+
+  // URL text placeholder
+  ctx.fillStyle = '#999'
+  ctx.font = `${abH * 0.55}px Inter, system-ui, sans-serif`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  const url = (_state.url as string) || 'https://example.com'
+  ctx.fillText(url, abX + r * 2, barH / 2, abW - r * 4)
+
+  // Rest is transparent (SDF box color shows through)
+}
+
+function paintMobileFrame(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, _state: Record<string, unknown>, stroke: StrokeStyle) {
+  const statusH = Math.min(h * 0.05, 44)
+  const homeH = Math.min(h * 0.03, 20)
+
+  // Status bar background
+  ctx.fillStyle = 'rgba(0,0,0,0.03)'
+  ctx.fillRect(0, 0, w, statusH)
+
+  // Dynamic Island / Notch
+  const islandW = w * 0.28
+  const islandH = statusH * 0.55
+  const islandX = (w - islandW) / 2
+  const islandY = statusH * 0.15
+  ctx.beginPath()
+  ctx.roundRect(islandX, islandY, islandW, islandH, islandH / 2)
+  ctx.fillStyle = '#1a1a1a'
+  ctx.fill()
+
+  // Status bar icons (time left, battery right)
+  ctx.fillStyle = '#333'
+  ctx.font = `600 ${statusH * 0.32}px Inter, system-ui, sans-serif`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'left'
+  ctx.fillText('9:41', w * 0.07, statusH / 2)
+
+  // Battery icon (simple rect)
+  const batW = w * 0.06, batH = statusH * 0.25
+  const batX = w * 0.88, batY = (statusH - batH) / 2
+  ctx.strokeStyle = '#333'
+  ctx.lineWidth = stroke.width * 0.5
+  ctx.beginPath()
+  ctx.roundRect(batX, batY, batW, batH, 2)
+  ctx.stroke()
+  ctx.fillStyle = '#333'
+  ctx.fillRect(batX + 1, batY + 1, batW * 0.7, batH - 2)
+
+  // Home indicator
+  const homeW = w * 0.35
+  const homeY = h - homeH * 0.6
+  ctx.beginPath()
+  ctx.roundRect((w - homeW) / 2, homeY, homeW, homeH * 0.25, homeH * 0.125)
+  ctx.fillStyle = '#1a1a1a'
+  ctx.fill()
+
+  // Rest is transparent
+}
+
 // ── Registry ──
 
 export const painters: Record<string, PaintFn> = {
@@ -784,6 +887,8 @@ export const painters: Record<string, PaintFn> = {
   'table-skeleton': paintTableSkeleton,
   image: paintImage,
   icon: paintIcon,
+  'browser-frame': paintBrowserFrame,
+  'mobile-frame': paintMobileFrame,
 }
 
 /** Paint a component into an atlas region context. Returns true if painter exists. */

@@ -106,7 +106,10 @@ export function useAnimateLoop({
         color: `rgb(${Math.round(ec[0] * 255)},${Math.round(ec[1] * 255)},${Math.round(ec[2] * 255)})`,
         width: rs.outlineWidth * 0.5,
       }
-      const skinnedEls = animatedElements.filter((el) => !!el.skin)
+      // Include both skin and frame elements for atlas painting
+      const skinnedEls = animatedElements.filter((el) => !!el.skin || !!el.frame)
+      // Map frame to skin name for painting
+      const getSkinKey = (el: ChoanElement) => el.frame ? `${el.frame}-frame` : el.skin!
       const skinnedIds = new Set(skinnedEls.map((el) => el.id))
       let atlasNeedsRebuild = false
       // Check if any previously skinned element lost its skin
@@ -117,7 +120,8 @@ export function useAnimateLoop({
         for (const el of skinnedEls) {
           const texW = Math.round(el.width * dpr)
           const texH = Math.round(el.height * dpr)
-          const stateKey = `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
+          const skinKey = getSkinKey(el)
+          const stateKey = `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
           if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
         }
       }
@@ -131,9 +135,10 @@ export function useAnimateLoop({
           const region = renderer.atlas.allocate(el.id, texW, texH)
           if (region) {
             const ctx = renderer.atlas.getContext(region)
+            const skinKey = getSkinKey(el)
             const compState = { ...el.componentState, _elColor: el.color }
-            paintComponent(el.skin!, ctx, texW, texH, compState, strokeStyle)
-            atlasDirty.set(el.id, `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${JSON.stringify(el.componentState ?? {})}`)
+            paintComponent(skinKey, ctx, texW, texH, compState, strokeStyle)
+            atlasDirty.set(el.id, `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${JSON.stringify(el.componentState ?? {})}`)
           }
         }
       }
