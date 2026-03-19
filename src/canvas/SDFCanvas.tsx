@@ -123,7 +123,7 @@ export default function SDFCanvas() {
       />
       <DragSelectBox box={dragSelectBox} />
       <DistanceLabels labels={distanceLabels} />
-      <FrameIndicator />
+      <FrameIndicator zoomScaleRef={zoomScaleRef} />
       <RenderSettingsPanel />
       <NavigationGizmo controlsRef={controlsRef} />
       <SplitLabels splitModeRef={splitModeRef} canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />

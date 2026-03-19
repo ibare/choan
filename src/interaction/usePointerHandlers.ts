@@ -313,8 +313,6 @@ export function usePointerHandlers({
     const storeState = useChoanStore.getState() as Record<string, unknown>
     const pendingSkin = storeState.pendingSkin as string | null
     const pendingFrame = storeState.pendingFrame as string | null
-    const setPendingSkin = storeState.setPendingSkin as (s: string | null) => void
-    const setPendingFrame = storeState.setPendingFrame as (s: string | null) => void
 
     // Frame: use preset size and fixed aspect ratio
     let frameProps: Partial<ChoanElement> = {}
