@@ -46,11 +46,26 @@ export function finalizeDrag(
 ): void {
   if (selIds.length !== 1) return
   const el = elements.find((e) => e.id === selId)
-  if (!el || el.role === 'container') return
-  const newParentId = detectContainment(el, elements.filter((e) => e.role === 'container' && e.id !== selId))
+  if (!el) return
+
+  // Collect all descendants to prevent circular reparenting
+  const descendants = new Set<string>()
+  function collectDesc(parentId: string) {
+    for (const e of elements) {
+      if (e.parentId === parentId && !descendants.has(e.id)) {
+        descendants.add(e.id)
+        collectDesc(e.id)
+      }
+    }
+  }
+  collectDesc(selId)
+
+  const candidates = elements.filter((e) => e.role === 'container' && e.id !== selId && !descendants.has(e.id))
+  const newParentId = detectContainment(el, candidates)
   if (newParentId !== el.parentId) {
     const oldParentId = el.parentId
     reparentElement(selId, newParentId)
     if (oldParentId) runLayout(oldParentId)
+    if (newParentId) runLayout(newParentId)
   }
 }

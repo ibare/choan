@@ -94,6 +94,33 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
   })
 }
 
+/** Recursively propagate Z values: each child gets parent.z + 1 */
+function propagateZ(elements: ChoanElement[]): ChoanElement[] {
+  const byParent = new Map<string, ChoanElement[]>()
+  for (const el of elements) {
+    const key = el.parentId ?? '__root__'
+    if (!byParent.has(key)) byParent.set(key, [])
+    byParent.get(key)!.push(el)
+  }
+  const zMap = new Map<string, number>()
+  function walk(parentKey: string, parentZ: number) {
+    for (const child of byParent.get(parentKey) ?? []) {
+      const childZ = parentZ + 1
+      if (child.z !== childZ) zMap.set(child.id, childZ)
+      walk(child.id, childZ)
+    }
+  }
+  // Start from root elements (their z is authoritative)
+  for (const root of byParent.get('__root__') ?? []) {
+    walk(root.id, root.z)
+  }
+  if (zMap.size === 0) return elements
+  return elements.map((e) => {
+    const newZ = zMap.get(e.id)
+    return newZ !== undefined ? { ...e, z: newZ } : e
+  })
+}
+
 const LABEL_MAP: Record<string, string> = {
   rectangle: 'Box',
   circle: 'Circle',
@@ -168,6 +195,8 @@ export const useElementStore = create<ElementStore>((set) => ({
         e.id === childId ? { ...e, parentId: parentId ?? undefined } : e,
       )
       if (parentId) updated = applyLayout(updated, parentId)
+      // Propagate Z to all descendants recursively
+      updated = propagateZ(updated)
       return { elements: updated }
     }),
 
