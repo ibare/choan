@@ -1,11 +1,10 @@
 import { useChoanStore } from '../store/useChoanStore'
-import type { ElementRole, LineStyle } from '../store/useChoanStore'
+import type { LineStyle } from '../store/useChoanStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
 import type { AnimatableProperty } from '../animation/types'
 import ContainerLayoutSection from './ContainerLayoutSection'
 import TriggersSection from './TriggersSection'
 
-const ROLES: ElementRole[] = ['container', 'image', 'button', 'input', 'card']
 const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 const SKINS = [
   '', 'switch', 'checkbox', 'radio', 'button', 'slider',
@@ -45,15 +44,6 @@ export default function PropertiesPanel() {
     setTimeout(() => useChoanStore.getState().runLayout(el.id), 0)
   }
 
-  const handleRoleChange = (newRole: ElementRole) => {
-    const oldRole = el.role
-    updateElement(el.id, { role: newRole })
-    if (oldRole === 'container' && newRole !== 'container') {
-      for (const child of elements.filter((e) => e.parentId === el.id)) {
-        updateElement(child.id, { parentId: undefined })
-      }
-    }
-  }
 
   return (
     <div className="panel">
@@ -64,15 +54,6 @@ export default function PropertiesPanel() {
 
       <label className="field-label">Type</label>
       <div className="field-value">{el.type}</div>
-
-      {el.type !== 'line' && (
-        <>
-          <label className="field-label">Role</label>
-          <select className="field-select" value={el.role ?? 'container'} onChange={(e) => handleRoleChange(e.target.value as ElementRole)}>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </>
-      )}
 
       <label className="field-label">Skin</label>
       <select className="field-select" value={el.skin ?? ''} onChange={(e) => {
