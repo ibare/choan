@@ -10,7 +10,7 @@ const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 const SKINS = [
   '', 'switch', 'checkbox', 'radio', 'button', 'slider',
   'text-input', 'progress', 'badge', 'star-rating', 'avatar',
-  'search', 'dropdown', 'text',
+  'search', 'dropdown', 'text', 'table-skeleton',
 ]
 
 export default function PropertiesPanel() {
@@ -148,6 +148,11 @@ export default function PropertiesPanel() {
               </label>)}
             </div>
             <label className="field-label">Bold</label>{toggle('bold')}
+          </>}
+          {(el.skin === 'table-skeleton') && <>
+            <label className="field-label">Columns</label>
+            <input className="field-input" type="number" min={1} max={10} value={Number(cs.columns) || 3}
+              onChange={(e) => setCS({ columns: Number(e.target.value) })} />
           </>}
         </>
       })()}

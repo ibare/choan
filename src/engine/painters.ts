@@ -380,6 +380,85 @@ function paintText(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number,
   ctx.fillText(text, x, h / 2, w - fontSize * 0.6)
 }
 
+// ── Table Skeleton ──
+
+function paintTableSkeleton(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, state: Record<string, unknown>, stroke: StrokeStyle) {
+  const cols = Math.max(1, Math.min(10, Number(state.columns) || 3))
+  const pad = w * 0.04
+  const headerH = h * 0.07
+  const ROW_HEIGHT = 28 // fixed row height in px
+  const rows = Math.max(1, Math.floor((h - pad * 2 - headerH) / ROW_HEIGHT))
+  const rowH = (h - pad * 2 - headerH) / rows
+  const colW = (w - pad * 2) / cols
+  const barH = Math.min(rowH * 0.4, 14)
+  const barR = barH / 2
+
+  // Outer border
+  ctx.beginPath()
+  ctx.roundRect(pad, pad, w - pad * 2, h - pad * 2, stroke.width * 2)
+  ctx.strokeStyle = stroke.color
+  ctx.lineWidth = stroke.width
+  ctx.stroke()
+
+  // Header row
+  const hy = pad
+  for (let c = 0; c < cols; c++) {
+    const bx = pad + c * colW + colW * 0.12
+    const bw = colW * 0.76
+    ctx.beginPath()
+    ctx.roundRect(bx, hy + (headerH - barH) / 2, bw, barH, barR)
+    ctx.fillStyle = '#ccc'
+    ctx.fill()
+  }
+
+  // Header separator
+  const sepY = pad + headerH
+  ctx.beginPath()
+  ctx.moveTo(pad, sepY)
+  ctx.lineTo(w - pad, sepY)
+  ctx.strokeStyle = stroke.color
+  ctx.lineWidth = stroke.width * 0.6
+  ctx.stroke()
+
+  // Data rows — varying widths for skeleton look
+  // Use deterministic pseudo-random based on row/col index
+  for (let r = 0; r < rows; r++) {
+    const ry = sepY + r * rowH
+    for (let c = 0; c < cols; c++) {
+      const seed = (r * 7 + c * 13 + 5) % 10
+      const widthFrac = 0.4 + seed * 0.04 // 0.4 ~ 0.76
+      const bx = pad + c * colW + colW * 0.12
+      const bw = colW * 0.76 * widthFrac
+      ctx.beginPath()
+      ctx.roundRect(bx, ry + (rowH - barH) / 2, bw, barH, barR)
+      ctx.fillStyle = '#e8e8e8'
+      ctx.fill()
+    }
+
+    // Row separator (except last)
+    if (r < rows - 1) {
+      const lineY = ry + rowH
+      ctx.beginPath()
+      ctx.moveTo(pad + colW * 0.06, lineY)
+      ctx.lineTo(w - pad - colW * 0.06, lineY)
+      ctx.strokeStyle = '#eee'
+      ctx.lineWidth = stroke.width * 0.4
+      ctx.stroke()
+    }
+  }
+
+  // Column separators
+  for (let c = 1; c < cols; c++) {
+    const cx = pad + c * colW
+    ctx.beginPath()
+    ctx.moveTo(cx, pad)
+    ctx.lineTo(cx, h - pad)
+    ctx.strokeStyle = '#eee'
+    ctx.lineWidth = stroke.width * 0.4
+    ctx.stroke()
+  }
+}
+
 // ── Registry ──
 
 export const painters: Record<string, PaintFn> = {
@@ -396,6 +475,7 @@ export const painters: Record<string, PaintFn> = {
   search: paintSearch,
   dropdown: paintDropdown,
   text: paintText,
+  'table-skeleton': paintTableSkeleton,
 }
 
 /** Paint a component into an atlas region context. Returns true if painter exists. */

@@ -107,12 +107,19 @@ export function useAnimateLoop({
         width: rs.outlineWidth * 0.5,
       }
       const skinnedEls = animatedElements.filter((el) => !!el.skin)
+      const skinnedIds = new Set(skinnedEls.map((el) => el.id))
       let atlasNeedsRebuild = false
-      for (const el of skinnedEls) {
-        const texW = Math.round(el.width * dpr)
-        const texH = Math.round(el.height * dpr)
-        const stateKey = `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
-        if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
+      // Check if any previously skinned element lost its skin
+      for (const id of atlasDirty.keys()) {
+        if (!skinnedIds.has(id)) { atlasNeedsRebuild = true; break }
+      }
+      if (!atlasNeedsRebuild) {
+        for (const el of skinnedEls) {
+          const texW = Math.round(el.width * dpr)
+          const texH = Math.round(el.height * dpr)
+          const stateKey = `${el.skin}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
+          if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
+        }
       }
       if (atlasNeedsRebuild) {
         renderer.atlas.reset()
