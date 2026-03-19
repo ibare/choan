@@ -10,7 +10,7 @@ const LINE_STYLES: LineStyle[] = ['solid', 'dashed']
 const SKINS = [
   '', 'switch', 'checkbox', 'radio', 'button', 'slider',
   'text-input', 'progress', 'badge', 'star-rating', 'avatar',
-  'search', 'dropdown', 'text', 'table-skeleton',
+  'search', 'dropdown', 'text', 'table-skeleton', 'image',
 ]
 
 export default function PropertiesPanel() {
@@ -77,7 +77,9 @@ export default function PropertiesPanel() {
       <label className="field-label">Skin</label>
       <select className="field-select" value={el.skin ?? ''} onChange={(e) => {
         const skin = e.target.value || undefined
-        updateElement(el.id, { skin, skinOnly: !!skin })
+        const patch: Record<string, unknown> = { skin, skinOnly: !!skin }
+        if (skin === 'image') patch.componentState = { seed: Math.floor(Math.random() * 9999) }
+        updateElement(el.id, patch)
       }}>
         {SKINS.map((s) => <option key={s} value={s}>{s || 'None'}</option>)}
       </select>
@@ -153,6 +155,14 @@ export default function PropertiesPanel() {
             <label className="field-label">Columns</label>
             <input className="field-input" type="number" min={1} max={10} value={Number(cs.columns) || 3}
               onChange={(e) => setCS({ columns: Number(e.target.value) })} />
+          </>}
+          {(el.skin === 'image') && <>
+            <label className="field-label">Seed</label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input className="field-input" type="number" value={Number(cs.seed) || 42} style={{ flex: 1 }}
+                onChange={(e) => setCS({ seed: Number(e.target.value) })} />
+              <button className="btn-small" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>Shuffle</button>
+            </div>
           </>}
         </>
       })()}
