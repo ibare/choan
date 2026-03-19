@@ -193,6 +193,7 @@ export default function PropertiesPanel() {
               items={ICON_TILES}
               value={(cs.icon as string) || 'heart'}
               columns={6}
+              layout="panel"
               onChange={(v) => setCS({ icon: v })}
             />
           </>}
