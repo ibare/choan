@@ -29,7 +29,7 @@ export function finalizeDrawn(
   drawStartPixel: { x: number; y: number },
   getElements: () => ChoanElement[],
   updateElement: (id: string, patch: Partial<ChoanElement>) => void,
-  reparentElement: (id: string, parentId: string | null | undefined) => void,
+  reparentElement: (id: string, parentId: string | null) => void,
 ): void {
   const els = getElements()
   const el = els.find((e) => e.id === drawElId)

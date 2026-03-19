@@ -28,7 +28,7 @@ export default function PropertiesPanel() {
   }
 
   const updateAnimatable = (prop: AnimatableProperty, value: number) => {
-    const old = (el as Record<string, unknown>)[prop] as number | undefined
+    const old = (el as unknown as Record<string, unknown>)[prop] as number | undefined
     updateElement(el.id, { [prop]: value })
     autoKeyframe(el.id, prop, value, old ?? 0)
   }
@@ -98,7 +98,7 @@ export default function PropertiesPanel() {
             <input type="radio" checked={!!cs[key] === (i === 1)} onChange={() => setCS({ [key]: i === 1 })} />{l}
           </label>)}
         </div>
-        const rangeUI = (key: string, label: string) => <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        const rangeUI = (key: string, _label?: string) => <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           <input type="range" min={0} max={1} step={0.01} value={Number(cs[key]) || 0} style={{ flex: 1 }}
             onChange={(e) => setCS({ [key]: Number(e.target.value) })} />
           <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round((Number(cs[key]) || 0) * 100)}%</span>

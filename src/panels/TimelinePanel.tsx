@@ -6,8 +6,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import type { DisplayLayer, RenderOptions } from '../engine/timeline2d'
-import type { AnimationClip, AnimationBundle, AnimatableProperty } from '../animation/types'
-import type { ChoanElement } from '../store/useChoanStore'
+import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../canvas/nanoid'
 import { Play, Pause, Stop, Plus, X, FilmStrip } from '@phosphor-icons/react'
 import { buildLayerTree } from '../animation/buildLayerTree'
@@ -16,17 +15,6 @@ import TimelineCanvas from './TimelineCanvas'
 import TimelineSidebar from './TimelineSidebar'
 import { type DisplayClipEntry, PX_PER_MS, RULER_HEIGHT, TRACK_HEIGHT, LAYER_HEADER_HEIGHT } from './timelineTypes'
 
-function getPropertyValue(el: ChoanElement, prop: AnimatableProperty): number {
-  switch (prop) {
-    case 'x': return el.x
-    case 'y': return el.y
-    case 'width': return el.width
-    case 'height': return el.height
-    case 'opacity': return el.opacity
-    case 'color': return el.color ?? 0xe6f8f0
-    case 'radius': return el.radius ?? 0
-  }
-}
 
 interface TimelinePanelProps {
   visible: boolean
@@ -38,7 +26,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     elements, animationClips, animationBundles,
     addAnimationClip, updateAnimationClip,
     addAnimationBundle, updateAnimationBundle, removeAnimationBundle,
-    addClipToBundle, updateClipInBundle, removeClipFromBundle,
+    updateClipInBundle, removeClipFromBundle,
   } = useChoanStore()
   const { previewState, play, pause, stop, playheadTime, setPlayheadTime, editingBundleId, setEditingBundle, ghostPreview, toggleGhostPreview } = usePreviewStore()
 
@@ -106,18 +94,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     setEditingBundle(bundle.id)
   }
 
-  // ── Add/remove track ──
-  const handleAddTrack = (bundleId: string, clipId: string, property: AnimatableProperty) => {
-    const bundle = animationBundles.find((b) => b.id === bundleId)
-    const clip = bundle?.clips.find((c) => c.id === clipId)
-    if (!clip || clip.tracks.some((t) => t.property === property)) return
-    const el = elements.find((e) => e.id === clip.elementId)
-    const currentValue = el ? getPropertyValue(el, property) : 0
-    updateClipInBundle(bundleId, clipId, {
-      tracks: [...clip.tracks, { property, keyframes: [{ time: 0, value: currentValue }, { time: clip.duration, value: currentValue }] }],
-    })
-  }
-
+  // ── Remove track ──
   const handleRemoveTrack = (clipId: string, trackIdx: number, bundleId?: string) => {
     const entry = displayClips.find((c) => c.clip.id === clipId)
     if (!entry) return
@@ -201,7 +178,6 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
         )}
         <TimelineSidebar
           displayClips={displayClips}
-          onAddTrack={handleAddTrack}
           onRemoveTrack={handleRemoveTrack}
           onRemoveClip={removeClipFromBundle}
           scrollY={scrollY}

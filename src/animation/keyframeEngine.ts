@@ -2,7 +2,7 @@
 // Snapshots element values before animation starts so they can be restored on stop.
 
 import type { ChoanElement } from '../store/useChoanStore'
-import type { AnimationClip, AnimatableProperty } from './types'
+import type { AnimationClip } from './types'
 import { evaluateTrack } from './interpolate'
 
 interface RunningAnimation {

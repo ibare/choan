@@ -98,7 +98,7 @@ export function buildViewProjMatrix(
   const p00 = f / aspect
   const p11 = f
   const p22 = (far + near) * nf
-  const p23 = -1
+  // p23 = -1 (perspective divide), used implicitly as -v0x terms in the matrix
   const p32 = 2 * far * near * nf
 
   return new Float32Array([

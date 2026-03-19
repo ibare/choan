@@ -1,9 +1,6 @@
 import { useState } from 'react'
-import { useRenderSettings, DEFAULT_RENDER_SETTINGS, type RenderSettings } from '../store/useRenderSettings'
+import { useRenderSettings } from '../store/useRenderSettings'
 import { GearSix } from '@phosphor-icons/react'
-
-type Vec2Key = 'sideSmooth' | 'normalEdgeThreshold' | 'idEdgeThreshold'
-type Vec3Key = 'lightDir' | 'warmTone' | 'edgeColor' | 'bgColor'
 
 function Slider({ label, value, min, max, step, onChange }: {
   label: string; value: number; min: number; max: number; step: number

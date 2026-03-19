@@ -3,17 +3,6 @@
 
 import type { ChoanElement } from '../store/useChoanStore'
 import { FRUSTUM, EXTRUDE_DEPTH } from './scene'
-import { PALETTE } from '../canvas/materials'
-
-function sdRoundBox(px: number, py: number, pz: number, bx: number, by: number, bz: number, r: number): number {
-  const qx = Math.abs(px) - bx + r
-  const qy = Math.abs(py) - by + r
-  const qz = Math.abs(pz) - bz + r
-  const mx = Math.max(qx, 0)
-  const my = Math.max(qy, 0)
-  const mz = Math.max(qz, 0)
-  return Math.sqrt(mx * mx + my * my + mz * mz) + Math.min(Math.max(qx, Math.max(qy, qz)), 0) - r
-}
 
 // 2D rounded rect extruded along Z — rounds only XY corners (CSS border-radius)
 function sdExtrudedRoundRect(px: number, py: number, pz: number, bx: number, by: number, bz: number, r: number): number {

@@ -41,7 +41,7 @@ export function finalizeDrag(
   selId: string,
   selIds: string[],
   elements: ChoanElement[],
-  reparentElement: (id: string, parentId: string | null | undefined) => void,
+  reparentElement: (id: string, parentId: string | null) => void,
   runLayout: (id: string) => void,
 ): void {
   if (selIds.length !== 1) return

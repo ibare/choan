@@ -2,11 +2,10 @@
 
 import type { AnimatableProperty } from '../animation/types'
 import { X } from '@phosphor-icons/react'
-import { type DisplayClipEntry, formatValue, TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, INDENT_PX, ANIMATABLE_PROPERTIES } from './timelineTypes'
+import { type DisplayClipEntry, formatValue, TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, INDENT_PX } from './timelineTypes'
 
 interface TimelineSidebarProps {
   displayClips: DisplayClipEntry[]
-  onAddTrack: (bundleId: string, clipId: string, property: AnimatableProperty) => void
   onRemoveTrack: (clipId: string, trackIdx: number, bundleId?: string) => void
   onRemoveClip: (bundleId: string, clipId: string) => void
   scrollY: number
@@ -14,7 +13,7 @@ interface TimelineSidebarProps {
 }
 
 export default function TimelineSidebar({
-  displayClips, onAddTrack, onRemoveTrack, onRemoveClip, onScroll,
+  displayClips, onRemoveTrack, onRemoveClip, onScroll,
 }: TimelineSidebarProps) {
   return (
     <div className="timeline-left-panel" onScroll={onScroll}>
