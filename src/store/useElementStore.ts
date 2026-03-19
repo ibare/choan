@@ -32,9 +32,10 @@ export interface ChoanElement {
   lineDirection?: LineDirection
   hasArrow?: boolean
   parentId?: string
-  layoutDirection?: 'free' | 'row' | 'column'
+  layoutDirection?: 'free' | 'row' | 'column' | 'grid'
   layoutGap?: number
   layoutPadding?: number
+  layoutColumns?: number
   triggers?: ElementTrigger[]
   skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')
   skinOnly?: boolean                      // hide SDF body, show only skin texture
@@ -85,6 +86,7 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
     gap: container.layoutGap ?? 8,
     padding: container.layoutPadding ?? 8,
     childCount: children.length,
+    columns: container.layoutColumns ?? 2,
   })
   return elements.map((e) => {
     if (!childIds.has(e.id)) return e
