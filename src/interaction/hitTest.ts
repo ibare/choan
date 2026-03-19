@@ -53,3 +53,37 @@ export function hitTestCorner(
   }
   return -1
 }
+
+/** Hit test layout resize handles between children of a row/column container. */
+export function hitTestLayoutHandle(
+  clientX: number,
+  clientY: number,
+  containerId: string,
+  elements: ChoanElement[],
+  screenToPixel: (cx: number, cy: number) => { x: number; y: number } | null,
+  zoomScale: number,
+): number {
+  const container = elements.find((e) => e.id === containerId)
+  if (!container) return -1
+  const dir = container.layoutDirection
+  if (dir !== 'row' && dir !== 'column') return -1
+  const pixel = screenToPixel(clientX, clientY)
+  if (!pixel) return -1
+
+  const children = elements.filter((e) => e.parentId === containerId)
+  const hitR = HANDLE_HIT_RADIUS * zoomScale * 1.2
+  for (let i = 0; i < children.length - 1; i++) {
+    const child = children[i]
+    let hx: number, hy: number
+    if (dir === 'row') {
+      hx = child.x + child.width
+      hy = child.y + child.height / 2
+    } else {
+      hx = child.x + child.width / 2
+      hy = child.y + child.height
+    }
+    const dx = pixel.x - hx, dy = pixel.y - hy
+    if (dx * dx + dy * dy <= hitR * hitR) return i
+  }
+  return -1
+}

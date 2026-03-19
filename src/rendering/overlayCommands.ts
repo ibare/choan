@@ -53,6 +53,29 @@ export function drawOverlay(
     const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
     ov.drawQuads(handles, hWorld, SELECTION_COLOR)
     ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
+
+    // Layout resize handles between children (row/column containers)
+    const dir = el.layoutDirection
+    if (dir === 'row' || dir === 'column') {
+      const children = elements.filter((e) => e.parentId === el.id)
+      const HANDLE_COLOR: [number, number, number, number] = [0.36, 0.31, 0.81, 0.7]
+      for (let ci = 0; ci < children.length - 1; ci++) {
+        const child = children[ci]
+        if (dir === 'row') {
+          const hx = child.x + child.width
+          const midY = child.y + child.height / 2
+          const handle = p2w(hx, midY)
+          ov.drawQuads(new Float32Array(handle), hWorld * 1.2, HANDLE_COLOR)
+          ov.drawQuads(new Float32Array(handle), hWorld * 0.7, [1, 1, 1, 0.9])
+        } else {
+          const hy = child.y + child.height
+          const midX = child.x + child.width / 2
+          const handle = p2w(midX, hy)
+          ov.drawQuads(new Float32Array(handle), hWorld * 1.2, HANDLE_COLOR)
+          ov.drawQuads(new Float32Array(handle), hWorld * 0.7, [1, 1, 1, 0.9])
+        }
+      }
+    }
     ov.setZ(0)
   }
 

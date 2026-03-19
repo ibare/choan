@@ -36,6 +36,8 @@ export interface ChoanElement {
   layoutGap?: number
   layoutPadding?: number
   layoutColumns?: number
+  layoutSizing?: 'equal' | 'fixed-ratio' | 'fixed-px'  // default: 'equal'
+  layoutRatio?: number      // 0~1, used when sizing='fixed-ratio'
   triggers?: ElementTrigger[]
   skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')
   skinOnly?: boolean                      // hide SDF body, show only skin texture
@@ -80,6 +82,13 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
   if (direction === 'free') {
     return elements.map((e) => childIds.has(e.id) ? { ...e, z: childZ } : e)
   }
+  const isRowOrCol = direction === 'row' || direction === 'column'
+  const sizings = isRowOrCol ? children.map((c) => c.layoutSizing ?? 'equal') : undefined
+  const ratios = isRowOrCol ? children.map((c) => c.layoutRatio) : undefined
+  const fixedSizes = isRowOrCol ? children.map((c) => {
+    if (c.layoutSizing !== 'fixed-px') return undefined
+    return direction === 'row' ? c.width : c.height
+  }) : undefined
   const positions = computeAutoLayout({
     container: { x: container.x, y: container.y, width: container.width, height: container.height },
     direction,
@@ -87,6 +96,9 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
     padding: container.layoutPadding ?? 8,
     childCount: children.length,
     columns: container.layoutColumns ?? 2,
+    sizings,
+    ratios,
+    fixedSizes,
   })
   return elements.map((e) => {
     if (!childIds.has(e.id)) return e

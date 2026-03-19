@@ -9,7 +9,7 @@ import { usePreviewStore } from '../store/usePreviewStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
 import { nanoid } from '../canvas/nanoid'
 import { kfAnimator } from '../rendering/kfAnimator'
-import { raycastElement, hitTestCorner } from './hitTest'
+import { raycastElement, hitTestCorner, hitTestLayoutHandle } from './hitTest'
 import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
 import { worldToPixel as worldToPixelCS, pixelToWorld } from '../coords/coordinateSystem'
@@ -93,6 +93,11 @@ export function usePointerHandlers({
   const isDrawingRef = useRef(false)
   const drawStartPixelRef = useRef({ x: 0, y: 0 })
   const drawElIdRef = useRef<string | null>(null)
+
+  const isLayoutResizingRef = useRef(false)
+  const layoutResizeContainerRef = useRef<string | null>(null)
+  const layoutResizeIndexRef = useRef(-1)
+  const layoutResizeStartRef = useRef(0)
 
   const isDragSelectRef = useRef(false)
   const dragSelectPointerIdRef = useRef<number>(-1)
@@ -188,6 +193,19 @@ export function usePointerHandlers({
 
       const selId = selectedIds[0] ?? null
       if (selectedIds.length === 1 && selId) {
+        // Layout resize handle check (between children)
+        const layoutHandle = hitTestLayoutHandle(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
+        if (layoutHandle >= 0) {
+          isLayoutResizingRef.current = true
+          layoutResizeContainerRef.current = selId
+          layoutResizeIndexRef.current = layoutHandle
+          const pixel = screenToPixel(e.clientX, e.clientY)
+          const selEl = els.find((el) => el.id === selId)
+          layoutResizeStartRef.current = pixel ? (selEl?.layoutDirection === 'column' ? pixel.y : pixel.x) : 0
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+          return
+        }
+
         const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
         if (corner >= 0) {
           if (corner === 2) { colorPickerOpenRef.current = true; colorPickerHoverRef.current = -1; return }
@@ -310,6 +328,38 @@ export function usePointerHandlers({
         const hover = computeColorPickerHover(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr)
         colorPickerHoverRef.current = hover
         setCursor(hover >= 0 ? 'pointer' : 'default')
+      }
+      return
+    }
+
+    if (isLayoutResizingRef.current && layoutResizeContainerRef.current) {
+      const pixel = screenToPixel(e.clientX, e.clientY)
+      if (pixel) {
+        const cId = layoutResizeContainerRef.current
+        const container = els.find((el) => el.id === cId)
+        const children = els.filter((el) => el.parentId === cId)
+        const idx = layoutResizeIndexRef.current
+        if (container && idx >= 0 && idx < children.length - 1) {
+          const isRow = container.layoutDirection === 'row'
+          const current = isRow ? pixel.x : pixel.y
+          const delta = current - layoutResizeStartRef.current
+          layoutResizeStartRef.current = current
+
+          // Calculate total inner size for ratio
+          const pad = container.layoutPadding ?? 8
+          const totalInner = (isRow ? container.width : container.height) - 2 * pad
+            - (children.length - 1) * (container.layoutGap ?? 8)
+
+          // Direct: the dragged child gets fixed-ratio
+          const a = children[idx]
+          const aSize = isRow ? a.width : a.height
+          const newASize = Math.max(10, aSize + delta)
+          const newRatio = Math.max(0.01, Math.min(0.95, newASize / totalInner))
+          update(a.id, { layoutSizing: 'fixed-ratio', layoutRatio: newRatio })
+
+          // Indirect: all others stay as they are (equal remains equal)
+          useChoanStore.getState().runLayout(cId)
+        }
       }
       return
     }
@@ -446,6 +496,7 @@ export function usePointerHandlers({
     isResizingRef.current = false; resizeElIdRef.current = null
     isDraggingRef.current = false; dragGroupIdsRef.current = []; dragGroupStartRef.current.clear(); dragContainerIdRef.current = null
     isRadiusDragRef.current = false
+    isLayoutResizingRef.current = false; layoutResizeContainerRef.current = null; layoutResizeIndexRef.current = -1
     snapLinesRef.current = []
   }, [])
 
