@@ -170,11 +170,15 @@ export default function PropertiesPanel() {
       {el.type === 'rectangle' && (
         <>
           <label className="field-label">Radius</label>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input type="range" min={0} max={1} step={0.01} value={el.radius ?? 0} style={{ flex: 1 }}
-              onChange={(e) => updateAnimatable('radius', Number(e.target.value))} />
-            <span style={{ fontSize: 11, color: '#666', width: 32 }}>{Math.round((el.radius ?? 0) * 100)}%</span>
-          </div>
+          {(() => {
+            const maxR = Math.min(el.width, el.height) / 2
+            const pxVal = Math.round((el.radius ?? 0) * maxR)
+            return <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input type="range" min={0} max={maxR} step={1} value={pxVal} style={{ flex: 1 }}
+                onChange={(e) => updateAnimatable('radius', maxR > 0 ? Number(e.target.value) / maxR : 0)} />
+              <span style={{ fontSize: 11, color: '#666', width: 36 }}>{pxVal}px</span>
+            </div>
+          })()}
         </>
       )}
 

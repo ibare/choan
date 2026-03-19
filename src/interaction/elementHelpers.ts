@@ -24,8 +24,21 @@ export function applyToSiblings(
   if (!el?.parentId) return
   const { x: _x, y: _y, ...siblingPatch } = patch
   if (Object.keys(siblingPatch).length === 0) return
+
+  // Radius: convert to px from source, then re-normalize per sibling
+  const radiusPx = siblingPatch.radius != null
+    ? siblingPatch.radius * Math.min(el.width, el.height) / 2
+    : null
+
   for (const sib of els) {
-    if (sib.parentId === el.parentId && sib.id !== id) update(sib.id, siblingPatch)
+    if (sib.parentId === el.parentId && sib.id !== id) {
+      if (radiusPx != null) {
+        const sibMaxR = Math.min(sib.width, sib.height) / 2
+        update(sib.id, { ...siblingPatch, radius: sibMaxR > 0 ? Math.min(1, radiusPx / sibMaxR) : 0 })
+      } else {
+        update(sib.id, siblingPatch)
+      }
+    }
   }
 }
 
