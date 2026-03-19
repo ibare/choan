@@ -404,9 +404,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .tile-popover {
   position: fixed;
   padding: 8px;
+  padding-right: 16px;
   background: var(--surface); border: 1.5px solid var(--border);
   border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  z-index: 20; overflow-y: auto;
+  z-index: 20; overflow-y: auto; overflow-x: hidden;
 }
 
 .tile-popover-grid {
