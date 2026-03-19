@@ -145,8 +145,8 @@ export function drawOverlay(
           const fi = Math.floor(highlightIdx / shadeCount)
           const si = highlightIdx % shadeCount
           const cell = colorWheelTex.getCellCenter(fi, si)
-          const cx = anchor.px + (cell.x - 0.5) * wheelSizePx * 2
-          const cy = anchor.py + (cell.y - 0.5) * wheelSizePx * 2
+          const cx = anchor.px + (cell.x - 0.5) * wheelSizePx
+          const cy = anchor.py + (cell.y - 0.5) * wheelSizePx
           ov.drawDiscScreen(cx, cy, 8 * dpr, [1, 1, 1, 0.8])
         }
       }

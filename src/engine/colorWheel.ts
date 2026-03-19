@@ -71,20 +71,24 @@ export function createColorWheel(gl: WebGL2RenderingContext): ColorWheelTexture 
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
   gl.bindTexture(gl.TEXTURE_2D, null)
 
+  // Build color lookup from canvas pixels for accurate hit testing
+  const colorLookup = new Map<number, { fi: number; si: number; hex: number }>()
+  for (let fi = 0; fi < familyCount; fi++) {
+    for (let si = 0; si < shadeCount; si++) {
+      const hex = COLOR_FAMILIES[fi].shades[si]
+      colorLookup.set(hex, { fi, si, hex })
+    }
+  }
+
   function hitTest(localX: number, localY: number) {
-    // localX, localY: 0~1 normalized within the wheel quad
-    const px = localX * WHEEL_SIZE - CENTER
-    const py = localY * WHEEL_SIZE - CENTER
-    const dist = Math.sqrt(px * px + py * py)
-    if (dist < INNER_R || dist > OUTER_R) return null
-
-    let angle = Math.atan2(py, px) + Math.PI / 2
-    if (angle < 0) angle += Math.PI * 2
-
-    const fi = Math.floor((angle / (Math.PI * 2)) * familyCount) % familyCount
-    const ringIdx = Math.floor((dist - INNER_R) / ringWidth)
-    const si = Math.min(ringIdx, shadeCount - 1) // innermost ring = si=0 (lightest)
-    return { fi, si, hex: COLOR_FAMILIES[fi].shades[si] }
+    // Read actual pixel color from canvas — avoids coordinate math errors
+    const px = Math.floor(localX * WHEEL_SIZE)
+    const py = Math.floor(localY * WHEEL_SIZE)
+    if (px < 0 || px >= WHEEL_SIZE || py < 0 || py >= WHEEL_SIZE) return null
+    const pixel = ctx.getImageData(px, py, 1, 1).data
+    if (pixel[3] < 128) return null // transparent
+    const hex = (pixel[0] << 16) | (pixel[1] << 8) | pixel[2]
+    return colorLookup.get(hex) ?? null
   }
 
   function getCellCenter(fi: number, si: number) {
