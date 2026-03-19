@@ -9,6 +9,7 @@ export interface OrbitControls {
   dispose(): void
   getAngles(): { theta: number; phi: number }
   setAngles(theta: number, phi: number): void
+  wheelEnabled: boolean
 }
 
 export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): OrbitControls {
@@ -80,8 +81,11 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     if (e.button === 1) isPanning = false
   }
 
+  let wheelEnabled = true
+
   function onWheel(e: WheelEvent) {
     e.preventDefault()
+    if (!wheelEnabled) return
 
     // Cursor-centered zoom: compute the world point under the cursor,
     // apply zoom, then pan so that point stays under the cursor.
@@ -165,5 +169,9 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   // Initialize camera position
   update()
 
-  return { update, dispose, getAngles, setAngles }
+  return {
+    update, dispose, getAngles, setAngles,
+    get wheelEnabled() { return wheelEnabled },
+    set wheelEnabled(v: boolean) { wheelEnabled = v },
+  }
 }

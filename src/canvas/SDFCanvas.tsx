@@ -12,6 +12,7 @@ import DragSelectBox from './DragSelectBox'
 import DistanceLabels from './DistanceLabels'
 import FrameIndicator from './FrameIndicator'
 import NavigationGizmo from './NavigationGizmo'
+import SplitLabels from './SplitLabels'
 
 export default function SDFCanvas() {
   const mountRef = useRef<HTMLDivElement>(null)
@@ -37,7 +38,7 @@ export default function SDFCanvas() {
     snapLinesRef,
   } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef })
 
-  useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef)
+  useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef, controlsRef)
 
   useAnimateLoop({
     rendererRef, controlsRef, canvasSizeRef, zoomScaleRef, distMeasuresRef,
@@ -124,6 +125,7 @@ export default function SDFCanvas() {
       <FrameIndicator />
       <RenderSettingsPanel />
       <NavigationGizmo controlsRef={controlsRef} />
+      <SplitLabels splitModeRef={splitModeRef} canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
     </div>
   )
 }

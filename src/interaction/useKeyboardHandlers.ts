@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, type MutableRefObject } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { nanoid } from '../canvas/nanoid'
 import type { ChoanElement } from '../store/useChoanStore'
+import type { OrbitControls } from '../engine/controls'
 import { resolveHotkey } from './hotkeyRegistry'
 
 export type ActionHandler = () => void
@@ -19,6 +20,7 @@ export function useKeyboardHandlers(
   colorPickerOpenRef: MutableRefObject<boolean>,
   colorPickerHoverRef: MutableRefObject<number>,
   splitModeRef: MutableRefObject<SplitMode>,
+  controlsRef?: MutableRefObject<OrbitControls | null>,
   customActions?: Record<string, ActionHandler>,
 ): void {
   const { removeElement, setTool } = useChoanStore()
@@ -29,6 +31,7 @@ export function useKeyboardHandlers(
   const executeSplit = useCallback(() => {
     const { count, elementId, direction } = splitModeRef.current
     splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
+    if (controlsRef?.current) controlsRef.current.wheelEnabled = true
 
     if (count <= 1) return // 1 = cancel
 
@@ -90,6 +93,7 @@ export function useKeyboardHandlers(
     'escape': () => {
       if (splitModeRef.current.active) {
         splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
+        if (controlsRef?.current) controlsRef.current.wheelEnabled = true
         return
       }
       colorPickerOpenRef.current = false
@@ -122,6 +126,7 @@ export function useKeyboardHandlers(
       const { selectedIds } = useChoanStore.getState()
       if (selectedIds.length !== 1) return
       splitModeRef.current = { active: true, count: 2, elementId: selectedIds[0], direction: 'horizontal' }
+      if (controlsRef?.current) controlsRef.current.wheelEnabled = false
     },
     'split:toggle-dir': () => {
       if (!splitModeRef.current.active) return
@@ -131,16 +136,22 @@ export function useKeyboardHandlers(
       if (!splitModeRef.current.active) return
       executeSplit()
     },
-    'split:1': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 1 } },
-    'split:2': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 2 } },
-    'split:3': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 3 } },
-    'split:4': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 4 } },
-    'split:5': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 5 } },
-    'split:6': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 6 } },
-    'split:7': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 7 } },
-    'split:8': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 8 } },
-    'split:9': () => { if (splitModeRef.current.active) splitModeRef.current = { ...splitModeRef.current, count: 9 } },
   }), [removeElement, setTool, colorPickerOpenRef, colorPickerHoverRef, executeSplit])
+
+  useEffect(() => {
+    // Wheel to adjust split count
+    const onWheel = (e: WheelEvent) => {
+      if (!splitModeRef.current.active) return
+      e.preventDefault()
+      const delta = e.deltaY < 0 ? 1 : -1
+      splitModeRef.current = {
+        ...splitModeRef.current,
+        count: Math.max(0, splitModeRef.current.count + delta),
+      }
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
