@@ -386,27 +386,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   white-space: nowrap;
 }
 
-/* ── Pin buttons ────────────────────────────── */
-.pin-button {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--text-muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 6;
-  padding: 0;
-  transition: all 0.1s;
-}
-.pin-button:hover { background: rgba(255,255,255,0.95); color: var(--text); }
-.pin-button.active { background: var(--accent); color: #fff; }
-
 /* ── Split labels ───────────────────────────── */
 .split-label {
   position: absolute;

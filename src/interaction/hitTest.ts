@@ -54,6 +54,33 @@ export function hitTestCorner(
   return -1
 }
 
+/** Hit test sizing indicator (TR corner) of layout children. Returns child ID or null. */
+export function hitTestSizingIndicator(
+  clientX: number,
+  clientY: number,
+  containerId: string,
+  elements: ChoanElement[],
+  screenToPixel: (cx: number, cy: number) => { x: number; y: number } | null,
+  zoomScale: number,
+): string | null {
+  const container = elements.find((e) => e.id === containerId)
+  if (!container) return null
+  const dir = container.layoutDirection
+  if (dir !== 'row' && dir !== 'column') return null
+  const pixel = screenToPixel(clientX, clientY)
+  if (!pixel) return null
+
+  const children = elements.filter((e) => e.parentId === containerId)
+  const hitR = HANDLE_HIT_RADIUS * zoomScale
+  for (const child of children) {
+    const ix = child.x + child.width - 12 * zoomScale
+    const iy = child.y + 12 * zoomScale
+    const dx = pixel.x - ix, dy = pixel.y - iy
+    if (dx * dx + dy * dy <= hitR * hitR) return child.id
+  }
+  return null
+}
+
 /** Hit test layout resize handles between children of a row/column container. */
 export function hitTestLayoutHandle(
   clientX: number,

@@ -54,11 +54,15 @@ export function drawOverlay(
     ov.drawQuads(handles, hWorld, SELECTION_COLOR)
     ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
 
-    // Layout resize handles between children (row/column containers)
+    // Layout resize handles + sizing indicators (row/column containers)
     const dir = el.layoutDirection
     if (dir === 'row' || dir === 'column') {
       const children = elements.filter((e) => e.parentId === el.id)
       const HANDLE_COLOR: [number, number, number, number] = [0.36, 0.31, 0.81, 0.7]
+      const FILL_COLOR: [number, number, number, number] = [0.36, 0.31, 0.81, 0.85]
+      const PIN_COLOR: [number, number, number, number] = [0.9, 0.3, 0.3, 0.85]
+
+      // Resize handles between children
       for (let ci = 0; ci < children.length - 1; ci++) {
         const child = children[ci]
         if (dir === 'row') {
@@ -73,6 +77,23 @@ export function drawOverlay(
           const handle = p2w(midX, hy)
           ov.drawQuads(new Float32Array(handle), hWorld * 1.2, HANDLE_COLOR)
           ov.drawQuads(new Float32Array(handle), hWorld * 0.7, [1, 1, 1, 0.9])
+        }
+      }
+
+      // Sizing mode indicators (TR corner of each child)
+      for (const child of children) {
+        const sizing = child.layoutSizing ?? 'equal'
+        if (sizing === 'equal') continue // no indicator for default
+        const indicator = p2w(child.x + child.width - 12 * zs, child.y + 12 * zs)
+        const iSize = hWorld * 2.5
+        if (sizing === 'fill') {
+          ov.drawQuads(new Float32Array(indicator), iSize, FILL_COLOR)
+          // Inner diamond shape (arrows-out hint)
+          ov.drawQuads(new Float32Array(indicator), iSize * 0.4, [1, 1, 1, 0.9])
+        } else {
+          // fixed-px or fixed-ratio
+          ov.drawQuads(new Float32Array(indicator), iSize, PIN_COLOR)
+          ov.drawQuads(new Float32Array(indicator), iSize * 0.4, [1, 1, 1, 0.9])
         }
       }
     }

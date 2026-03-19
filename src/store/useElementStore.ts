@@ -36,7 +36,7 @@ export interface ChoanElement {
   layoutGap?: number
   layoutPadding?: number
   layoutColumns?: number
-  layoutSizing?: 'equal' | 'fixed-ratio' | 'fixed-px'  // default: 'equal'
+  layoutSizing?: 'equal' | 'fill' | 'fixed-ratio' | 'fixed-px'  // default: 'equal'
   layoutRatio?: number      // 0~1, used when sizing='fixed-ratio'
   triggers?: ElementTrigger[]
   skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')

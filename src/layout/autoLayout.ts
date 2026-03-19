@@ -8,7 +8,7 @@ export interface LayoutInput {
   childCount: number
   columns?: number
   // Per-child sizing: 'equal' (default), 'fixed-ratio', 'fixed-px'
-  sizings?: ('equal' | 'fixed-ratio' | 'fixed-px')[]
+  sizings?: ('equal' | 'fill' | 'fixed-ratio' | 'fixed-px')[]
   ratios?: (number | undefined)[]       // for fixed-ratio (0~1)
   fixedSizes?: (number | undefined)[]   // for fixed-px (pixels)
 }
@@ -30,7 +30,7 @@ const MIN_SIZE = 10
  */
 function distribute(
   total: number, count: number, gap: number,
-  sizings?: ('equal' | 'fixed-ratio' | 'fixed-px')[],
+  sizings?: ('equal' | 'fill' | 'fixed-ratio' | 'fixed-px')[],
   ratios?: (number | undefined)[],
   fixedSizes?: (number | undefined)[],
 ): number[] {
@@ -49,23 +49,35 @@ function distribute(
   remaining = Math.max(0, remaining)
 
   // Pass 2: fixed-ratio — take proportional share of original available
-  let ratioTotal = 0
   for (let i = 0; i < count; i++) {
     if ((sizings?.[i] ?? 'equal') === 'fixed-ratio') {
       const r = ratios?.[i] ?? 0
       sizes[i] = Math.max(MIN_SIZE, available * r)
       remaining -= sizes[i]
-      ratioTotal += r
     }
   }
   remaining = Math.max(0, remaining)
 
-  // Pass 3: equal — split remaining among equal children
+  // Pass 3: fill — takes all remaining (multiple fills split equally)
+  const fillIndices: number[] = []
+  for (let i = 0; i < count; i++) {
+    if ((sizings?.[i] ?? 'equal') === 'fill') fillIndices.push(i)
+  }
+
+  // Pass 4: equal — split remaining among equal children
   const equalIndices: number[] = []
   for (let i = 0; i < count; i++) {
     if ((sizings?.[i] ?? 'equal') === 'equal') equalIndices.push(i)
   }
-  if (equalIndices.length > 0) {
+
+  if (fillIndices.length > 0) {
+    // Equal gets minimum, fill gets the rest
+    const equalTotal = equalIndices.length * MIN_SIZE
+    const fillRemaining = Math.max(0, remaining - equalTotal)
+    for (const i of equalIndices) sizes[i] = MIN_SIZE
+    const fillEach = Math.max(MIN_SIZE, fillRemaining / fillIndices.length)
+    for (const i of fillIndices) sizes[i] = fillEach
+  } else if (equalIndices.length > 0) {
     const each = Math.max(MIN_SIZE, remaining / equalIndices.length)
     for (const i of equalIndices) sizes[i] = each
   }

@@ -1,42 +1,49 @@
-// Pin toggle icons for layout children — shown when a row/column container is selected.
+// Sizing mode toggle for layout children — cycles equal → fill → fixed-px.
 
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { SDFRenderer } from '../engine/renderer'
 import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { pixelToWorld } from '../coords/coordinateSystem'
-import { PushPin } from '@phosphor-icons/react'
+import { PushPin, ArrowsOutSimple } from '@phosphor-icons/react'
 
 interface PinOverlayProps {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
   rendererRef: MutableRefObject<SDFRenderer | null>
 }
 
-interface PinPos { id: string; x: number; y: number; pinned: boolean }
+type SizingMode = 'equal' | 'fill' | 'fixed-ratio' | 'fixed-px'
+const CYCLE: SizingMode[] = ['equal', 'fill', 'fixed-px']
+
+function nextMode(current: SizingMode): SizingMode {
+  // fixed-ratio is set by handle drag, not by clicking — treat as fixed-px in cycle
+  const mapped = current === 'fixed-ratio' ? 'fixed-px' : current
+  const idx = CYCLE.indexOf(mapped)
+  return CYCLE[(idx + 1) % CYCLE.length]
+}
+
+interface PinPos { id: string; x: number; y: number; sizing: SizingMode }
 
 export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayProps) {
   const [pins, setPins] = useState<PinPos[]>([])
   const rafRef = useRef(0)
 
   useEffect(() => {
-    let prevKey = ''
     const tick = () => {
       rafRef.current = requestAnimationFrame(tick)
       const { elements, selectedIds } = useChoanStore.getState()
-      if (selectedIds.length !== 1) { if (prevKey !== '') { setPins([]); prevKey = '' }; return }
+      if (selectedIds.length !== 1) { setPins([]); return }
 
       const container = elements.find((e) => e.id === selectedIds[0])
       if (!container || (container.layoutDirection !== 'row' && container.layoutDirection !== 'column')) {
-        if (prevKey !== '') { setPins([]); prevKey = '' }; return
+        setPins([]); return
       }
 
       const renderer = rendererRef.current
       if (!renderer) return
 
       const children = elements.filter((e) => e.parentId === container.id)
-      const key = children.map((c) => `${c.id}:${c.x}:${c.y}:${c.width}:${c.height}:${c.layoutSizing}`).join('|')
-      if (key === prevKey) return
-      prevKey = key
+      // Always recalculate — camera zoom changes projectToScreen results
 
       const { w, h } = canvasSizeRef.current
       const rs = useRenderSettings.getState()
@@ -47,7 +54,7 @@ export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayPro
         const z = child.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.03
         const [wx, wy] = pixelToWorld(child.x + child.width - 8, child.y + 8, w, h)
         const screen = renderer.overlay.projectToScreen(wx, wy, z)
-        result.push({ id: child.id, x: screen.px / dpr, y: screen.py / dpr, pinned: child.layoutSizing === 'fixed-px' })
+        result.push({ id: child.id, x: screen.px / dpr, y: screen.py / dpr, sizing: child.layoutSizing ?? 'equal' })
       }
       setPins(result)
     }
@@ -59,22 +66,27 @@ export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayPro
 
   return (
     <>
-      {pins.map((p) => (
-        <button
-          key={p.id}
-          className={`pin-button ${p.pinned ? 'active' : ''}`}
-          style={{ left: p.x, top: p.y }}
-          onClick={() => {
-            const store = useChoanStore.getState()
-            const newSizing = p.pinned ? 'equal' : 'fixed-px'
-            store.updateElement(p.id, { layoutSizing: newSizing, layoutRatio: undefined })
-            const el = store.elements.find((e) => e.id === p.id)
-            if (el?.parentId) store.runLayout(el.parentId)
-          }}
-        >
-          <PushPin size={12} weight={p.pinned ? 'fill' : 'regular'} />
-        </button>
-      ))}
+      {pins.map((p) => {
+        const isActive = p.sizing !== 'equal'
+        return (
+          <button
+            key={p.id}
+            className={`pin-button ${isActive ? 'active' : ''}`}
+            style={{ left: p.x, top: p.y }}
+            title={p.sizing}
+            onClick={() => {
+              const store = useChoanStore.getState()
+              const next = nextMode(p.sizing)
+              store.updateElement(p.id, { layoutSizing: next, layoutRatio: undefined })
+              const el = store.elements.find((e) => e.id === p.id)
+              if (el?.parentId) store.runLayout(el.parentId)
+            }}
+          >
+            {p.sizing === 'fill' && <ArrowsOutSimple size={12} weight="bold" />}
+            {(p.sizing === 'fixed-px' || p.sizing === 'fixed-ratio') && <PushPin size={12} weight="fill" />}
+          </button>
+        )
+      })}
     </>
   )
 }

@@ -9,7 +9,7 @@ import { usePreviewStore } from '../store/usePreviewStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
 import { nanoid } from '../canvas/nanoid'
 import { kfAnimator } from '../rendering/kfAnimator'
-import { raycastElement, hitTestCorner, hitTestLayoutHandle } from './hitTest'
+import { raycastElement, hitTestCorner, hitTestLayoutHandle, hitTestSizingIndicator } from './hitTest'
 import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
 import { worldToPixel as worldToPixelCS, pixelToWorld } from '../coords/coordinateSystem'
@@ -193,6 +193,22 @@ export function usePointerHandlers({
 
       const selId = selectedIds[0] ?? null
       if (selectedIds.length === 1 && selId) {
+        // Sizing indicator click (TR corner of layout children)
+        const sizingHit = hitTestSizingIndicator(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
+        if (sizingHit) {
+          const child = els.find((el) => el.id === sizingHit)
+          if (child) {
+            const current = child.layoutSizing ?? 'equal'
+            const cycle: Array<'equal' | 'fill' | 'fixed-px'> = ['equal', 'fill', 'fixed-px']
+            const mapped = current === 'fixed-ratio' ? 'fixed-px' : current
+            const next = cycle[(cycle.indexOf(mapped) + 1) % cycle.length]
+            const { updateElement, runLayout } = useChoanStore.getState()
+            updateElement(sizingHit, { layoutSizing: next, layoutRatio: undefined })
+            if (child.parentId) runLayout(child.parentId)
+          }
+          return
+        }
+
         // Layout resize handle check (between children)
         const layoutHandle = hitTestLayoutHandle(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
         if (layoutHandle >= 0) {
