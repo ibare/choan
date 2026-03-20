@@ -3,6 +3,7 @@
 
 import type { ChoanElement } from '../store/useChoanStore'
 import { FRUSTUM, EXTRUDE_DEPTH } from './scene'
+import { MAX_BVH_NODES, type BVHData } from './bvh'
 
 // 2D rounded rect extruded along Z — rounds only XY corners (CSS border-radius)
 function sdExtrudedRoundRect(px: number, py: number, pz: number, bx: number, by: number, bz: number, r: number): number {
@@ -72,12 +73,66 @@ function evalElementSDF(
   }
 }
 
+// sceneSDF using BVH traversal — mirrors GPU sceneSDF
+function sceneSDF_BVH(
+  px: number, py: number, pz: number,
+  elements: ChoanElement[],
+  canvasW: number, canvasH: number,
+  bvh: BVHData,
+): { dist: number; idx: number } {
+  let resDist = 1e10
+  let resIdx = -1
+
+  const { nodes, objectOrder, numInternalNodes } = bvh
+  const stack = new Int32Array(16)
+  let sp = 1
+  stack[0] = 0
+
+  while (sp > 0) {
+    const idx = stack[--sp]
+    if (idx >= MAX_BVH_NODES) continue
+
+    const ni = idx * 4
+    const minX = nodes[ni], minY = nodes[ni + 1], maxX = nodes[ni + 2], maxY = nodes[ni + 3]
+
+    // Degenerate (padding)
+    if (minX > maxX) continue
+
+    // 2D AABB distance
+    const dx = Math.max(minX - px, Math.max(px - maxX, 0))
+    const dy = Math.max(minY - py, Math.max(py - maxY, 0))
+    const boxDist = Math.sqrt(dx * dx + dy * dy)
+
+    if (boxDist >= resDist) continue
+
+    if (idx >= numInternalNodes) {
+      // Leaf
+      const leafIdx = idx - numInternalNodes
+      const origIdx = objectOrder[leafIdx]
+      if (origIdx >= 0 && origIdx < elements.length) {
+        const d = evalElementSDF(px, py, pz, elements[origIdx], canvasW, canvasH)
+        if (d < resDist) {
+          resDist = d
+          resIdx = origIdx
+        }
+      }
+    } else {
+      // Internal
+      stack[sp++] = idx * 2 + 2
+      stack[sp++] = idx * 2 + 1
+    }
+  }
+
+  return { dist: resDist, idx: resIdx }
+}
+
 // Ray march on CPU — returns closest hit element index or -1
 export function cpuRayMarch(
   roX: number, roY: number, roZ: number,
   rdX: number, rdY: number, rdZ: number,
   elements: ChoanElement[],
   canvasW: number, canvasH: number,
+  bvh?: BVHData,
 ): HitResult | null {
   const MAX_STEPS = 64
   const MAX_DIST = 100
@@ -89,13 +144,23 @@ export function cpuRayMarch(
     const py = roY + rdY * t
     const pz = roZ + rdZ * t
 
-    let minDist = 1e10
-    let hitIdx = -1
-    for (let i = 0; i < elements.length; i++) {
-      const d = evalElementSDF(px, py, pz, elements[i], canvasW, canvasH)
-      if (d < minDist) {
-        minDist = d
-        hitIdx = i
+    let minDist: number
+    let hitIdx: number
+
+    if (bvh && bvh.numLeaves > 0) {
+      const res = sceneSDF_BVH(px, py, pz, elements, canvasW, canvasH, bvh)
+      minDist = res.dist
+      hitIdx = res.idx
+    } else {
+      minDist = 1e10
+      hitIdx = -1
+      for (let i = 0; i < elements.length; i++) {
+        if (elements[i].skinOnly) continue
+        const d = evalElementSDF(px, py, pz, elements[i], canvasW, canvasH)
+        if (d < minDist) {
+          minDist = d
+          hitIdx = i
+        }
       }
     }
 

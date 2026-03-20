@@ -7,6 +7,8 @@ import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, type SceneUBO } from './scene'
+import { buildBVH2D, type BVHData, type AABB2D } from './bvh'
+import { pixelToWorld, pixelWidthToWorld, pixelHeightToWorld } from '../coords/coordinateSystem'
 import { createTextureAtlas, type TextureAtlas } from './textureAtlas'
 import { createColorWheel, type ColorWheelTexture } from './colorWheel'
 import { createOverlayRenderer, type OverlayRenderer } from './overlay'
@@ -22,6 +24,7 @@ export interface SDFRenderer {
   overlay: OverlayRenderer
   atlas: TextureAtlas
   colorWheel: ColorWheelTexture
+  bvhData: BVHData | null
   resize(width: number, height: number): void
   updateScene(elements: ChoanElement[], extrudeDepth?: number): void
   render(settings: RenderSettings): void
@@ -129,7 +132,6 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     pendingCanvasH = ch
 
     // HiDPI (DPR≥2): DPR already provides sub-pixel sharpness — skip 2× SS
-    // to avoid rendering at 4× logical pixel count (DPR × SS).
     const ss = dpr >= 2 ? 1 : 2
     const sw = cw * ss
     const sh = ch * ss
@@ -137,13 +139,62 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     resizeResolve(sw, sh)
   }
 
+  // BVH data exposed for CPU hit testing
+  let currentBVH: BVHData | null = null
+
   function updateScene(elements: ChoanElement[], extrudeDepth?: number) {
+    // Separate regular and skinOnly elements, preserving original indices
+    const regularWithIdx: { el: ChoanElement; origIdx: number }[] = []
+    const skinOnlyElements: ChoanElement[] = []
+    for (let i = 0; i < elements.length; i++) {
+      if (elements[i].skinOnly) skinOnlyElements.push(elements[i])
+      else regularWithIdx.push({ el: elements[i], origIdx: i })
+    }
+
+    // Compute 2D AABBs in world space for regular elements
+    const aabbs: AABB2D[] = regularWithIdx.map(({ el }) => {
+      const cx = el.x + el.width / 2
+      const cy = el.y + el.height / 2
+      const [wx, wy] = pixelToWorld(cx, cy, cssWidth, cssHeight)
+      const hw = pixelWidthToWorld(el.width, cssWidth, cssHeight) / 2
+      const hh = pixelHeightToWorld(el.height, cssHeight) / 2
+      return { cx: wx, cy: wy, hw, hh }
+    })
+
+    // Build BVH
+    const rawBvh = buildBVH2D(aabbs)
+
+    // Convert objectOrder from regular-array indices to original elements indices
+    const origObjectOrder = rawBvh.objectOrder.map(
+      idx => idx >= 0 && idx < regularWithIdx.length ? regularWithIdx[idx].origIdx : -1,
+    )
+
+    // Store BVH data with original indices for CPU hit testing
+    currentBVH = {
+      nodes: rawBvh.nodes,
+      objectOrder: origObjectOrder,
+      numInternalNodes: rawBvh.numInternalNodes,
+      numLeaves: rawBvh.numLeaves,
+    }
+
+    // Reorder elements: [regular in BVH leaf order] + [skinOnly]
+    const reordered: ChoanElement[] = []
+    for (const origIdx of origObjectOrder) {
+      if (origIdx >= 0) reordered.push(elements[origIdx])
+    }
+    const numRegular = reordered.length
+    for (const el of skinOnlyElements) reordered.push(el)
+
+    // Build texRects for reordered elements
     const texRects = new Map<string, [number, number, number, number]>()
-    for (const el of elements) {
+    for (const el of reordered) {
       const rect = atlas.getTexRect(el.id)
       if (rect) texRects.set(el.id, rect)
     }
-    sceneUBO.update(gl, elements, cssWidth, cssHeight, extrudeDepth, texRects)
+
+    sceneUBO.update(
+      gl, reordered, cssWidth, cssHeight, extrudeDepth, texRects, numRegular,
+    )
   }
 
   function render(s: RenderSettings) {
@@ -250,5 +301,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   resize(container.clientWidth, container.clientHeight)
 
-  return { canvas, gl, camera, overlay, atlas, colorWheel, resize, updateScene, render, dispose }
+  return {
+    canvas, gl, camera, overlay, atlas, colorWheel,
+    get bvhData() { return currentBVH },
+    resize, updateScene, render, dispose,
+  }
 }

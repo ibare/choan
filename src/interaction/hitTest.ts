@@ -22,7 +22,7 @@ export function raycastElement(
     clientX, clientY, rect, ray.ro, ray.forward, ray.right, ray.up, ray.fovScale, w, h,
   )
   const elements = elementsOverride ?? useChoanStore.getState().elements
-  const hit = cpuRayMarch(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h)
+  const hit = cpuRayMarch(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, renderer.bvhData ?? undefined)
   if (!hit || hit.objectIndex < 0 || hit.objectIndex >= elements.length) return null
   return elements[hit.objectIndex].id
 }

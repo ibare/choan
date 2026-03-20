@@ -37,14 +37,13 @@ uniform float uSideDarken;
 uniform vec2 uSideSmooth;
 
 // Scene UBO (std140)
-// Layout: vec4 numObjPad, then per-object: vec4 posType, vec4 sizeRadius, vec4 colorAlpha
 #define MAX_OBJECTS ${MAX_OBJECTS}
 layout(std140) uniform SceneData {
-  vec4 uNumObjPad;           // x = numObjects
+  vec4 uNumObjPad;           // x = numObjects, y = (reserved), z = numRegular
   vec4 uPosType[MAX_OBJECTS];
   vec4 uSizeRadius[MAX_OBJECTS];
   vec4 uColorAlpha[MAX_OBJECTS];
-  vec4 uEffect[MAX_OBJECTS];     // x = pulse intensity, y = flash intensity
+  vec4 uEffect[MAX_OBJECTS];     // x = pulse intensity, y = flash intensity, w = skinOnly
   vec4 uTexRect[MAX_OBJECTS];    // xy = atlas UV offset, zw = atlas UV scale (0 = no texture)
 };
 
@@ -75,50 +74,7 @@ float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
   return length(pa - ba * h) - r;
 }
 
-// ─── Scene ────────────────────────────────────────
-
-vec2 sceneSDF(vec3 p) {
-  vec2 res = vec2(1e10, -1.0);
-  int numObj = int(uNumObjPad.x);
-
-  for (int i = 0; i < MAX_OBJECTS; i++) {
-    if (i >= numObj) break;
-
-    vec3 lp = p - uPosType[i].xyz;
-    vec3 hs = uSizeRadius[i].xyz;
-    float shapeType = uPosType[i].w;
-    float radius = uSizeRadius[i].w;
-    float d;
-
-    if (shapeType < 0.5) {
-      // Rectangle: radius maps 0-1 → 0-min(halfSize.xy), XY only
-      float maxR = min(hs.x, hs.y);
-      float r = radius * maxR;
-      d = sdExtrudedRoundRect(lp, hs, r);
-    } else if (shapeType < 1.5) {
-      // Circle: fully rounded XY, sharp Z extrusion
-      float r = min(hs.x, hs.y);
-      d = sdExtrudedRoundRect(lp, hs, r);
-    } else {
-      // Line: capsule along x-axis
-      vec3 a = vec3(-hs.x, 0.0, 0.0);
-      vec3 b = vec3( hs.x, 0.0, 0.0);
-      d = sdCapsule(lp, a, b, hs.y);
-    }
-
-    // skinOnly: exclude from raymarching entirely (handled in main)
-    if (uEffect[i].w > 0.5) continue;
-
-    // Pulse: expand SDF on color change
-    d -= uEffect[i].x * 0.015;
-
-    if (d < res.x) res = vec2(d, float(i));
-  }
-
-  return res;
-}
-
-// ─── Single-object SDF (for normal calculation) ───
+// ─── Single-object SDF ───────────────────────────
 
 float singleSDF(vec3 p, int objId) {
   float shapeType = uPosType[objId].w;
@@ -137,6 +93,28 @@ float singleSDF(vec3 p, int objId) {
 
 float singleSDFWithPulse(vec3 p, int objId) {
   return singleSDF(p, objId) - uEffect[objId].x * 0.015;
+}
+
+// ─── Scene (AABB pre-test accelerated) ───────────
+
+vec2 sceneSDF(vec3 p) {
+  vec2 res = vec2(1e10, -1.0);
+  int numRegular = int(uNumObjPad.z);
+
+  for (int i = 0; i < MAX_OBJECTS; i++) {
+    if (i >= numRegular) break;
+
+    // Cheap 2D AABB distance test — skip expensive SDF if box is already farther
+    float dx = max(abs(p.x - uPosType[i].x) - uSizeRadius[i].x, 0.0);
+    float dy = max(abs(p.y - uPosType[i].y) - uSizeRadius[i].y, 0.0);
+    if (dx * dx + dy * dy >= res.x * res.x) continue;
+
+    float d = singleSDF(p, i);
+    d -= uEffect[i].x * 0.015; // pulse
+    if (d < res.x) res = vec2(d, float(i));
+  }
+
+  return res;
 }
 
 // ─── Normal (tetrahedron on hit object only — O(1) regardless of N) ─
@@ -259,11 +237,11 @@ void main() {
     outNormalId = vec4(normal, hit.y);
   }
 
-  // ── skinOnly overlay: ray-plane intersection for excluded objects ──
+  // ── skinOnly overlay: ray-plane intersection (starts after regular objects) ──
   int numObj = int(uNumObjPad.x);
-  for (int i = 0; i < MAX_OBJECTS; i++) {
+  int numRegSkin = int(uNumObjPad.z);
+  for (int i = numRegSkin; i < MAX_OBJECTS; i++) {
     if (i >= numObj) break;
-    if (uEffect[i].w < 0.5) continue; // not skinOnly
     vec4 texRect = uTexRect[i];
     if (texRect.z <= 0.0) continue; // no texture
 

@@ -33,7 +33,15 @@ const colorChangeTimes = new Map<string, number>()
 export interface SceneUBO {
   buffer: WebGLBuffer
   data: Float32Array
-  update(gl: WebGL2RenderingContext, elements: ChoanElement[], canvasW: number, canvasH: number, extrudeDepth?: number, texRects?: Map<string, [number, number, number, number]>): void
+  update(
+    gl: WebGL2RenderingContext,
+    elements: ChoanElement[],
+    canvasW: number,
+    canvasH: number,
+    extrudeDepth?: number,
+    texRects?: Map<string, [number, number, number, number]>,
+    numRegular?: number,
+  ): void
   bind(gl: WebGL2RenderingContext, program: WebGLProgram): void
   dispose(gl: WebGL2RenderingContext): void
 }
@@ -53,6 +61,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     canvasH: number,
     extrudeDepthOverride?: number,
     texRects?: Map<string, [number, number, number, number]>,
+    numRegular?: number,
   ) {
     const ed = extrudeDepthOverride ?? EXTRUDE_DEPTH
     const count = Math.min(elements.length, MAX_OBJECTS)
@@ -61,8 +70,9 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     // Clear all data
     data.fill(0)
 
-    // numObjects
+    // uNumObjPad: x = numObjects, z = numRegular (non-skinOnly count)
     data[0] = count
+    data[2] = numRegular ?? count
 
     for (let i = 0; i < count; i++) {
       const el = elements[i]
