@@ -52,6 +52,8 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
   }
 
   // 2. Scrub mode — evaluate bundle clips at playhead time
+  //    Then apply layout animator for non-animated elements so spring
+  //    physics (e.g. size transitions) keep working during editing.
   if (editingBundleId && previewState === 'stopped') {
     const bundle = animationBundles.find((b) => b.id === editingBundleId)
     if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
@@ -67,13 +69,16 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
         }
         overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
       }
-      return elements.map((el) => {
+      const scrubbed = elements.map((el) => {
         if (manipulatedIds.has(el.id)) return el
         const patch = overrides.get(el.id)
         return patch ? { ...el, ...patch } : el
       })
+      // Skip animated + manipulated elements in layout animator
+      const skipIds = new Set([...manipulatedIds, ...overrides.keys()])
+      return layoutAnimator.tick(scrubbed, springParams, skipIds.size > 0 ? skipIds : undefined)
     }
-    return elements
+    return layoutAnimator.tick(elements, springParams, manipulatedIds.size > 0 ? manipulatedIds : undefined)
   }
 
   // 3. Editing mode — spring physics
