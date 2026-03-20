@@ -103,7 +103,10 @@ function sceneSDF_BVH(
     const dy = Math.max(minY - py, Math.max(py - maxY, 0))
     const boxDist = Math.sqrt(dx * dx + dy * dy)
 
-    if (boxDist >= resDist) continue
+    // Only prune when point is outside AABB (boxDist > 0).
+    // Inside the AABB (boxDist = 0), the actual SDF can be negative
+    // (e.g., child inside parent), so we must always descend.
+    if (boxDist > 0 && boxDist >= resDist) continue
 
     if (idx >= numInternalNodes) {
       // Leaf
