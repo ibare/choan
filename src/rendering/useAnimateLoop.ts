@@ -118,8 +118,9 @@ export function useAnimateLoop({
       }
       if (!atlasNeedsRebuild) {
         for (const el of skinnedEls) {
-          const texW = Math.round(el.width * dpr)
-          const texH = Math.round(el.height * dpr)
+          const texScale = el.frame ? 0.5 : dpr
+          const texW = Math.round(el.width * texScale)
+          const texH = Math.round(el.height * texScale)
           const skinKey = getSkinKey(el)
           const stateKey = `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
           if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
@@ -128,18 +129,30 @@ export function useAnimateLoop({
       if (atlasNeedsRebuild) {
         renderer.atlas.reset()
         atlasDirty.clear()
+        // Share atlas regions for identical skin+size+state combinations
+        const sharedRegions = new Map<string, string>() // stateKey → first element ID
         for (const el of skinnedEls) {
-          const texW = Math.round(el.width * dpr)
-          const texH = Math.round(el.height * dpr)
+          const texScale = el.frame ? 0.5 : dpr
+          const texW = Math.round(el.width * texScale)
+          const texH = Math.round(el.height * texScale)
           if (texW < 1 || texH < 1) continue
-          const region = renderer.atlas.allocate(el.id, texW, texH)
-          if (region) {
-            const ctx = renderer.atlas.getContext(region)
-            const skinKey = getSkinKey(el)
-            const compState = { ...el.componentState, _elColor: el.color }
-            paintComponent(skinKey, ctx, texW, texH, compState, strokeStyle)
-            atlasDirty.set(el.id, `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${JSON.stringify(el.componentState ?? {})}`)
+          const skinKey = getSkinKey(el)
+          const stateKey = `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${JSON.stringify(el.componentState ?? {})}`
+
+          const existingId = sharedRegions.get(stateKey)
+          if (existingId) {
+            // Reuse existing region — allocate with same ID alias
+            renderer.atlas.alias(el.id, existingId)
+          } else {
+            const region = renderer.atlas.allocate(el.id, texW, texH)
+            if (region) {
+              const ctx = renderer.atlas.getContext(region)
+              const compState = { ...el.componentState, _elColor: el.color }
+              paintComponent(skinKey, ctx, texW, texH, compState, strokeStyle)
+              sharedRegions.set(stateKey, el.id)
+            }
           }
+          atlasDirty.set(el.id, stateKey)
         }
       }
 

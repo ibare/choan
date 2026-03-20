@@ -18,7 +18,6 @@ import { getCameraRayParams } from '../engine/camera'
 import { screenToRay } from '../engine/sdf'
 import { handleColorPickerClick, computeColorPickerHover } from './colorPickerHandlers'
 import { handleDragMove, finalizeDrag } from './dragHandlers'
-import { FRAME_PRESETS } from '../engine/painters'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
 import { handleDrawMove, finalizeDrawn } from './drawHandlers'
 import { handleDragSelectMove } from './dragSelectHandlers'
@@ -314,19 +313,13 @@ export function usePointerHandlers({
     const pendingSkin = storeState.pendingSkin as string | null
     const pendingFrame = storeState.pendingFrame as string | null
 
-    // Frame: use preset size and fixed aspect ratio
-    let frameProps: Partial<ChoanElement> = {}
+    // Frame/skin props — always start at width:1, height:1 (consistent with rect)
+    const frameExtra: Partial<ChoanElement> = {}
     if (pendingFrame === 'browser' || pendingFrame === 'mobile') {
-      const preset = FRAME_PRESETS[pendingFrame]
-      const safeInset = pendingFrame === 'browser'
+      frameExtra.frame = pendingFrame
+      frameExtra.safeInset = pendingFrame === 'browser'
         ? { top: 14, bottom: 0, left: 0, right: 0 }
         : { top: 20, bottom: 10, left: 0, right: 0 }
-      frameProps = {
-        frame: pendingFrame,
-        width: preset.width, height: preset.height,
-        x: pixel.x - preset.width / 2, y: pixel.y - preset.height / 2,
-        safeInset,
-      }
     }
 
     const newEl: ChoanElement = {
@@ -335,7 +328,7 @@ export function usePointerHandlers({
       role: tool === 'rectangle' ? 'container' : undefined,
       color: drawColor, x: pixel.x, y: pixel.y, z: 0, width: 1, height: 1, opacity: 1,
       ...(pendingSkin ? { skin: pendingSkin, skinOnly: true } : {}),
-      ...frameProps,
+      ...frameExtra,
     }
     addElement(newEl)
     selectElement(id)

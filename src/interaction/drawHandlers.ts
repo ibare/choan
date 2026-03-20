@@ -50,7 +50,9 @@ export function finalizeDrawn(
   const el = els.find((e) => e.id === drawElId)
   if (!el) return
   if (el.width <= MIN_ELEMENT_SIZE && el.height <= MIN_ELEMENT_SIZE) {
-    const size = DEFAULT_SIZE[el.type] ?? { w: 100, h: 100 }
+    // Frame elements use their preset size; others use DEFAULT_SIZE
+    const frameSize = el.frame ? FRAME_PRESETS[el.frame] : null
+    const size = frameSize ? { w: frameSize.width, h: frameSize.height } : (DEFAULT_SIZE[el.type] ?? { w: 100, h: 100 })
     const sx = drawStartPixel.x, sy = drawStartPixel.y
     updateElement(drawElId, { x: sx - size.w / 2, y: sy - size.h / 2, width: size.w, height: size.h })
   }

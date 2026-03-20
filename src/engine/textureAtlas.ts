@@ -2,7 +2,7 @@
 // Each UI component is painted into a region, then the entire canvas is uploaded
 // as a single WebGL texture. Per-object UV rects are passed to the shader via UBO.
 
-const ATLAS_SIZE = 2048
+const ATLAS_SIZE = 4096
 const PAD = 1 // 1px padding to avoid UV seam bleeding
 
 export interface AtlasRegion {
@@ -24,6 +24,7 @@ export interface TextureAtlas {
   allocate(id: string, w: number, h: number): AtlasRegion | null
   reset(): void
   free(id: string): void
+  alias(newId: string, existingId: string): void
   getRegion(id: string): AtlasRegion | undefined
   getTexRect(id: string): [number, number, number, number] | null
   getContext(region: AtlasRegion): OffscreenCanvasRenderingContext2D
@@ -81,6 +82,12 @@ export function createTextureAtlas(gl: WebGL2RenderingContext): TextureAtlas {
     regions.delete(id)
   }
 
+  /** Point newId to the same atlas region as existingId (shared texture). */
+  function alias(newId: string, existingId: string): void {
+    const region = regions.get(existingId)
+    if (region) regions.set(newId, { ...region, id: newId })
+  }
+
   /** Clear all shelves and regions — call before rebuilding. */
   function reset(): void {
     shelves.length = 0
@@ -125,6 +132,7 @@ export function createTextureAtlas(gl: WebGL2RenderingContext): TextureAtlas {
   return {
     texture,
     allocate,
+    alias,
     reset,
     free,
     getRegion,
