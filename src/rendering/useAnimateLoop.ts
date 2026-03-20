@@ -118,7 +118,7 @@ export function useAnimateLoop({
       }
       if (!atlasNeedsRebuild) {
         for (const el of skinnedEls) {
-          const texScale = el.frame ? 0.5 : dpr
+          const texScale = el.frame ? 2 : dpr
           const texW = Math.round(el.width * texScale)
           const texH = Math.round(el.height * texScale)
           const skinKey = getSkinKey(el)
@@ -132,7 +132,7 @@ export function useAnimateLoop({
         // Share atlas regions for identical skin+size+state combinations
         const sharedRegions = new Map<string, string>() // stateKey → first element ID
         for (const el of skinnedEls) {
-          const texScale = el.frame ? 0.5 : dpr
+          const texScale = el.frame ? 2 : dpr
           const texW = Math.round(el.width * texScale)
           const texH = Math.round(el.height * texScale)
           if (texW < 1 || texH < 1) continue

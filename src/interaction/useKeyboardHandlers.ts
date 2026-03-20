@@ -24,7 +24,7 @@ export function useKeyboardHandlers(
   customActions?: Record<string, ActionHandler>,
 ): void {
   const { removeElement, setTool } = useChoanStore()
-  const copiedRef = useRef<ChoanElement | null>(null)
+  const copiedRef = useRef<ChoanElement[]>([])
   const customActionsRef = useRef(customActions)
   customActionsRef.current = customActions
 
@@ -106,17 +106,62 @@ export function useKeyboardHandlers(
     },
     'copy': () => {
       const { selectedIds, elements } = useChoanStore.getState()
-      if (selectedIds.length > 0) copiedRef.current = elements.find((el) => el.id === selectedIds[0]) ?? null
+      if (selectedIds.length === 0) return
+      const rootId = selectedIds[0]
+      // Collect root + all descendants recursively
+      const collected: ChoanElement[] = []
+      function collect(parentId: string) {
+        for (const el of elements) {
+          if (el.id === parentId || el.parentId === parentId) {
+            if (!collected.some((c) => c.id === el.id)) {
+              collected.push(el)
+              collect(el.id)
+            }
+          }
+        }
+      }
+      collect(rootId)
+      copiedRef.current = collected
     },
     'paste': () => {
-      const src = copiedRef.current
-      if (!src) return
-      const id = nanoid()
-      const { addElement, selectElement, runLayout, elements: curEls } = useChoanStore.getState()
-      const parentStillExists = src.parentId && curEls.some((e) => e.id === src.parentId)
-      addElement({ ...src, id, x: src.x + 20, y: src.y + 20, parentId: parentStillExists ? src.parentId : undefined })
-      if (parentStillExists && src.parentId) runLayout(src.parentId)
-      selectElement(id)
+      const sources = copiedRef.current
+      if (sources.length === 0) return
+      const store = useChoanStore.getState()
+      const root = sources[0]
+
+      // Create ID mapping (old → new)
+      const idMap = new Map<string, string>()
+      for (const el of sources) idMap.set(el.id, nanoid())
+
+      const rootId = idMap.get(root.id)!
+      const parentStillExists = root.parentId && store.elements.some((e) => e.id === root.parentId)
+
+      for (const el of sources) {
+        const newId = idMap.get(el.id)!
+        const isRoot = el.id === root.id
+        let newParentId: string | undefined
+        if (isRoot) {
+          newParentId = parentStillExists ? root.parentId : undefined
+        } else {
+          newParentId = el.parentId ? idMap.get(el.parentId) : undefined
+        }
+        store.addElement({
+          ...el,
+          id: newId,
+          x: isRoot ? el.x + 20 : el.x,
+          y: isRoot ? el.y + 20 : el.y,
+          parentId: newParentId,
+        })
+      }
+
+      if (parentStillExists && root.parentId) store.runLayout(root.parentId)
+      // Re-layout all pasted containers so children are positioned correctly
+      for (const el of sources) {
+        if (el.layoutDirection && el.layoutDirection !== 'free') {
+          store.runLayout(idMap.get(el.id)!)
+        }
+      }
+      store.selectElement(rootId)
     },
     'tool:select': () => setTool('select'),
     'tool:rectangle': () => setTool('rectangle'),
