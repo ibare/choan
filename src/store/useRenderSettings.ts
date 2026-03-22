@@ -39,7 +39,7 @@ export const DEFAULT_RENDER_SETTINGS: RenderSettings = {
   idEdgeThreshold: [0.1, 0.6],
 
   bgColor: [0xf7 / 255, 0xf3 / 255, 0xee / 255],
-  extrudeDepth: 0.05,
+  extrudeDepth: 0.15,
 
   springStiffness: 0.15,
   springDamping: 0.75,
