@@ -48,8 +48,18 @@ export function useKeyboardHandlers(
     const totalSize = sliceSize * count + gap * (count - 1)
     const startPos = (isH ? el.x : el.y) - (totalSize - (isH ? el.width : el.height)) / 2
 
-    // Collect children (for container duplication)
-    const children = store.elements.filter((e) => e.parentId === elementId)
+    // Collect entire descendant subtree (recursive)
+    const allElements = store.elements
+    function collectDescendants(parentId: string): ChoanElement[] {
+      const direct = allElements.filter((e) => e.parentId === parentId)
+      const result: ChoanElement[] = []
+      for (const child of direct) {
+        result.push(child)
+        result.push(...collectDescendants(child.id))
+      }
+      return result
+    }
+    const descendants = collectDescendants(elementId)
 
     // Create at original position/size first (for spring animation)
     const newIds: string[] = []
@@ -58,36 +68,52 @@ export function useKeyboardHandlers(
       newIds.push(id)
       store.addElement({ ...el, id, x: el.x, y: el.y, width: el.width, height: el.height, label: el.label, parentId: el.parentId })
 
-      // Duplicate children into each new container
-      for (const child of children) {
-        const childId = nanoid()
-        store.addElement({ ...child, id: childId, parentId: id })
+      // Duplicate entire subtree — map old IDs to new IDs for parent references
+      const idMap = new Map<string, string>()
+      idMap.set(elementId, id)
+      for (const desc of descendants) {
+        const newDescId = nanoid()
+        idMap.set(desc.id, newDescId)
+      }
+      for (const desc of descendants) {
+        store.addElement({ ...desc, id: idMap.get(desc.id)!, parentId: idMap.get(desc.parentId!)! })
       }
     }
 
-    // Remove original children then container
-    for (const child of children) store.removeElement(child.id)
+    // Remove original descendants (deepest first) then container
+    for (let i = descendants.length - 1; i >= 0; i--) store.removeElement(descendants[i].id)
     store.removeElement(elementId)
     store.setSelectedIds([])
 
     // Next frame: update to final positions → spring animation + re-layout children
     requestAnimationFrame(() => {
       const s = useChoanStore.getState()
+
+      // Recursively run layout on a container and all its descendant containers
+      const runLayoutDeep = (containerId: string) => {
+        s.runLayout(containerId)
+        for (const e of s.elements.filter((e) => e.parentId === containerId)) {
+          if (e.role === 'container' && e.layoutDirection && e.layoutDirection !== 'free') {
+            runLayoutDeep(e.id)
+          }
+        }
+      }
+
       for (let i = 0; i < newIds.length; i++) {
         s.updateElement(newIds[i], isH
           ? { x: startPos + (sliceSize + gap) * i, width: sliceSize }
           : { y: startPos + (sliceSize + gap) * i, height: sliceSize },
         )
         if (el.layoutDirection && el.layoutDirection !== 'free') {
-          s.runLayout(newIds[i])
+          runLayoutDeep(newIds[i])
         }
       }
       // Re-layout parent container if it has auto layout
       if (isAutoLayout && el.parentId) {
         s.runLayout(el.parentId)
-        // Parent changed container positions → re-layout children to match
+        // Parent changed container positions → re-layout all descendants
         if (el.layoutDirection && el.layoutDirection !== 'free') {
-          for (const id of newIds) s.runLayout(id)
+          for (const id of newIds) runLayoutDeep(id)
         }
       }
     })
