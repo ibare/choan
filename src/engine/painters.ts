@@ -753,13 +753,7 @@ function paintIcon(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number,
   ctx.scale(scale, scale)
 
   const path = new Path2D(pathData)
-  const elColor = state._elColor as number | undefined
-  if (elColor != null) {
-    const r = (elColor >> 16) & 0xFF, g = (elColor >> 8) & 0xFF, b = elColor & 0xFF
-    ctx.fillStyle = `rgb(${r},${g},${b})`
-  } else {
-    ctx.fillStyle = stroke.color
-  }
+  ctx.fillStyle = stroke.color
   ctx.fill(path)
 
   ctx.restore()

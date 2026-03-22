@@ -85,6 +85,10 @@ export function useKeyboardHandlers(
       // Re-layout parent container if it has auto layout
       if (isAutoLayout && el.parentId) {
         s.runLayout(el.parentId)
+        // Parent changed container positions → re-layout children to match
+        if (el.layoutDirection && el.layoutDirection !== 'free') {
+          for (const id of newIds) s.runLayout(id)
+        }
       }
     })
   }, [])
@@ -207,10 +211,10 @@ export function useKeyboardHandlers(
       if (!binding) return
 
       const custom = customActionsRef.current?.[binding.action]
-      if (custom) { custom(); return }
+      if (custom) { e.preventDefault(); custom(); return }
 
       const handler = builtinActions()[binding.action]
-      if (handler) handler()
+      if (handler) { e.preventDefault(); handler() }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

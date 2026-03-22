@@ -24,6 +24,7 @@ const bindings: HotkeyBinding[] = [
 
   // ── Tools ──
   { key: 'v', action: 'tool:select',            label: 'Select tool' },
+  { key: ' ', action: 'tool:select',            label: 'Select tool (Space)' },
   { key: 'r', action: 'tool:rectangle',         label: 'Rectangle tool' },
 
   // ── Split ──
