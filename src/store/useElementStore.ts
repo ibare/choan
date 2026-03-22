@@ -82,33 +82,41 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
   const childZ = container.z + 1
   const childIds = new Set(children.map((c) => c.id))
   if (direction === 'free') {
-    return elements.map((e) => childIds.has(e.id) ? { ...e, z: childZ } : e)
+    elements = elements.map((e) => childIds.has(e.id) ? { ...e, z: childZ } : e)
+  } else {
+    const isRowOrCol = direction === 'row' || direction === 'column'
+    const sizings = isRowOrCol ? children.map((c) => c.layoutSizing ?? 'equal') : undefined
+    const ratios = isRowOrCol ? children.map((c) => c.layoutRatio) : undefined
+    const fixedSizes = isRowOrCol ? children.map((c) => {
+      if (c.layoutSizing !== 'fixed-px') return undefined
+      return direction === 'row' ? c.width : c.height
+    }) : undefined
+    const positions = computeAutoLayout({
+      container: { x: container.x, y: container.y, width: container.width, height: container.height },
+      direction,
+      gap: container.layoutGap ?? 8,
+      padding: container.layoutPadding ?? 8,
+      safeInset: container.safeInset,
+      childCount: children.length,
+      columns: container.layoutColumns ?? 2,
+      sizings,
+      ratios,
+      fixedSizes,
+    })
+    elements = elements.map((e) => {
+      if (!childIds.has(e.id)) return e
+      const idx = children.indexOf(e)
+      const pos = positions[idx]
+      return { ...e, x: pos.x, y: pos.y, width: pos.width, height: pos.height, z: childZ }
+    })
   }
-  const isRowOrCol = direction === 'row' || direction === 'column'
-  const sizings = isRowOrCol ? children.map((c) => c.layoutSizing ?? 'equal') : undefined
-  const ratios = isRowOrCol ? children.map((c) => c.layoutRatio) : undefined
-  const fixedSizes = isRowOrCol ? children.map((c) => {
-    if (c.layoutSizing !== 'fixed-px') return undefined
-    return direction === 'row' ? c.width : c.height
-  }) : undefined
-  const positions = computeAutoLayout({
-    container: { x: container.x, y: container.y, width: container.width, height: container.height },
-    direction,
-    gap: container.layoutGap ?? 8,
-    padding: container.layoutPadding ?? 8,
-    safeInset: container.safeInset,
-    childCount: children.length,
-    columns: container.layoutColumns ?? 2,
-    sizings,
-    ratios,
-    fixedSizes,
-  })
-  return elements.map((e) => {
-    if (!childIds.has(e.id)) return e
-    const idx = children.indexOf(e)
-    const pos = positions[idx]
-    return { ...e, x: pos.x, y: pos.y, width: pos.width, height: pos.height, z: childZ }
-  })
+  // Recurse into child containers whose position/size may have changed
+  for (const child of children) {
+    if (child.role === 'container') {
+      elements = applyLayout(elements, child.id)
+    }
+  }
+  return elements
 }
 
 /** Recursively propagate Z values: each child gets parent.z + 1 */

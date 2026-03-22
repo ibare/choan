@@ -86,35 +86,20 @@ export function useKeyboardHandlers(
     store.setSelectedIds([])
 
     // Next frame: update to final positions → spring animation + re-layout children
+    // applyLayout is now recursive, so runLayout propagates to all descendants
     requestAnimationFrame(() => {
       const s = useChoanStore.getState()
-
-      // Recursively run layout on a container and all its descendant containers
-      const runLayoutDeep = (containerId: string) => {
-        s.runLayout(containerId)
-        for (const e of s.elements.filter((e) => e.parentId === containerId)) {
-          if (e.role === 'container' && e.layoutDirection && e.layoutDirection !== 'free') {
-            runLayoutDeep(e.id)
-          }
-        }
-      }
-
       for (let i = 0; i < newIds.length; i++) {
         s.updateElement(newIds[i], isH
           ? { x: startPos + (sliceSize + gap) * i, width: sliceSize }
           : { y: startPos + (sliceSize + gap) * i, height: sliceSize },
         )
         if (el.layoutDirection && el.layoutDirection !== 'free') {
-          runLayoutDeep(newIds[i])
+          s.runLayout(newIds[i])
         }
       }
-      // Re-layout parent container if it has auto layout
       if (isAutoLayout && el.parentId) {
         s.runLayout(el.parentId)
-        // Parent changed container positions → re-layout all descendants
-        if (el.layoutDirection && el.layoutDirection !== 'free') {
-          for (const id of newIds) runLayoutDeep(id)
-        }
       }
     })
   }, [])
