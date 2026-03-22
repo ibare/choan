@@ -4,7 +4,7 @@
 import type { ChoanElement } from '../store/useChoanStore'
 import type { SDFRenderer } from '../engine/renderer'
 import { getCameraRayParams } from '../engine/camera'
-import { cpuRayMarch, screenToRay } from '../engine/sdf'
+import { cpuRayMarch, cpuSkinOnlyHit, screenToRay } from '../engine/sdf'
 import { useChoanStore } from '../store/useChoanStore'
 import { HANDLE_HIT_RADIUS } from '../constants'
 
@@ -23,8 +23,13 @@ export function raycastElement(
   )
   const elements = elementsOverride ?? useChoanStore.getState().elements
   const hit = cpuRayMarch(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, renderer.bvhData ?? undefined)
-  if (!hit || hit.objectIndex < 0 || hit.objectIndex >= elements.length) return null
-  return elements[hit.objectIndex].id
+
+  // skinOnly elements (icons etc.) use ray-plane intersection, not SDF
+  const skinHit = cpuSkinOnlyHit(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, hit?.distance ?? -1)
+
+  const best = skinHit ?? hit
+  if (!best || best.objectIndex < 0 || best.objectIndex >= elements.length) return null
+  return elements[best.objectIndex].id
 }
 
 export function hitTestCorner(

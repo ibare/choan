@@ -178,6 +178,42 @@ export function cpuRayMarch(
   return null
 }
 
+// Ray-plane intersection for skinOnly elements (mirrors GPU skinOnly overlay)
+export function cpuSkinOnlyHit(
+  roX: number, roY: number, roZ: number,
+  rdX: number, rdY: number, rdZ: number,
+  elements: ChoanElement[],
+  canvasW: number, canvasH: number,
+  sdfHitDist: number, // distance of existing SDF hit (-1 if no hit)
+): HitResult | null {
+  let bestT = sdfHitDist >= 0 ? sdfHitDist : 1e10
+  let bestIdx = -1
+
+  for (let i = 0; i < elements.length; i++) {
+    if (!elements[i].skinOnly) continue
+    const { wx, wy, wz, hw, hh, hd } = elementToWorld(elements[i], canvasW, canvasH)
+    const frontZ = wz + hd
+
+    // Ray-plane intersection: plane at z = frontZ
+    if (Math.abs(rdZ) < 1e-6) continue
+    const t = (frontZ - roZ) / rdZ
+    if (t < 0 || t >= bestT) continue
+
+    // Hit point on the plane
+    const hx = roX + rdX * t - wx
+    const hy = roY + rdY * t - wy
+
+    // Check XY bounds
+    if (Math.abs(hx) > hw || Math.abs(hy) > hh) continue
+
+    bestT = t
+    bestIdx = i
+  }
+
+  if (bestIdx < 0) return null
+  return { distance: bestT, objectIndex: bestIdx }
+}
+
 // Ray from screen pixel through camera
 export function screenToRay(
   clientX: number, clientY: number,
