@@ -215,7 +215,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
 }
 
 export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef }: Props) {
-  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [pos, setPos] = useState<{ x: number; y: number; placement: 'top' | 'right' | 'bottom' } | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const rafRef = useRef(0)
   const prevKeyRef = useRef('')
@@ -240,17 +240,48 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
       const { w, h } = canvasSizeRef.current
       const dpr = window.devicePixelRatio || 1
-      // top-center of the element in canvas pixel space
-      const cx = elem.x + elem.width / 2
-      const ty = elem.y
-      const [wx, wy] = pixelToWorldCS(cx, ty, w, h)
-      const screen = rendererRef.current.overlay.projectToScreen(wx, wy, 0)
-      const nx = screen.px / dpr
-      const ny = screen.py / dpr
-      const key = `${nx.toFixed(1)},${ny.toFixed(1)}`
+      const ov = rendererRef.current.overlay
+      const project = (px: number, py: number) => {
+        const [wx, wy] = pixelToWorldCS(px, py, w, h)
+        const s = ov.projectToScreen(wx, wy, 0)
+        return { x: s.px / dpr, y: s.py / dpr }
+      }
+
+      // Element bounding box in CSS pixels
+      const topCenter = project(elem.x + elem.width / 2, elem.y)
+      const rightCenter = project(elem.x + elem.width, elem.y + elem.height / 2)
+      const bottomCenter = project(elem.x + elem.width / 2, elem.y + elem.height)
+
+      // Container CSS size
+      const containerW = w
+      const containerH = h
+
+      // Estimate toolbar size for space checks
+      const TOOLBAR_H = 44
+      const TOOLBAR_W = 400
+      const GAP = 12
+
+      // Decide placement: top → right → bottom
+      let placement: 'top' | 'right' | 'bottom'
+      let nx: number, ny: number
+      if (topCenter.y > TOOLBAR_H + GAP) {
+        placement = 'top'
+        nx = topCenter.x
+        ny = topCenter.y
+      } else if (rightCenter.x + TOOLBAR_W + GAP < containerW) {
+        placement = 'right'
+        nx = rightCenter.x
+        ny = rightCenter.y
+      } else {
+        placement = 'bottom'
+        nx = bottomCenter.x
+        ny = bottomCenter.y
+      }
+
+      const key = `${nx.toFixed(1)},${ny.toFixed(1)},${placement}`
       if (key !== prevKeyRef.current) {
         prevKeyRef.current = key
-        setPos({ x: nx, y: ny })
+        setPos({ x: nx, y: ny, placement })
       }
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -281,7 +312,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
   return (
     <div
-      className="context-toolbar"
+      className={`context-toolbar context-toolbar--${pos.placement}`}
       data-theme="dark"
       style={{ left: pos.x, top: pos.y }}
     >

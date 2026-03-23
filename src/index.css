@@ -811,26 +811,56 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   border: 1px solid var(--border);
   border-radius: 24px;
   box-shadow: var(--shadow-xl);
-  /* Center horizontally, float above element top edge */
-  transform: translateX(-50%) translateY(calc(-100% - 10px));
   pointer-events: auto;
   z-index: 25;
   user-select: none;
   white-space: nowrap;
 }
 
-/* Downward caret */
+/* Caret base */
 .context-toolbar::after {
   content: '';
   position: absolute;
-  bottom: -5px;
-  left: 50%;
-  transform: translateX(-50%) rotate(45deg);
   width: 8px;
   height: 8px;
   background: var(--surface-1);
+  transform: rotate(45deg);
+}
+
+/* Placement: top (above element, caret points down) */
+.context-toolbar--top {
+  transform: translateX(-50%) translateY(calc(-100% - 10px));
+}
+.context-toolbar--top::after {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -4px;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+}
+
+/* Placement: right (right of element, caret points left) */
+.context-toolbar--right {
+  transform: translateY(-50%) translateX(10px);
+}
+.context-toolbar--right::after {
+  left: -5px;
+  top: 50%;
+  margin-top: -4px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Placement: bottom (below element, caret points up) */
+.context-toolbar--bottom {
+  transform: translateX(-50%) translateY(10px);
+}
+.context-toolbar--bottom::after {
+  top: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
 }
 
 .ctx-btn {
