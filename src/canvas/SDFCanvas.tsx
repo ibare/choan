@@ -128,7 +128,7 @@ export default function SDFCanvas() {
       <RenderSettingsPanel />
       <NavigationGizmo controlsRef={controlsRef} />
       <SplitLabels splitModeRef={splitModeRef} canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
-      <ContextToolbar canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
+      <ContextToolbar canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} colorPickerOpenRef={colorPickerOpenRef} />
     </div>
   )
 }
