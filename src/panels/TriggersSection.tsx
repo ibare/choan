@@ -21,10 +21,10 @@ const EVENT_OPTIONS = [
 
 export default function TriggersSection({ triggers, animationBundles, onUpdate }: Props) {
   const [newEvent, setNewEvent] = useState<'click' | 'hover'>('click')
-  const [newBundle, setNewBundle] = useState('')
+  const [newBundle, setNewBundle] = useState('__none__')
 
   const bundleOptions = [
-    { value: '', label: 'Animation...' },
+    { value: '__none__', label: 'Animation...' },
     ...animationBundles.map((b) => ({ value: b.id, label: b.name })),
   ]
 
@@ -68,9 +68,9 @@ export default function TriggersSection({ triggers, animationBundles, onUpdate }
           <Button
             size="icon" variant="ghost"
             onClick={() => {
-              if (!newBundle) return
+              if (newBundle === '__none__') return
               onUpdate([...triggers, { event: newEvent, animationBundleId: newBundle }])
-              setNewBundle('')
+              setNewBundle('__none__')
             }}
           >
             <Plus size={12} />
