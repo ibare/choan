@@ -5,10 +5,14 @@ import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import * as RadixPopover from '@radix-ui/react-popover'
 import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
-import { SKIN_REGISTRY } from '../config/skins'
+// SKIN_REGISTRY no longer used — skin picker removed from toolbar
 import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
-import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns } from '@phosphor-icons/react'
+import {
+  SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
+  EyeSlash, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
+  ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB,
+} from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 
 interface Props {
@@ -107,6 +111,60 @@ function ScrubInput({ icon, value, min, max, onChange }: {
   )
 }
 
+// ── Skin-specific toolbar options ─────────────────────────────
+// Returns inline toolbar controls based on skin type.
+
+type CS = Record<string, unknown>
+
+function SkinToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button className={`ctx-btn${active ? ' active' : ''}`} title={label} onClick={onClick}>
+      <ToggleRight size={15} />
+    </button>
+  )
+}
+
+function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
+  const bool = (key: string) => !!cs[key]
+  const toggleBtn = (key: string, label: string) => (
+    <SkinToggle label={label} active={bool(key)} onClick={() => setCS({ [key]: !bool(key) })} />
+  )
+  const pctScrub = (key: string, label: string) => (
+    <ScrubInput
+      icon={<Percent size={13} />}
+      value={Math.round((Number(cs[key]) || 0) * 100)}
+      min={0} max={100}
+      onChange={(v) => setCS({ [key]: v / 100 })}
+    />
+  )
+
+  switch (skin) {
+    case 'switch':     return toggleBtn('on', 'On/Off')
+    case 'checkbox':   return toggleBtn('checked', 'Checked')
+    case 'radio':      return toggleBtn('selected', 'Selected')
+    case 'button':     return toggleBtn('pressed', 'Pressed')
+    case 'slider':     return pctScrub('value', 'Value')
+    case 'text-input': return toggleBtn('focused', 'Focused')
+    case 'progress':   return pctScrub('value', 'Value')
+    case 'badge':
+      return <ScrubInput icon={<Hash size={13} />} value={Number(cs.count) || 0} min={0} max={99} onChange={(v) => setCS({ count: v })} />
+    case 'star-rating':
+      return <ScrubInput icon={<Star size={13} />} value={Number(cs.rating) || 0} min={0} max={5} onChange={(v) => setCS({ rating: v })} />
+    case 'avatar':     return toggleBtn('online', 'Online')
+    case 'dropdown':   return toggleBtn('open', 'Open')
+    case 'text':       return toggleBtn('bold', 'Bold')
+    case 'table-skeleton':
+      return <ScrubInput icon={<Columns size={13} />} value={Number(cs.columns) || 3} min={1} max={10} onChange={(v) => setCS({ columns: v })} />
+    case 'image':
+      return (
+        <button className="ctx-btn" title="Shuffle" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
+          <ArrowsClockwise size={15} />
+        </button>
+      )
+    default: return null
+  }
+}
+
 export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const rafRef = useRef(0)
@@ -161,7 +219,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const radiusPx    = Math.round((el.radius ?? 0) * maxRadius)
   const colorHex    = colorToHex(el.color ?? 0xe0e0e0)
   const isFrameless = !el.skin && (el.skinOnly ?? false)
-  const currentSkin = SKIN_REGISTRY.find((s) => s.id === el.skin)
+
 
   const handleLayout = (d: LayoutDir) => {
     updateElement(el.id, { layoutDirection: d })
@@ -262,44 +320,10 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
         </>
       )}
 
-      {/* Skin: picker + Only Skin toggle */}
+      {/* Skin: type-specific options + Only Skin toggle */}
       {isSkin && (
         <>
-          <RadixPopover.Root>
-            <RadixPopover.Trigger asChild>
-              <button className="ctx-btn" title={currentSkin?.label ?? el.skin}>
-                {currentSkin
-                  ? <currentSkin.Icon size={15} />
-                  : <span style={{ fontSize: 10 }}>{el.skin}</span>
-                }
-              </button>
-            </RadixPopover.Trigger>
-            <RadixPopover.Portal>
-              <RadixPopover.Content
-                className="ctx-skin-picker"
-                data-theme="dark"
-                side="top"
-                align="center"
-                sideOffset={8}
-              >
-                {SKIN_REGISTRY.map(({ id, label, Icon }) => (
-                  <button
-                    key={id}
-                    className={`ctx-btn${el.skin === id ? ' active' : ''}`}
-                    title={label}
-                    onClick={() => {
-                      const patch: Record<string, unknown> = { skin: id }
-                      if (id === 'image') patch.componentState = { seed: Math.floor(Math.random() * 9999) }
-                      updateElement(el.id, patch)
-                    }}
-                  >
-                    <Icon size={15} />
-                  </button>
-                ))}
-                <RadixPopover.Arrow className="ctx-skin-arrow" />
-              </RadixPopover.Content>
-            </RadixPopover.Portal>
-          </RadixPopover.Root>
+          {renderSkinOptions(el.skin!, cs, setCS)}
 
           <div className="ctx-sep" />
 
