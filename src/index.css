@@ -939,13 +939,18 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   border-radius: var(--radius-3);
   box-shadow: var(--shadow-xl);
   z-index: 300;
-  width: 376px;
 }
 .color-picker-arrow { fill: var(--surface-1); }
 
+/* Top row: color gradient + BW strip side by side */
+.color-picker-top {
+  display: flex;
+  gap: var(--space-1);
+}
+
 .color-picker-canvas-wrap {
   position: relative;
-  width: 360px;
+  flex: 1;
   height: 240px;
   border-radius: var(--radius-2);
   overflow: hidden;
@@ -956,6 +961,22 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   width: 100%;
   height: 100%;
 }
+
+.color-picker-bw-wrap {
+  position: relative;
+  width: 32px;
+  height: 240px;
+  border-radius: var(--radius-2);
+  overflow: hidden;
+  cursor: crosshair;
+  flex-shrink: 0;
+}
+.color-picker-bw-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .color-picker-cursor {
   position: absolute;
   width: 14px;

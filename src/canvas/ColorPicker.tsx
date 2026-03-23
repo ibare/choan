@@ -1,4 +1,4 @@
-// Custom color picker — gradient canvas + 9-step rotating shade swatches.
+// Custom color picker — gradient canvas + grayscale strip + 9-step rotating shade swatches.
 // Opens as Radix Popover content from the context toolbar.
 
 import { useEffect, useRef } from 'react'
@@ -48,22 +48,13 @@ function colorToHex(n: number): string {
 
 // ── Constants ────────────────────────────────────────────────
 
-const W = 360
-const H = 240
 const SAT = 0.80
-const BW_THRESHOLD = 0.90 // rightmost 10% is grayscale band
 const L_MAX = 0.90
 const L_MIN = 0.10
 const L_RANGE = L_MAX - L_MIN
 
-// 9 lightness steps in a circular ring
 const STEP_COUNT = 9
 const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => 0.10 + i * 0.10)
-// [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
-
-// Tripled track for infinite carousel: [...steps, ...steps, ...steps] = 27 items.
-// The middle copy (indices 9–17) is the "home" — we translateX so the active
-// item in the middle copy sits at the visible center (position 4 of 9).
 const TRIPLED = [...ALL_STEPS, ...ALL_STEPS, ...ALL_STEPS]
 
 // ── Component ────────────────────────────────────────────────
@@ -74,101 +65,148 @@ interface ColorPickerProps {
 }
 
 export default function ColorPicker({ color, onChange }: ColorPickerProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const dragRef = useRef(false)
+  const colorCanvasRef = useRef<HTMLCanvasElement>(null)
+  const bwCanvasRef = useRef<HTMLCanvasElement>(null)
+  const dragRef = useRef<'color' | 'bw' | false>(false)
 
-  // Draw gradient once on mount
+  // Draw color gradient on mount
   useEffect(() => {
-    const canvas = canvasRef.current
+    const canvas = colorCanvasRef.current
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width = W * dpr
-    canvas.height = H * dpr
+    const cw = 320, ch = 240
+    canvas.width = cw * dpr
+    canvas.height = ch * dpr
     const ctx = canvas.getContext('2d')!
-    const imageData = ctx.createImageData(canvas.width, canvas.height)
-    const data = imageData.data
-    const pw = canvas.width, ph = canvas.height
-    for (let y = 0; y < ph; y++) {
-      const l = L_MAX - (y / ph) * L_RANGE
-      for (let x = 0; x < pw; x++) {
-        const nx = x / pw
-        const [r, g, b] = nx >= BW_THRESHOLD
-          ? hslToRgb(0, 0, l)                          // grayscale band
-          : hslToRgb((nx / BW_THRESHOLD) * 360, SAT, l) // color region
-        const i = (y * pw + x) * 4
-        data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255
+    const img = ctx.createImageData(canvas.width, canvas.height)
+    const d = img.data
+    for (let y = 0; y < canvas.height; y++) {
+      const l = L_MAX - (y / canvas.height) * L_RANGE
+      for (let x = 0; x < canvas.width; x++) {
+        const h = (x / canvas.width) * 360
+        const [r, g, b] = hslToRgb(h, SAT, l)
+        const i = (y * canvas.width + x) * 4
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255
       }
     }
-    ctx.putImageData(imageData, 0, 0)
+    ctx.putImageData(img, 0, 0)
   }, [])
 
-  // Pick color from canvas coordinates
-  const pick = (clientX: number, clientY: number) => {
-    const canvas = canvasRef.current
+  // Draw grayscale strip on mount
+  useEffect(() => {
+    const canvas = bwCanvasRef.current
+    if (!canvas) return
+    const dpr = window.devicePixelRatio || 1
+    const cw = 32, ch = 240
+    canvas.width = cw * dpr
+    canvas.height = ch * dpr
+    const ctx = canvas.getContext('2d')!
+    const img = ctx.createImageData(canvas.width, canvas.height)
+    const d = img.data
+    for (let y = 0; y < canvas.height; y++) {
+      const l = L_MAX - (y / canvas.height) * L_RANGE
+      const [r, g, b] = hslToRgb(0, 0, l)
+      for (let x = 0; x < canvas.width; x++) {
+        const i = (y * canvas.width + x) * 4
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255
+      }
+    }
+    ctx.putImageData(img, 0, 0)
+  }, [])
+
+  // Pick from color canvas
+  const pickColor = (clientX: number, clientY: number) => {
+    const canvas = colorCanvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const nx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
     const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
-    const l = L_MAX - ny * L_RANGE
-    if (nx >= BW_THRESHOLD) {
-      onChange(hslToColor(0, 0, l)) // grayscale
-    } else {
-      const h = (nx / BW_THRESHOLD) * 360
-      onChange(hslToColor(h, SAT, l))
-    }
+    onChange(hslToColor(nx * 360, SAT, L_MAX - ny * L_RANGE))
   }
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    dragRef.current = true
+  // Pick from BW strip
+  const pickBW = (clientX: number, clientY: number) => {
+    const canvas = bwCanvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    void clientX // only Y matters
+    onChange(hslToColor(0, 0, L_MAX - ny * L_RANGE))
+  }
+
+  const handleDown = (src: 'color' | 'bw') => (e: React.PointerEvent) => {
+    dragRef.current = src
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    pick(e.clientX, e.clientY)
+    ;(src === 'color' ? pickColor : pickBW)(e.clientX, e.clientY)
   }
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (dragRef.current) pick(e.clientX, e.clientY)
+  const handleMove = (src: 'color' | 'bw') => (e: React.PointerEvent) => {
+    if (dragRef.current === src) (src === 'color' ? pickColor : pickBW)(e.clientX, e.clientY)
   }
-  const handlePointerUp = () => { dragRef.current = false }
+  const handleUp = () => { dragRef.current = false }
 
-  // Cursor position derived from current color
+  // Current color analysis
   const [curH, curS, curL] = colorToHsl(color)
   const isGray = curS < 0.05
-  const cursorLeft = isGray
-    ? `${(BW_THRESHOLD + (1 - BW_THRESHOLD) / 2) * 100}%`  // center of BW band
-    : `${(curH / 360) * BW_THRESHOLD * 100}%`               // within color region
-  const cursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
 
-  // Active step index (0–8) in ALL_STEPS
-  const [shadeH] = colorToHsl(color)
+  // Cursor for color canvas
+  const colorCursorLeft = `${(curH / 360) * 100}%`
+  const colorCursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
+
+  // Cursor for BW strip
+  const bwCursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
+
+  // Shade carousel
+  const shadeSat = isGray ? 0 : SAT
+  const shadeHue = isGray ? 0 : curH
   const activeIdx = ALL_STEPS.reduce((best, l, i) =>
     Math.abs(l - curL) < Math.abs(ALL_STEPS[best] - curL) ? i : best, 0)
-
-  // translateX: center the active item from the middle copy (index 9+activeIdx)
-  // Each item = 100%/27 of track width. Window starts at (5+activeIdx).
   const offsetPct = -((5 + activeIdx) / 27) * 100
 
   return (
     <>
-      {/* Gradient canvas */}
-      <div
-        className="color-picker-canvas-wrap"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-      >
-        <canvas ref={canvasRef} />
+      {/* Top row: color gradient + BW strip */}
+      <div className="color-picker-top">
+        {/* Color gradient */}
         <div
-          className="color-picker-cursor"
-          style={{ left: cursorLeft, top: cursorTop, background: colorToHex(color) }}
-        />
+          className="color-picker-canvas-wrap"
+          onPointerDown={handleDown('color')}
+          onPointerMove={handleMove('color')}
+          onPointerUp={handleUp}
+        >
+          <canvas ref={colorCanvasRef} />
+          {!isGray && (
+            <div
+              className="color-picker-cursor"
+              style={{ left: colorCursorLeft, top: colorCursorTop, background: colorToHex(color) }}
+            />
+          )}
+        </div>
+
+        {/* Grayscale strip */}
+        <div
+          className="color-picker-bw-wrap"
+          onPointerDown={handleDown('bw')}
+          onPointerMove={handleMove('bw')}
+          onPointerUp={handleUp}
+        >
+          <canvas ref={bwCanvasRef} />
+          {isGray && (
+            <div
+              className="color-picker-cursor"
+              style={{ left: '50%', top: bwCursorTop, background: colorToHex(color) }}
+            />
+          )}
+        </div>
       </div>
 
-      {/* Shade carousel — slides so active is always centered */}
+      {/* Shade carousel */}
       <div className="color-picker-shades">
         <div
           className="color-picker-shades__track"
           style={{ transform: `translateX(${offsetPct}%)` }}
         >
           {TRIPLED.map((l, i) => {
-            const c = hslToColor(shadeH, SAT, l)
+            const c = hslToColor(shadeHue, shadeSat, l)
             const isCenter = i === 9 + activeIdx
             return (
               <button
