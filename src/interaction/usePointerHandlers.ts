@@ -441,14 +441,12 @@ export function usePointerHandlers({
     // Hover cursor
     if (tool === 'select' && selIds.length === 1 && selId) {
       const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
-      if (corner === 2) {
-        setCursor('pointer')
-      } else if (corner === 3) {
-        setCursor(els.find((el) => el.id === selId)?.type === 'rectangle' ? 'grab' : 'default')
-      } else if (corner === 1) {
+      if (corner >= 0) {
         const el = els.find((el) => el.id === selId)
         const parent = el?.parentId ? els.find((p) => p.id === el.parentId) : null
-        setCursor(el?.parentId && parent?.layoutDirection !== 'free' && parent?.layoutDirection !== undefined ? 'default' : 'nwse-resize')
+        const isManagedChild = el?.parentId && parent?.layoutDirection !== 'free' && parent?.layoutDirection !== undefined
+        // BL(0)/TR(2) = nesw, BR(1)/TL(3) = nwse
+        setCursor(isManagedChild ? 'default' : (corner === 0 || corner === 2) ? 'nesw-resize' : 'nwse-resize')
       } else {
         setCursor('default')
       }
