@@ -49,9 +49,9 @@ function colorToHex(n: number): string {
 // ── Constants ────────────────────────────────────────────────
 
 const SAT = 0.80
-const L_MAX = 0.90
-const L_MIN = 0.10
-const L_RANGE = L_MAX - L_MIN
+const L_MAX = 1.0
+const L_MIN = 0.0
+const L_RANGE = L_MAX - L_MIN  // 1.0
 
 const STEP_COUNT = 9
 const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => 0.10 + i * 0.10)
