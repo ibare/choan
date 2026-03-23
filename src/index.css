@@ -939,14 +939,14 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   border-radius: var(--radius-3);
   box-shadow: var(--shadow-xl);
   z-index: 300;
-  width: 256px;
+  width: 376px;
 }
 .color-picker-arrow { fill: var(--surface-1); }
 
 .color-picker-canvas-wrap {
   position: relative;
-  width: 240px;
-  height: 160px;
+  width: 360px;
+  height: 240px;
   border-radius: var(--radius-2);
   overflow: hidden;
   cursor: crosshair;
@@ -958,8 +958,8 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 }
 .color-picker-cursor {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid #fff;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(0,0,0,0.15);
@@ -974,32 +974,26 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 }
 .color-picker-shade {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
+  justify-content: center;
   border: none;
   background: none;
   padding: 0;
   cursor: pointer;
+  flex: 1;
 }
 .color-picker-shade__swatch {
-  width: 22px;
-  height: 22px;
+  width: 100%;
+  aspect-ratio: 1;
   border-radius: var(--radius-1);
   border: 1.5px solid transparent;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
-.color-picker-shade__swatch:hover { transform: scale(1.1); }
+.color-picker-shade__swatch:hover { transform: scale(1.08); }
 .color-picker-shade.active .color-picker-shade__swatch {
   border-color: #fff;
-  transform: scale(1.15);
+  transform: scale(1.12);
   box-shadow: 0 0 0 1px var(--border);
-}
-.color-picker-shade__hex {
-  font-size: 7px;
-  color: var(--text-3);
-  font-family: var(--font);
-  line-height: 1;
 }
 
 /* Skin picker popover */

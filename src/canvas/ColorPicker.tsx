@@ -1,4 +1,4 @@
-// Custom color picker — gradient canvas + 9-step shade swatches.
+// Custom color picker — gradient canvas + 9-step rotating shade swatches.
 // Opens as Radix Popover content from the context toolbar.
 
 import { useEffect, useRef } from 'react'
@@ -48,13 +48,39 @@ function colorToHex(n: number): string {
 
 // ── Constants ────────────────────────────────────────────────
 
-const W = 240
-const H = 160
+const W = 360
+const H = 240
 const SAT = 0.80
 const L_MAX = 0.90
 const L_MIN = 0.10
 const L_RANGE = L_MAX - L_MIN
-const SHADE_STEPS = [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+
+// 9 lightness steps in a circular ring
+const STEP_COUNT = 9
+const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => 0.10 + i * 0.10)
+// [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
+
+// ── Circular shade rotation ──────────────────────────────────
+// Returns 9 steps rotated so the closest step to `targetL` is at center (index 4).
+
+function getRotatedSteps(targetL: number): number[] {
+  // Find the index of the closest step
+  let closestIdx = 0
+  let minDist = Infinity
+  for (let i = 0; i < STEP_COUNT; i++) {
+    const d = Math.abs(ALL_STEPS[i] - targetL)
+    if (d < minDist) { minDist = d; closestIdx = i }
+  }
+
+  // Rotate so closestIdx lands at position 4 (center)
+  const offset = closestIdx - 4
+  const result: number[] = []
+  for (let i = 0; i < STEP_COUNT; i++) {
+    const srcIdx = ((i + offset) % STEP_COUNT + STEP_COUNT) % STEP_COUNT
+    result.push(ALL_STEPS[srcIdx])
+  }
+  return result
+}
 
 // ── Component ────────────────────────────────────────────────
 
@@ -117,10 +143,9 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
   const cursorLeft = `${(curH / 360) * 100}%`
   const cursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
 
-  // Shade swatches
+  // Rotated shade steps — selected color's L is always at center
   const [shadeH] = colorToHsl(color)
-  const activeIdx = SHADE_STEPS.reduce((best, l, i) =>
-    Math.abs(l - curL) < Math.abs(SHADE_STEPS[best] - curL) ? i : best, 0)
+  const rotatedSteps = getRotatedSteps(curL)
 
   return (
     <>
@@ -138,18 +163,19 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
         />
       </div>
 
-      {/* Shade steps */}
+      {/* Shade steps — circular rotation, center = active */}
       <div className="color-picker-shades">
-        {SHADE_STEPS.map((l, i) => {
+        {rotatedSteps.map((l, i) => {
           const c = hslToColor(shadeH, SAT, l)
+          const isCenter = i === 4
           return (
             <button
-              key={i}
-              className={`color-picker-shade${i === activeIdx ? ' active' : ''}`}
+              key={l}
+              className={`color-picker-shade${isCenter ? ' active' : ''}`}
               onClick={() => onChange(c)}
+              style={{ transitionDelay: `${Math.abs(i - 4) * 15}ms` }}
             >
               <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
-              <span className="color-picker-shade__hex">{colorToHex(c).slice(1).toUpperCase()}</span>
             </button>
           )
         })}
