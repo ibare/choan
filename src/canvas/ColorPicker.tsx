@@ -114,13 +114,16 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
     ctx.putImageData(img, 0, 0)
   }, [])
 
+  // Snap extremes so pure white/black are easily reachable
+  const snapY = (ny: number) => ny < 0.02 ? 0 : ny > 0.98 ? 1 : ny
+
   // Pick from color canvas
   const pickColor = (clientX: number, clientY: number) => {
     const canvas = colorCanvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const nx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    const ny = snapY(Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)))
     onChange(hslToColor(nx * 360, SAT, L_MAX - ny * L_RANGE))
   }
 
@@ -129,7 +132,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
     const canvas = bwCanvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    const ny = snapY(Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)))
     void clientX // only Y matters
     onChange(hslToColor(0, 0, 1.0 - ny))
   }
