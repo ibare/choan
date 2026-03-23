@@ -219,6 +219,9 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const radiusPx    = Math.round((el.radius ?? 0) * maxRadius)
   const colorHex    = colorToHex(el.color ?? 0xe0e0e0)
   const isFrameless = !el.skin && (el.skinOnly ?? false)
+  const cs = (el.componentState ?? {}) as Record<string, unknown>
+  const setCS = (patch: Record<string, unknown>) =>
+    updateElement(el.id, { componentState: { ...cs, ...patch } })
 
 
   const handleLayout = (d: LayoutDir) => {
