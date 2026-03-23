@@ -931,13 +931,12 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   box-shadow: var(--shadow-xl);
   z-index: 300;
   max-height: 280px;
-  overflow-y: auto;
-  scrollbar-width: none;
+  overflow-y: overlay;
+  scrollbar-gutter: stable;
 }
-.ctx-icon-picker:hover { scrollbar-width: thin; }
-.ctx-icon-picker::-webkit-scrollbar { width: 4px; }
-.ctx-icon-picker::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; }
-.ctx-icon-picker:hover::-webkit-scrollbar-thumb { background: var(--border); }
+.ctx-icon-picker::-webkit-scrollbar { width: 4px; background: transparent; }
+.ctx-icon-picker::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+.ctx-icon-picker::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
 .ctx-icon-grid {
   display: grid;
   grid-template-columns: repeat(8, 28px);
