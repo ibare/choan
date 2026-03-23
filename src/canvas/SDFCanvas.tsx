@@ -13,6 +13,7 @@ import DistanceLabels from './DistanceLabels'
 import FrameIndicator from './FrameIndicator'
 import NavigationGizmo from './NavigationGizmo'
 import SplitLabels from './SplitLabels'
+import ContextToolbar from './ContextToolbar'
 // PinOverlay removed — sizing indicators rendered via WebGL overlay
 
 export default function SDFCanvas() {
@@ -127,6 +128,7 @@ export default function SDFCanvas() {
       <RenderSettingsPanel />
       <NavigationGizmo controlsRef={controlsRef} />
       <SplitLabels splitModeRef={splitModeRef} canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
+      <ContextToolbar canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
     </div>
   )
 }

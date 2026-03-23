@@ -798,3 +798,133 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
 /* ── KF Editor (Radix Dialog content) ───────────────────── */
 .kf-editor-input { width: 120px; }
+
+/* ── Context Toolbar ─────────────────────────────────────── */
+.context-toolbar {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow-xl);
+  /* Center horizontally, float above element top edge */
+  transform: translateX(-50%) translateY(calc(-100% - 10px));
+  pointer-events: auto;
+  z-index: 25;
+  user-select: none;
+  white-space: nowrap;
+}
+
+/* Downward caret */
+.context-toolbar::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ctx-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-2);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.ctx-btn:hover { background: var(--surface-3); color: var(--text-1); }
+.ctx-btn.active { background: var(--accent); color: #fff; }
+
+.ctx-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* Radius input */
+.ctx-radius-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+}
+.ctx-label {
+  font-size: var(--text-xs);
+  color: var(--text-3);
+  line-height: 1;
+}
+.ctx-number {
+  width: 32px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-1);
+  color: var(--text-1);
+  font-size: var(--text-xs);
+  font-family: var(--font);
+  text-align: right;
+  padding: 2px 2px;
+  outline: none;
+  -moz-appearance: textfield;
+}
+.ctx-number::-webkit-outer-spin-button,
+.ctx-number::-webkit-inner-spin-button { -webkit-appearance: none; }
+.ctx-number:focus { background: var(--surface-3); }
+
+/* Color swatch */
+.ctx-color-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border-radius: var(--radius-2);
+  transition: background var(--transition-fast);
+}
+.ctx-color-label:hover { background: var(--surface-3); }
+.ctx-color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  box-shadow: 0 0 0 1px var(--border);
+  flex-shrink: 0;
+}
+.ctx-color-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Skin picker popover */
+.ctx-skin-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 28px);
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-xl);
+  z-index: 300;
+}
+.ctx-skin-arrow { fill: var(--surface-1); }
