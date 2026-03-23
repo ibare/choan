@@ -876,7 +876,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .ctx-scrub__icon {
   display: flex;
   align-items: center;
-  color: var(--text-3);
+  color: var(--text-2);
   flex-shrink: 0;
   pointer-events: none;
 }
