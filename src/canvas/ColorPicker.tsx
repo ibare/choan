@@ -54,7 +54,8 @@ const L_MIN = 0.0
 const L_RANGE = L_MAX - L_MIN  // 1.0
 
 const STEP_COUNT = 9
-const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => 0.10 + i * 0.10)
+// 0.0 (black) → 1.0 (white) in 9 even steps
+const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => i / (STEP_COUNT - 1))
 const TRIPLED = [...ALL_STEPS, ...ALL_STEPS, ...ALL_STEPS]
 
 // ── Component ────────────────────────────────────────────────
