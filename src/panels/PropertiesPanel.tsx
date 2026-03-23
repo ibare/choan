@@ -117,6 +117,16 @@ export default function PropertiesPanel() {
             }}
           />
 
+          {el.skin && (
+            <PropRow label="Skin Only" columns="1-1">
+              <input
+                type="checkbox"
+                checked={el.skinOnly ?? false}
+                onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked })}
+              />
+            </PropRow>
+          )}
+
           {el.skin && <SkinEditor skin={el.skin} state={cs} onChange={setCS} />}
         </Section>
       )}
