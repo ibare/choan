@@ -1,6 +1,7 @@
 import type { ChoanElement } from '../../store/useChoanStore'
 import type { PlatformRenderer } from './base'
 import { hexToCSS } from '../core/colorUtils'
+import { describeComponentState } from '../core/describeComponentState'
 
 export const webRenderer: PlatformRenderer = {
   platform: 'web',
@@ -79,11 +80,10 @@ export const webRenderer: PlatformRenderer = {
   renderSkin(el: ChoanElement): string | null {
     if (el.frame) return `\`${el.frame}\` device frame`
     if (!el.skin) return null
-    const stateDesc = el.componentState
-      ? ` | state: ${JSON.stringify(el.componentState)}`
-      : ''
-    const onlyNote = el.skinOnly ? ' (skin only — SDF body hidden)' : ''
-    return `\`${el.skin}\`${onlyNote}${stateDesc}`
+    const onlyNote = el.skinOnly ? ' (skin only)' : ''
+    const content = describeComponentState(el.skin, el.componentState)
+    const contentNote = content ? ` — ${content}` : ''
+    return `\`${el.skin}\`${onlyNote}${contentNote}`
   },
 
   renderPosition(el: ChoanElement, parent: ChoanElement): string {

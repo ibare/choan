@@ -1,6 +1,7 @@
 import type { ElementNode } from './buildTree'
 import { fingerprint } from './fingerprint'
 import { hexToCSS } from './colorUtils'
+import { describeComponentState } from './describeComponentState'
 
 export interface PatternGroup {
   fp: string
@@ -89,7 +90,9 @@ function diffNodes(pattern: ElementNode, exc: ElementNode): string[] {
   }
 
   if (JSON.stringify(p.componentState ?? {}) !== JSON.stringify(e.componentState ?? {})) {
-    diffs.push(`state: ${JSON.stringify(p.componentState ?? {})} → ${JSON.stringify(e.componentState ?? {})}`)
+    const fromDesc = (p.skin && describeComponentState(p.skin, p.componentState)) ?? JSON.stringify(p.componentState ?? {})
+    const toDesc   = (e.skin && describeComponentState(e.skin, e.componentState)) ?? JSON.stringify(e.componentState ?? {})
+    diffs.push(`content: ${fromDesc} → ${toDesc}`)
   }
 
   if (diffs.length === 0) diffs.push('(구조적 차이 있음)')
