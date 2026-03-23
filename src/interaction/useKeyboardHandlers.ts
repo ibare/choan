@@ -66,7 +66,7 @@ export function useKeyboardHandlers(
     for (let i = 0; i < count; i++) {
       const id = nanoid()
       newIds.push(id)
-      store.addElement({ ...el, id, x: el.x, y: el.y, width: el.width, height: el.height, label: el.label, parentId: el.parentId })
+      store.addElement({ ...el, id, x: el.x, y: el.y, width: el.width, height: el.height, label: `${el.label} ${i + 1}`, parentId: el.parentId })
 
       // Duplicate entire subtree — map old IDs to new IDs for parent references
       const idMap = new Map<string, string>()
