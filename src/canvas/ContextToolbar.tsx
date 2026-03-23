@@ -7,12 +7,17 @@ import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { SKIN_REGISTRY } from '../config/skins'
 import type { SDFRenderer } from '../engine/renderer'
+import type { OrbitControls } from '../engine/controls'
 import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash, Angle } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
   rendererRef: MutableRefObject<SDFRenderer | null>
+  isDraggingRef: MutableRefObject<boolean>
+  isResizingRef: MutableRefObject<boolean>
+  isDrawingRef: MutableRefObject<boolean>
+  controlsRef: MutableRefObject<OrbitControls | null>
 }
 
 const DIR_OPTIONS = [
@@ -102,7 +107,7 @@ function ScrubInput({ icon, value, min, max, onChange }: {
   )
 }
 
-export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
+export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const rafRef = useRef(0)
   const prevKeyRef = useRef('')
@@ -116,6 +121,10 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
   useEffect(() => {
     const tick = () => {
       rafRef.current = requestAnimationFrame(tick)
+      // Hide during drag, resize, draw, pan, or 3D rotate
+      const interacting = isDraggingRef.current || isResizingRef.current || isDrawingRef.current || (controlsRef.current?.isInteracting ?? false)
+      if (interacting) { setPos(null); prevKeyRef.current = ''; return }
+
       const { selectedIds: ids, elements: els } = useElementStore.getState()
       if (ids.length !== 1) { setPos(null); prevKeyRef.current = ''; return }
       const elem = els.find((e) => e.id === ids[0])

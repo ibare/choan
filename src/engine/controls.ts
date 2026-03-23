@@ -10,6 +10,7 @@ export interface OrbitControls {
   getAngles(): { theta: number; phi: number }
   setAngles(theta: number, phi: number): void
   wheelEnabled: boolean
+  readonly isInteracting: boolean
 }
 
 export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): OrbitControls {
@@ -173,5 +174,6 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     update, dispose, getAngles, setAngles,
     get wheelEnabled() { return wheelEnabled },
     set wheelEnabled(v: boolean) { wheelEnabled = v },
+    get isInteracting() { return isRotating || isPanning },
   }
 }
