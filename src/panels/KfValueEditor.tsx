@@ -1,5 +1,8 @@
-// Inline keyframe value editor (double-click to open).
+// Inline keyframe value editor — uses Radix Dialog for overlay.
 
+import { Dialog } from '../components/ui/Dialog'
+import { Input } from '../components/ui/Input'
+import { Button } from '../components/ui/Button'
 import type { AnimatableProperty } from '../animation/types'
 import type { DisplayClipEntry } from './timelineTypes'
 import { formatValue } from './timelineTypes'
@@ -21,18 +24,16 @@ export default function KfValueEditor({ clipId, trackIdx, value, displayClips, o
   const prop = entry?.clip.tracks[trackIdx]?.property as AnimatableProperty | undefined
 
   return (
-    <div className="kf-editor-overlay" onClick={onClose}>
-      <div className="kf-editor" onClick={(e) => e.stopPropagation()}>
-        <input
-          className="field-input"
-          autoFocus
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') onCommit(); if (e.key === 'Escape') onClose() }}
-          placeholder={prop ? formatValue(prop, undefined) : ''}
-        />
-        <button className="btn-small" onClick={onCommit}>OK</button>
-      </div>
-    </div>
+    <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
+      <Input
+        className="kf-editor-input"
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') onCommit(); if (e.key === 'Escape') onClose() }}
+        placeholder={prop ? formatValue(prop, undefined) : ''}
+      />
+      <Button size="sm" onClick={onCommit}>OK</Button>
+    </Dialog>
   )
 }

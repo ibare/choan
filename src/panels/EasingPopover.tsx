@@ -1,5 +1,6 @@
 // Easing type selector popover for keyframe editing.
 
+import { createPortal } from 'react-dom'
 import type { EasingType } from '../animation/types'
 import type { DisplayClipEntry } from './timelineTypes'
 import { LEFT_WIDTH, RULER_HEIGHT, LAYER_HEADER_HEIGHT, TRACK_HEIGHT } from './timelineTypes'
@@ -21,19 +22,32 @@ export default function EasingPopover({ layerIdx, trackIdx, kfIdx, screenX, scre
   const entry = displayClips[layerIdx]
   const currentEasing = entry?.clip.tracks[trackIdx]?.keyframes[kfIdx]?.easing
 
-  return (
-    <div className="easing-popover-backdrop" onClick={onClose}>
+  const left = screenX + LEFT_WIDTH
+  const top = screenY + RULER_HEIGHT + LAYER_HEADER_HEIGHT + TRACK_HEIGHT
+
+  return createPortal(
+    <>
+      {/* Invisible backdrop to capture outside clicks */}
+      <div
+        style={{ position: 'fixed', inset: 0, zIndex: 190 }}
+        onPointerDown={onClose}
+      />
       <div
         className="easing-popover"
-        style={{ left: screenX + LEFT_WIDTH, top: screenY + RULER_HEIGHT + LAYER_HEADER_HEIGHT + TRACK_HEIGHT }}
-        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'fixed', left, top, zIndex: 191 }}
+        onPointerDown={(e) => e.stopPropagation()}
       >
         {EASING_TYPES.map((et) => (
-          <button key={et} className={`easing-option ${currentEasing === et ? 'active' : ''}`} onClick={() => onSelect(et)}>
+          <button
+            key={et}
+            className={`easing-option ${currentEasing === et ? 'active' : ''}`}
+            onClick={() => onSelect(et)}
+          >
             {et}
           </button>
         ))}
       </div>
-    </div>
+    </>,
+    document.body,
   )
 }

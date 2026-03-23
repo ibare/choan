@@ -8,28 +8,38 @@ import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
 import { serialize, deserialize } from './export/toYaml'
 import type { DeserializedFile } from './export/toYaml'
+import { TooltipProvider } from './components/ui/Tooltip'
+import { Button } from './components/ui/Button'
+import { Moon, Sun } from '@phosphor-icons/react'
 
 export default function App() {
-  const { elements, animationBundles, tool, setTool, pendingSkin, setPendingSkin, pendingFrame, setPendingFrame, loadFile, reset } = useChoanStore()
-  const [projectName, setProjectName] = useState('My UI')
-  const [exportMsg, setExportMsg] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const {
+    elements, animationBundles,
+    tool, pendingSkin, pendingFrame,
+    setTool, setPendingSkin, setPendingFrame,
+    loadFile, reset,
+  } = useChoanStore()
+
+  const [projectName, setProjectName]   = useState('My UI')
+  const [exportMsg, setExportMsg]       = useState('')
+  const [theme, setTheme]               = useState<'light' | 'dark'>('light')
+  const fileInputRef                    = useRef<HTMLInputElement>(null)
   const [timelineHeight, setTimelineHeight] = useState(180)
-  const isDraggingRef = useRef(false)
-  const dragStartYRef = useRef(0)
-  const dragStartHeightRef = useRef(0)
+  const isDraggingRef   = useRef(false)
+  const dragStartYRef   = useRef(0)
+  const dragStartHRef   = useRef(0)
 
   const handleResizeStart = useCallback((e: React.PointerEvent) => {
     isDraggingRef.current = true
     dragStartYRef.current = e.clientY
-    dragStartHeightRef.current = timelineHeight
+    dragStartHRef.current = timelineHeight
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }, [timelineHeight])
 
   const handleResizeMove = useCallback((e: React.PointerEvent) => {
     if (!isDraggingRef.current) return
     const dy = dragStartYRef.current - e.clientY
-    setTimelineHeight(Math.max(80, Math.min(600, dragStartHeightRef.current + dy)))
+    setTimelineHeight(Math.max(80, Math.min(600, dragStartHRef.current + dy)))
   }, [])
 
   const handleResizeEnd = useCallback(() => {
@@ -73,10 +83,7 @@ export default function App() {
       try {
         const result: DeserializedFile = deserialize(ev.target?.result as string)
         setProjectName(result.name)
-        loadFile({
-          elements: result.elements,
-          animationBundles: result.animationBundles,
-        })
+        loadFile({ elements: result.elements, animationBundles: result.animationBundles })
       } catch (err) {
         alert('파일을 불러올 수 없습니다.')
         console.error(err)
@@ -87,53 +94,69 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <div className="toolbar">
-        <span className="app-logo">초안</span>
-        <input
-          className="project-name"
-          value={projectName}
-          onChange={(e) => setProjectName(e.target.value)}
-        />
-        <div className="toolbar-spacer" />
-        <div className="action-group">
-          <button className="btn" onClick={() => fileInputRef.current?.click()}>Open</button>
-          <button className="btn" onClick={handleSave}>Save</button>
-          <button className="btn btn-primary" onClick={handleExport}>Export MD</button>
-          <button className="btn btn-ghost" onClick={() => { if (confirm('초기화할까요?')) reset() }}>Reset</button>
-        </div>
-        {exportMsg && <span className="export-msg">{exportMsg}</span>}
-      </div>
-
-      <div className="main">
-        <div className="left-panel">
-          <CanvasToolbar tool={tool} pendingSkin={pendingSkin} pendingFrame={pendingFrame} onSetTool={setTool} onSetPendingSkin={setPendingSkin} onSetPendingFrame={setPendingFrame} />
-          <LayerPanel />
-        </div>
-        <div className="main-center">
-          <div className="canvas-area">
-            <SDFCanvas />
-          </div>
-          <div
-            className="resize-handle-h"
-            onPointerDown={handleResizeStart}
-            onPointerMove={handleResizeMove}
-            onPointerUp={handleResizeEnd}
+    <TooltipProvider>
+      <div className="app" data-theme={theme}>
+        <div className="toolbar">
+          <span className="app-logo">초안</span>
+          <input
+            className="project-name"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
           />
-          <TimelinePanel visible height={timelineHeight} />
+          <div className="toolbar-spacer" />
+          <div className="action-group">
+            <Button onClick={() => fileInputRef.current?.click()}>Open</Button>
+            <Button onClick={handleSave}>Save</Button>
+            <Button variant="primary" onClick={handleExport}>Export MD</Button>
+            <Button variant="ghost" onClick={() => { if (confirm('초기화할까요?')) reset() }}>Reset</Button>
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')}
+              title="Toggle theme"
+            >
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </Button>
+          </div>
+          {exportMsg && <span className="export-msg">{exportMsg}</span>}
         </div>
-        <div className="right-panel">
-          <PropertiesPanel />
-        </div>
-      </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".choan"
-        style={{ display: 'none' }}
-        onChange={handleOpen}
-      />
-    </div>
+        <div className="main">
+          <div className="left-panel">
+            <CanvasToolbar
+              tool={tool}
+              pendingSkin={pendingSkin}
+              pendingFrame={pendingFrame}
+              onSetTool={setTool}
+              onSetPendingSkin={setPendingSkin}
+              onSetPendingFrame={setPendingFrame}
+            />
+            <LayerPanel />
+          </div>
+          <div className="main-center">
+            <div className="canvas-area">
+              <SDFCanvas />
+            </div>
+            <div
+              className="resize-handle-h"
+              onPointerDown={handleResizeStart}
+              onPointerMove={handleResizeMove}
+              onPointerUp={handleResizeEnd}
+            />
+            <TimelinePanel visible height={timelineHeight} />
+          </div>
+          <div className="right-panel">
+            <PropertiesPanel />
+          </div>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".choan"
+          style={{ display: 'none' }}
+          onChange={handleOpen}
+        />
+      </div>
+    </TooltipProvider>
   )
 }

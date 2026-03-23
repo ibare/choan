@@ -1,13 +1,9 @@
-// Toolbar — grid layout for left side panel. Each skin is a tool button with a Phosphor icon.
+// Left-side toolbar — tool selection + skin/frame shortcuts.
 
 import type { Tool } from '../store/useChoanStore'
-import {
-  Cursor, Rectangle,
-  ToggleRight, CheckSquare, RadioButton, HandTap, SlidersHorizontal,
-  TextT, ChartBar, CircleHalf, Star, UserCircle,
-  MagnifyingGlass, CaretDown, TextAa, Table, Image, Heart,
-  Browser, DeviceMobile,
-} from '@phosphor-icons/react'
+import { Cursor, Rectangle, Browser, DeviceMobile } from '@phosphor-icons/react'
+import { SKIN_REGISTRY } from '../config/skins'
+import { Tooltip } from '../components/ui/Tooltip'
 
 interface CanvasToolbarProps {
   tool: Tool
@@ -18,60 +14,63 @@ interface CanvasToolbarProps {
   onSetPendingFrame: (frame: string | null) => void
 }
 
-const SKIN_TOOLS: { skin: string; icon: React.ReactNode; label: string }[] = [
-  { skin: 'switch', icon: <ToggleRight size={18} />, label: 'Switch' },
-  { skin: 'checkbox', icon: <CheckSquare size={18} />, label: 'Checkbox' },
-  { skin: 'radio', icon: <RadioButton size={18} />, label: 'Radio' },
-  { skin: 'button', icon: <HandTap size={18} />, label: 'Button' },
-  { skin: 'slider', icon: <SlidersHorizontal size={18} />, label: 'Slider' },
-  { skin: 'text-input', icon: <TextT size={18} />, label: 'Text Input' },
-  { skin: 'progress', icon: <ChartBar size={18} />, label: 'Progress' },
-  { skin: 'badge', icon: <CircleHalf size={18} />, label: 'Badge' },
-  { skin: 'star-rating', icon: <Star size={18} />, label: 'Star Rating' },
-  { skin: 'avatar', icon: <UserCircle size={18} />, label: 'Avatar' },
-  { skin: 'search', icon: <MagnifyingGlass size={18} />, label: 'Search' },
-  { skin: 'dropdown', icon: <CaretDown size={18} />, label: 'Dropdown' },
-  { skin: 'text', icon: <TextAa size={18} />, label: 'Text' },
-  { skin: 'table-skeleton', icon: <Table size={18} />, label: 'Table' },
-  { skin: 'image', icon: <Image size={18} />, label: 'Image' },
-  { skin: 'icon', icon: <Heart size={18} />, label: 'Icon' },
-]
-
 export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTool, onSetPendingSkin, onSetPendingFrame }: CanvasToolbarProps) {
   const clearAll = () => { onSetPendingSkin(null); onSetPendingFrame(null) }
+
+  const isSelectActive   = tool === 'select' && !pendingSkin && !pendingFrame
+  const isRectActive     = tool === 'rectangle' && !pendingSkin && !pendingFrame
+
   return (
     <div className="side-toolbar">
-      <button className={`side-tool ${tool === 'select' && !pendingSkin && !pendingFrame ? 'active' : ''}`}
-        onClick={() => { onSetTool('select'); clearAll() }} title="Select (V)">
-        <Cursor size={18} />
-      </button>
-      <button className={`side-tool ${tool === 'rectangle' && !pendingSkin && !pendingFrame ? 'active' : ''}`}
-        onClick={() => { onSetTool('rectangle'); clearAll() }} title="Rectangle (R)">
-        <Rectangle size={18} />
-      </button>
-
-      <div className="toolbar-separator" />
-
-      <button className={`side-tool ${pendingFrame === 'browser' ? 'active' : ''}`}
-        onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('browser') }} title="Browser Frame">
-        <Browser size={18} />
-      </button>
-      <button className={`side-tool ${pendingFrame === 'mobile' ? 'active' : ''}`}
-        onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('mobile') }} title="Mobile Frame">
-        <DeviceMobile size={18} />
-      </button>
-
-      <div className="toolbar-separator" />
-
-      {SKIN_TOOLS.map(({ skin, icon, label }) => (
+      <Tooltip content="Select (V)">
         <button
-          key={skin}
-          className={`side-tool ${pendingSkin === skin ? 'active' : ''}`}
-          onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingSkin(skin) }}
-          title={label}
+          className={`side-tool ${isSelectActive ? 'active' : ''}`}
+          onClick={() => { onSetTool('select'); clearAll() }}
         >
-          {icon}
+          <Cursor size={18} />
         </button>
+      </Tooltip>
+
+      <Tooltip content="Rectangle (R)">
+        <button
+          className={`side-tool ${isRectActive ? 'active' : ''}`}
+          onClick={() => { onSetTool('rectangle'); clearAll() }}
+        >
+          <Rectangle size={18} />
+        </button>
+      </Tooltip>
+
+      <div className="toolbar-separator" />
+
+      <Tooltip content="Browser Frame">
+        <button
+          className={`side-tool ${pendingFrame === 'browser' ? 'active' : ''}`}
+          onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('browser') }}
+        >
+          <Browser size={18} />
+        </button>
+      </Tooltip>
+
+      <Tooltip content="Mobile Frame">
+        <button
+          className={`side-tool ${pendingFrame === 'mobile' ? 'active' : ''}`}
+          onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('mobile') }}
+        >
+          <DeviceMobile size={18} />
+        </button>
+      </Tooltip>
+
+      <div className="toolbar-separator" />
+
+      {SKIN_REGISTRY.map(({ id, label, Icon }) => (
+        <Tooltip key={id} content={label}>
+          <button
+            className={`side-tool ${pendingSkin === id ? 'active' : ''}`}
+            onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingSkin(id) }}
+          >
+            <Icon size={18} />
+          </button>
+        </Tooltip>
       ))}
     </div>
   )

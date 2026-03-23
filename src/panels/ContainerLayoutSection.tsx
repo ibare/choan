@@ -1,6 +1,10 @@
 // Container layout properties section for PropertiesPanel.
 
 import type { ChoanElement } from '../store/useChoanStore'
+import { Section } from '../components/ui/Section'
+import { PropRow } from '../components/ui/PropRow'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { Input } from '../components/ui/Input'
 
 interface Props {
   el: ChoanElement
@@ -8,58 +12,62 @@ interface Props {
   onChange: (patch: Record<string, unknown>) => void
 }
 
-const DIRECTIONS = ['free', 'row', 'column', 'grid'] as const
+const DIR_OPTIONS = [
+  { value: 'free',   label: 'Free'   },
+  { value: 'row',    label: 'Row'    },
+  { value: 'column', label: 'Col'    },
+  { value: 'grid',   label: 'Grid'   },
+] as const
 
 export default function ContainerLayoutSection({ el, childCount, onChange }: Props) {
   const dir = el.layoutDirection ?? 'free'
   const hasLayout = dir !== 'free'
 
   return (
-    <>
-      <div className="sub-title">Container Layout</div>
-
-      <label className="field-label">Direction</label>
-      <div className="radio-group">
-        {DIRECTIONS.map((d) => (
-          <label key={d} className={`radio-option ${dir === d ? 'active' : ''}`}>
-            <input type="radio" name="layoutDirection" value={d} checked={dir === d}
-              onChange={() => onChange({ layoutDirection: d })} />
-            {d.charAt(0).toUpperCase() + d.slice(1)}
-          </label>
-        ))}
-      </div>
+    <Section title="Container Layout">
+      <SegmentedControl
+        options={DIR_OPTIONS as unknown as Array<{ value: string; label: string }>}
+        value={dir}
+        onChange={(d) => onChange({ layoutDirection: d })}
+      />
 
       {hasLayout && (
         <>
           {dir === 'grid' && (
-            <>
-              <label className="field-label">Columns</label>
-              <input className="field-input" type="number" min={1} max={12} style={{ width: 60 }}
-                value={el.layoutColumns ?? 2}
-                onChange={(e) => onChange({ layoutColumns: Math.max(1, Number(e.target.value)) })} />
-            </>
+            <PropRow label="Columns">
+              <Input
+                type="number" min={1} max={12}
+                value={String(el.layoutColumns ?? 2)}
+                onChange={(e) => onChange({ layoutColumns: Math.max(1, Number(e.target.value)) })}
+              />
+            </PropRow>
           )}
-
-          <label className="field-label">Gap</label>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input className="field-input" type="number" min={0} style={{ width: 60 }}
-              value={el.layoutGap ?? 8}
-              onChange={(e) => onChange({ layoutGap: Math.max(0, Number(e.target.value)) })} />
-            <span style={{ fontSize: 11, color: '#888' }}>px</span>
-          </div>
-
-          <label className="field-label">Padding</label>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <input className="field-input" type="number" min={0} style={{ width: 60 }}
-              value={el.layoutPadding ?? 8}
-              onChange={(e) => onChange({ layoutPadding: Math.max(0, Number(e.target.value)) })} />
-            <span style={{ fontSize: 11, color: '#888' }}>px</span>
-          </div>
+          <PropRow label="Gap">
+            <div className="ui-row-gap-2">
+              <Input
+                type="number" min={0}
+                value={String(el.layoutGap ?? 8)}
+                onChange={(e) => onChange({ layoutGap: Math.max(0, Number(e.target.value)) })}
+              />
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>px</span>
+            </div>
+          </PropRow>
+          <PropRow label="Padding">
+            <div className="ui-row-gap-2">
+              <Input
+                type="number" min={0}
+                value={String(el.layoutPadding ?? 8)}
+                onChange={(e) => onChange({ layoutPadding: Math.max(0, Number(e.target.value)) })}
+              />
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>px</span>
+            </div>
+          </PropRow>
         </>
       )}
 
-      <label className="field-label">Children</label>
-      <div className="field-value">{childCount} elements</div>
-    </>
+      <PropRow label="Children">
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>{childCount} elements</span>
+      </PropRow>
+    </Section>
   )
 }

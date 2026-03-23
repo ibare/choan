@@ -1,0 +1,130 @@
+/* ── Primitive Tokens ──────────────────────────────────── */
+:root {
+  /* Gray scale */
+  --gray-0:   #ffffff;
+  --gray-50:  #f7f7f8;
+  --gray-100: #ededef;
+  --gray-150: #e4e4e7;
+  --gray-200: #d4d4d8;
+  --gray-300: #b4b4bc;
+  --gray-400: #8a8a96;
+  --gray-500: #60606c;
+  --gray-600: #48484f;
+  --gray-700: #323238;
+  --gray-750: #2a2a30;
+  --gray-800: #222226;
+  --gray-850: #1a1a1e;
+  --gray-900: #141416;
+  --gray-950: #0e0e10;
+
+  /* Brand – Violet */
+  --violet-50:  #f5f3ff;
+  --violet-100: #ede9ff;
+  --violet-300: #a99af5;
+  --violet-400: #9487f0;
+  --violet-500: #7065e0;
+  --violet-600: #5b4fcf;
+  --violet-700: #4a3fbe;
+
+  /* Functional */
+  --red-100:    #ffe0e0;
+  --red-500:    #e05a5a;
+  --red-600:    #c94444;
+  --green-500:  #4caf82;
+  --yellow-500: #f5c842;
+
+  /* Spacing (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* Border radius */
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-3: 8px;
+  --radius-4: 12px;
+
+  /* Font sizes */
+  --text-2xs: 9px;
+  --text-xs:  11px;
+  --text-sm:  12px;
+  --text-md:  13px;
+  --text-lg:  15px;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.10);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.12);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.16);
+  --shadow-xl:  0 12px 40px rgba(0,0,0,0.20);
+
+  /* Transitions */
+  --transition-fast: 0.1s ease;
+  --transition-base: 0.15s ease;
+}
+
+/* ── Semantic Tokens: Light (default) ──────────────────── */
+:root {
+  --bg:             var(--gray-50);
+  --surface-1:      var(--gray-0);
+  --surface-2:      var(--gray-100);
+  --surface-3:      var(--gray-150);
+  --surface-hover:  var(--gray-200);
+
+  --border:         var(--gray-200);
+  --border-subtle:  rgba(0, 0, 0, 0.06);
+  --border-focus:   var(--violet-500);
+
+  --text-1:         var(--gray-900);
+  --text-2:         var(--gray-500);
+  --text-3:         var(--gray-400);
+
+  --accent:         var(--violet-600);
+  --accent-hover:   var(--violet-700);
+  --accent-subtle:  var(--violet-50);
+  --accent-text:    var(--violet-600);
+
+  --danger:         var(--red-500);
+  --danger-hover:   var(--red-600);
+  --danger-subtle:  var(--red-100);
+
+  --success:        var(--green-500);
+
+  /* Layout */
+  --toolbar-h:  48px;
+  --panel-w:    260px;
+  --font:       'Inter', system-ui, sans-serif;
+}
+
+/* ── Semantic Tokens: Dark ─────────────────────────────── */
+[data-theme="dark"] {
+  --bg:             var(--gray-900);
+  --surface-1:      var(--gray-850);
+  --surface-2:      var(--gray-800);
+  --surface-3:      var(--gray-750);
+  --surface-hover:  var(--gray-700);
+
+  --border:         var(--gray-700);
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-focus:   var(--violet-400);
+
+  --text-1:         var(--gray-100);
+  --text-2:         var(--gray-400);
+  --text-3:         var(--gray-600);
+
+  --accent:         var(--violet-500);
+  --accent-hover:   var(--violet-400);
+  --accent-subtle:  rgba(112, 101, 224, 0.15);
+  --accent-text:    var(--violet-300);
+
+  --danger:         var(--red-500);
+  --danger-hover:   var(--red-500);
+  --danger-subtle:  rgba(224, 90, 90, 0.15);
+
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.30);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.40);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.50);
+  --shadow-xl:  0 12px 40px rgba(0,0,0,0.60);
+}

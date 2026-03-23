@@ -1,5 +1,4 @@
 // Android (Jetpack Compose) renderer — stub for future implementation
-import type { ChoanElement } from '../../store/useChoanStore'
 import type { PlatformRenderer } from './base'
 
 export const androidRenderer: PlatformRenderer = {

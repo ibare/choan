@@ -1,5 +1,4 @@
 // iOS (SwiftUI) renderer — stub for future implementation
-import type { ChoanElement } from '../../store/useChoanStore'
 import type { PlatformRenderer } from './base'
 
 export const iosRenderer: PlatformRenderer = {
