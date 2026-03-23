@@ -51,6 +51,7 @@ function colorToHex(n: number): string {
 const W = 360
 const H = 240
 const SAT = 0.80
+const BW_THRESHOLD = 0.90 // rightmost 10% is grayscale band
 const L_MAX = 0.90
 const L_MIN = 0.10
 const L_RANGE = L_MAX - L_MIN
@@ -90,8 +91,10 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
     for (let y = 0; y < ph; y++) {
       const l = L_MAX - (y / ph) * L_RANGE
       for (let x = 0; x < pw; x++) {
-        const h = (x / pw) * 360
-        const [r, g, b] = hslToRgb(h, SAT, l)
+        const nx = x / pw
+        const [r, g, b] = nx >= BW_THRESHOLD
+          ? hslToRgb(0, 0, l)                          // grayscale band
+          : hslToRgb((nx / BW_THRESHOLD) * 360, SAT, l) // color region
         const i = (y * pw + x) * 4
         data[i] = r; data[i + 1] = g; data[i + 2] = b; data[i + 3] = 255
       }
@@ -106,9 +109,13 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
     const rect = canvas.getBoundingClientRect()
     const nx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
     const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
-    const h = nx * 360
     const l = L_MAX - ny * L_RANGE
-    onChange(hslToColor(h, SAT, l))
+    if (nx >= BW_THRESHOLD) {
+      onChange(hslToColor(0, 0, l)) // grayscale
+    } else {
+      const h = (nx / BW_THRESHOLD) * 360
+      onChange(hslToColor(h, SAT, l))
+    }
   }
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -122,8 +129,11 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
   const handlePointerUp = () => { dragRef.current = false }
 
   // Cursor position derived from current color
-  const [curH, , curL] = colorToHsl(color)
-  const cursorLeft = `${(curH / 360) * 100}%`
+  const [curH, curS, curL] = colorToHsl(color)
+  const isGray = curS < 0.05
+  const cursorLeft = isGray
+    ? `${(BW_THRESHOLD + (1 - BW_THRESHOLD) / 2) * 100}%`  // center of BW band
+    : `${(curH / 360) * BW_THRESHOLD * 100}%`               // within color region
   const cursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
 
   // Active step index (0–8) in ALL_STEPS
