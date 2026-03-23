@@ -7,21 +7,26 @@ import { drawDiamond } from './timeline2dPrimitives'
 export const BAR_HEIGHT = 3
 const DIAMOND_SIZE = 15
 
-const C = {
-  rulerBg0: '#f7f4ef',
-  rulerBg1: '#ece8e1',
-  rulerBorder: '#d6cfc5',
-  rulerMajorTick: '#888',
-  rulerMediumTick: '#aaa',
-  rulerMinorTick: '#bbb',
-  rulerLabel: '#888',
-  trackBg0: '#ffffff',
-  trackBg1: '#f9f8f6',
-  layerBg: '#f2efe9',
-  layerBorder: '#e0d8d0',
-  trackBar: '#ece9ff',
-  playhead: '#1a1a2e',
-  playheadHandle: '#1a1a2e',
+function getColors(ctx: CanvasRenderingContext2D) {
+  const s = getComputedStyle(ctx.canvas)
+  const v = (n: string) => s.getPropertyValue(n).trim()
+  return {
+    rulerBg0:        v('--surface-1'),
+    rulerBg1:        v('--surface-2'),
+    rulerBorder:     v('--border'),
+    rulerMajorTick:  v('--text-2'),
+    rulerMediumTick: v('--gray-600'),
+    rulerMinorTick:  v('--gray-700'),
+    rulerLabel:      v('--text-2'),
+    trackBg0:        v('--bg'),
+    trackBg1:        v('--surface-1'),
+    layerBg:         v('--surface-2'),
+    layerBorder:     v('--border'),
+    trackBar:        v('--accent-subtle'),
+    playhead:        v('--accent'),
+    playheadBg:      v('--surface-3'),
+    playheadText:    v('--text-1'),
+  }
 }
 
 const NICE_STEPS = [50, 100, 200, 250, 500, 1000, 2000, 5000, 10000]
@@ -46,6 +51,7 @@ export function renderRuler(
   opts: RenderOptions,
   msToX: (ms: number, opts: RenderOptions) => number,
 ) {
+  const C = getColors(ctx)
   const rh = opts.rulerHeight
 
   // Background gradient
@@ -122,6 +128,7 @@ export function renderTracks(
   opts: RenderOptions,
   msToX: (ms: number, opts: RenderOptions) => number,
 ) {
+  const C = getColors(ctx)
   let y = opts.rulerHeight - opts.scrollY
   let colorIdx = 0
 
@@ -185,6 +192,7 @@ export function renderPlayhead(
   opts: RenderOptions,
   msToX: (ms: number, opts: RenderOptions) => number,
 ) {
+  const C = getColors(ctx)
   if (opts.playheadTime === null) return
   const x = msToX(opts.playheadTime, opts)
   if (x < -80 || x > w + 80) return
@@ -231,7 +239,7 @@ export function renderPlayhead(
 
   // Shield shape: rounded top corners, straight bottom corners → pointed tip
   const bodyBottom = handleY + handleBodyH
-  ctx.fillStyle = '#222'
+  ctx.fillStyle = C.playheadBg
   ctx.beginPath()
   ctx.moveTo(handleX + handleR, handleY)
   ctx.lineTo(handleX + handleW - handleR, handleY)
@@ -262,14 +270,14 @@ export function renderPlayhead(
     ctx.fill()
     ctx.restore()
   } else {
-    ctx.fillStyle = '#e0f2e0'
+    ctx.fillStyle = C.trackBg1
     ctx.beginPath()
     ctx.roundRect(innerX, innerY, innerW, innerH, innerR)
     ctx.fill()
   }
 
   // Time label inside inner box
-  ctx.fillStyle = isSnapped ? '#fff' : '#2a5a2a'
+  ctx.fillStyle = isSnapped ? '#fff' : C.playheadText
   ctx.textBaseline = 'middle'
   ctx.textAlign = 'center'
   ctx.fillText(label, handleX + handleW / 2, handleY + handleBodyH / 2)

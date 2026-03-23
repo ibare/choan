@@ -22,7 +22,7 @@ export default function App() {
 
   const [projectName, setProjectName]   = useState('My UI')
   const [exportMsg, setExportMsg]       = useState('')
-  const [theme, setTheme]               = useState<'light' | 'dark'>('light')
+  const [theme, setTheme]               = useState<'light' | 'dark'>('dark')
   const fileInputRef                    = useRef<HTMLInputElement>(null)
   const [timelineHeight, setTimelineHeight] = useState(180)
   const isDraggingRef   = useRef(false)
@@ -133,7 +133,7 @@ export default function App() {
             <LayerPanel />
           </div>
           <div className="main-center">
-            <div className="canvas-area">
+            <div className="canvas-area" data-theme="light">
               <SDFCanvas />
             </div>
             <div
