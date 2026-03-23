@@ -26,6 +26,81 @@ type LayoutDir = 'free' | 'row' | 'column' | 'grid'
 const colorToHex = (n: number) => `#${n.toString(16).padStart(6, '0')}`
 const hexToColor = (s: string) => parseInt(s.slice(1), 16)
 
+// ── Scrubable number input ───────────────────────────────────
+// Hover → ew-resize cursor, drag horizontally to scrub.
+// Click (no drag) → switch to keyboard text input.
+
+function ScrubInput({ icon, value, min, max, onChange }: {
+  icon: React.ReactNode
+  value: number
+  min: number
+  max: number
+  onChange: (v: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dragRef = useRef({ active: false, startX: 0, startVal: 0, moved: false })
+
+  const clamp = (v: number) => Math.round(Math.max(min, Math.min(max, v)))
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (editing) return
+    dragRef.current = { active: true, startX: e.clientX, startVal: value, moved: false }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    e.preventDefault()
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d.active) return
+    const dx = e.clientX - d.startX
+    if (Math.abs(dx) > 2) {
+      d.moved = true
+      onChange(clamp(d.startVal + dx))
+    }
+  }
+
+  const handlePointerUp = () => {
+    const d = dragRef.current
+    if (!d.active) return
+    d.active = false
+    if (!d.moved) {
+      setEditing(true)
+      setDraft(String(value))
+      requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.select() })
+    }
+  }
+
+  const commit = () => {
+    setEditing(false)
+    onChange(clamp(Number(draft) || 0))
+  }
+
+  return (
+    <div
+      className={`ctx-scrub${editing ? ' editing' : ''}`}
+      onPointerDown={editing ? undefined : handlePointerDown}
+      onPointerMove={editing ? undefined : handlePointerMove}
+      onPointerUp={editing ? undefined : handlePointerUp}
+    >
+      <span className="ctx-scrub__icon">{icon}</span>
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="ctx-scrub__input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+        />
+      ) : (
+        <span className="ctx-scrub__value">{value}</span>
+      )}
+    </div>
+  )
+}
+
 export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const rafRef = useRef(0)
@@ -114,20 +189,13 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
             <EyeSlash size={15} />
           </button>
 
-          <div className="ctx-radius-wrap">
-            <Angle size={13} className="ctx-label" />
-            <input
-              className="ctx-number"
-              type="number"
-              min={0}
-              max={Math.round(maxRadius)}
-              value={radiusPx}
-              onChange={(e) => {
-                const v = Math.max(0, Math.min(Math.round(maxRadius), Number(e.target.value)))
-                updateElement(el.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })
-              }}
-            />
-          </div>
+          <ScrubInput
+            icon={<Angle size={13} />}
+            value={radiusPx}
+            min={0}
+            max={Math.round(maxRadius)}
+            onChange={(v) => updateElement(el.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
+          />
 
           <label className="ctx-color-label" title="Color">
             <div className="ctx-color-swatch" style={{ background: colorHex }} />

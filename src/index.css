@@ -857,37 +857,52 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   flex-shrink: 0;
 }
 
-/* Radius input */
-.ctx-radius-wrap {
+/* Scrubable number input */
+.ctx-scrub {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 0 4px;
+  gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-2);
+  padding: 4px 8px 4px 6px;
+  min-width: 52px;
+  cursor: ew-resize;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  user-select: none;
 }
-.ctx-label {
-  font-size: var(--text-xs);
+.ctx-scrub:hover { border-color: var(--border); }
+.ctx-scrub.editing { cursor: text; border-color: var(--border-focus); background: var(--accent-subtle); }
+.ctx-scrub__icon {
+  display: flex;
+  align-items: center;
   color: var(--text-3);
-  line-height: 1;
-  display: flex;
-  align-items: center;
   flex-shrink: 0;
+  pointer-events: none;
 }
-.ctx-number {
-  width: 32px;
+.ctx-scrub__value {
+  font-size: var(--text-xs);
+  color: var(--text-1);
+  font-family: var(--font);
+  font-variant-numeric: tabular-nums;
+  min-width: 16px;
+  text-align: right;
+  pointer-events: none;
+}
+.ctx-scrub__input {
+  width: 28px;
   background: transparent;
   border: none;
-  border-radius: var(--radius-1);
-  color: var(--text-1);
+  outline: none;
   font-size: var(--text-xs);
+  color: var(--text-1);
   font-family: var(--font);
   text-align: right;
-  padding: 2px 2px;
-  outline: none;
+  padding: 0;
   -moz-appearance: textfield;
 }
-.ctx-number::-webkit-outer-spin-button,
-.ctx-number::-webkit-inner-spin-button { -webkit-appearance: none; }
-.ctx-number:focus { background: var(--surface-3); }
+.ctx-scrub__input::-webkit-outer-spin-button,
+.ctx-scrub__input::-webkit-inner-spin-button { -webkit-appearance: none; }
 
 /* Color swatch */
 .ctx-color-label {
