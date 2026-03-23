@@ -8,7 +8,7 @@ import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { SKIN_REGISTRY } from '../config/skins'
 import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
-import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash, Angle } from '@phosphor-icons/react'
+import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 
 interface Props {
@@ -186,9 +186,39 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
         </button>
       ))}
 
-      {/* Container extras: Frameless, Radius, Color */}
+      {/* Container extras */}
       {isContainer && (
         <>
+          {/* Layout-dependent options: Gap, Padding, Columns */}
+          {(dir === 'row' || dir === 'column' || dir === 'grid') && (
+            <>
+              <div className="ctx-sep" />
+              {dir === 'grid' && (
+                <ScrubInput
+                  icon={<Columns size={13} />}
+                  value={el.layoutColumns ?? 2}
+                  min={1}
+                  max={12}
+                  onChange={(v) => { updateElement(el.id, { layoutColumns: v }); queueMicrotask(() => runLayout(el.id)) }}
+                />
+              )}
+              <ScrubInput
+                icon={<ArrowsOutLineHorizontal size={13} />}
+                value={el.layoutGap ?? 8}
+                min={0}
+                max={100}
+                onChange={(v) => { updateElement(el.id, { layoutGap: v }); queueMicrotask(() => runLayout(el.id)) }}
+              />
+              <ScrubInput
+                icon={<FrameCorners size={13} />}
+                value={el.layoutPadding ?? 8}
+                min={0}
+                max={100}
+                onChange={(v) => { updateElement(el.id, { layoutPadding: v }); queueMicrotask(() => runLayout(el.id)) }}
+              />
+            </>
+          )}
+
           <div className="ctx-sep" />
 
           <button
