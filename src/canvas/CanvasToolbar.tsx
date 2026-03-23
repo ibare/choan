@@ -3,7 +3,7 @@
 import type { Tool } from '../store/useChoanStore'
 import {
   Cursor, Rectangle,
-  ToggleRight, CheckSquare, RadioButton, CursorClick, SlidersHorizontal,
+  ToggleRight, CheckSquare, RadioButton, HandTap, SlidersHorizontal,
   TextT, ChartBar, CircleHalf, Star, UserCircle,
   MagnifyingGlass, CaretDown, TextAa, Table, Image, Heart,
   Browser, DeviceMobile,
@@ -22,7 +22,7 @@ const SKIN_TOOLS: { skin: string; icon: React.ReactNode; label: string }[] = [
   { skin: 'switch', icon: <ToggleRight size={18} />, label: 'Switch' },
   { skin: 'checkbox', icon: <CheckSquare size={18} />, label: 'Checkbox' },
   { skin: 'radio', icon: <RadioButton size={18} />, label: 'Radio' },
-  { skin: 'button', icon: <CursorClick size={18} />, label: 'Button' },
+  { skin: 'button', icon: <HandTap size={18} />, label: 'Button' },
   { skin: 'slider', icon: <SlidersHorizontal size={18} />, label: 'Slider' },
   { skin: 'text-input', icon: <TextT size={18} />, label: 'Text Input' },
   { skin: 'progress', icon: <ChartBar size={18} />, label: 'Progress' },
