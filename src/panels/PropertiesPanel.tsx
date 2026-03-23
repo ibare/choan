@@ -124,13 +124,15 @@ export default function PropertiesPanel() {
       {/* ── Container ──────────────────────────────── */}
       {isContainer && (
         <>
-          <PropRow label="Frameless" className="props-field-group">
-            <input
-              type="checkbox"
-              checked={!el.skin && (el.skinOnly ?? false)}
-              onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked, skin: e.target.checked ? undefined : el.skin })}
-            />
-          </PropRow>
+          {!el.skin && (
+            <PropRow label="Frameless" className="props-field-group">
+              <input
+                type="checkbox"
+                checked={el.skinOnly ?? false}
+                onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked })}
+              />
+            </PropRow>
+          )}
           <ContainerLayoutSection el={el} childCount={childCount} onChange={handleContainerProp} />
         </>
       )}
