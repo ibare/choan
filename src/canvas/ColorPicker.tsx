@@ -54,9 +54,12 @@ const L_MIN = 0.0
 const L_RANGE = L_MAX - L_MIN  // 1.0
 
 const STEP_COUNT = 9
-// 0.0 (black) → 1.0 (white) in 9 even steps
-const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => i / (STEP_COUNT - 1))
-const TRIPLED = [...ALL_STEPS, ...ALL_STEPS, ...ALL_STEPS]
+// Color shades: L 0.10–0.90 (stays within vivid chromatic range)
+const COLOR_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => 0.10 + i * 0.10)
+// Grayscale shades: L 0.0–1.0 (full range, #000000 to #ffffff)
+const BW_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => i / (STEP_COUNT - 1))
+const COLOR_TRIPLED = [...COLOR_STEPS, ...COLOR_STEPS, ...COLOR_STEPS]
+const BW_TRIPLED = [...BW_STEPS, ...BW_STEPS, ...BW_STEPS]
 
 // ── Component ────────────────────────────────────────────────
 
@@ -159,11 +162,13 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
   // Cursor for BW strip (full 0–1 range)
   const bwCursorTop = `${(1.0 - Math.max(0, Math.min(1, curL))) * 100}%`
 
-  // Shade carousel
+  // Shade carousel — use different step ranges for color vs grayscale
   const shadeSat = isGray ? 0 : SAT
   const shadeHue = isGray ? 0 : curH
-  const activeIdx = ALL_STEPS.reduce((best, l, i) =>
-    Math.abs(l - curL) < Math.abs(ALL_STEPS[best] - curL) ? i : best, 0)
+  const steps = isGray ? BW_STEPS : COLOR_STEPS
+  const tripled = isGray ? BW_TRIPLED : COLOR_TRIPLED
+  const activeIdx = steps.reduce((best, l, i) =>
+    Math.abs(l - curL) < Math.abs(steps[best] - curL) ? i : best, 0)
   const offsetPct = -((5 + activeIdx) / 27) * 100
 
   return (
@@ -209,7 +214,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
           className="color-picker-shades__track"
           style={{ transform: `translateX(${offsetPct}%)` }}
         >
-          {TRIPLED.map((l, i) => {
+          {tripled.map((l, i) => {
             const c = hslToColor(shadeHue, shadeSat, l)
             const isCenter = i === 9 + activeIdx
             return (
