@@ -131,7 +131,7 @@ function SkinToggle({ label, active, onClick }: { label: string; active: boolean
   )
 }
 
-function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
+function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, iconOpen: boolean, setIconOpen: (v: boolean) => void) {
   const bool = (key: string) => !!cs[key]
   const toggleBtn = (key: string, label: string) => (
     <SkinToggle label={label} active={bool(key)} onClick={() => setCS({ [key]: !bool(key) })} />
@@ -179,7 +179,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
     case 'search':     return textInput('query', 'Search...')
     case 'icon':
       return (
-        <RadixPopover.Root>
+        <RadixPopover.Root open={iconOpen} onOpenChange={setIconOpen}>
           <RadixPopover.Trigger asChild>
             <button className="ctx-btn" title="Change Icon">
               <IconSvg name={(cs.icon as string) || 'heart'} size={15} />
@@ -199,7 +199,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
                     key={name}
                     className={`ctx-icon-item${(cs.icon || 'heart') === name ? ' active' : ''}`}
                     title={name}
-                    onClick={() => setCS({ icon: name })}
+                    onClick={() => { setCS({ icon: name }); setIconOpen(false) }}
                   >
                     <IconSvg name={name} size={16} />
                   </button>
@@ -216,6 +216,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
 
 export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [iconPickerOpen, setIconPickerOpen] = useState(false)
   const rafRef = useRef(0)
   const prevKeyRef = useRef('')
 
@@ -375,7 +376,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
       {/* Skin: type-specific options + Only Skin toggle */}
       {isSkin && (
         <>
-          {renderSkinOptions(el.skin!, cs, setCS)}
+          {renderSkinOptions(el.skin!, cs, setCS, iconPickerOpen, setIconPickerOpen)}
 
           <div className="ctx-sep" />
 
