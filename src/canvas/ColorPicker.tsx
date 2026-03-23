@@ -170,10 +170,9 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
           const isCenter = i === 4
           return (
             <button
-              key={l}
+              key={i}
               className={`color-picker-shade${isCenter ? ' active' : ''}`}
               onClick={() => onChange(c)}
-              style={{ transitionDelay: `${Math.abs(i - 4) * 15}ms` }}
             >
               <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
             </button>
