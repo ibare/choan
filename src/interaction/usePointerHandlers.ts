@@ -54,6 +54,7 @@ export function usePointerHandlers({
   zoomScaleRef: MutableRefObject<number>
   mountRef: MutableRefObject<HTMLDivElement | null>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
+  colorPickerAnchorRef: MutableRefObject<{ px: number; py: number } | null>
 }): UsePointerHandlersResult {
   const screenToPixel = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
     const renderer = rendererRef.current
@@ -154,11 +155,16 @@ export function usePointerHandlers({
         const dpr = window.devicePixelRatio || 1
         const rect = renderer.canvas.getBoundingClientRect()
         const mouseCanvas = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr }
-        const { w, h } = canvasSizeRef.current
-        const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
-        const rs = useRenderSettings.getState()
-        const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
-        const anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
+        let anchor: { px: number; py: number }
+        if (colorPickerAnchorRef.current) {
+          anchor = colorPickerAnchorRef.current
+        } else {
+          const { w, h } = canvasSizeRef.current
+          const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
+          const rs = useRenderSettings.getState()
+          const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+          anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
+        }
         if (handleColorPickerClick(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr, els, selId, e.altKey, update, renderer.colorWheel)) {
           colorPickerOpenRef.current = false
           colorPickerHoverRef.current = -1
@@ -224,7 +230,7 @@ export function usePointerHandlers({
 
         const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
         if (corner >= 0) {
-          if (corner === 2) { colorPickerOpenRef.current = true; colorPickerHoverRef.current = -1; return }
+          if (corner === 2) { colorPickerAnchorRef.current = null; colorPickerOpenRef.current = true; colorPickerHoverRef.current = -1; return }
           if (corner === 3 && els.find((el) => el.id === selId)?.type === 'rectangle') {
             isRadiusDragRef.current = true
             radiusStartRef.current = els.find((el) => el.id === selId)?.radius ?? 0
@@ -351,11 +357,16 @@ export function usePointerHandlers({
         const dpr = window.devicePixelRatio || 1
         const rect = renderer.canvas.getBoundingClientRect()
         const mouseCanvas = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr }
-        const { w, h } = canvasSizeRef.current
-        const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
-        const rs = useRenderSettings.getState()
-        const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
-        const anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
+        let anchor: { px: number; py: number }
+        if (colorPickerAnchorRef.current) {
+          anchor = colorPickerAnchorRef.current
+        } else {
+          const { w, h } = canvasSizeRef.current
+          const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
+          const rs = useRenderSettings.getState()
+          const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+          anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
+        }
         const hover = computeColorPickerHover(mouseCanvas, { x: anchor.px, y: anchor.py }, dpr, renderer.colorWheel)
         colorPickerHoverRef.current = hover
         setCursor(hover >= 0 ? 'pointer' : 'default')

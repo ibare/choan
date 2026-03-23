@@ -13,6 +13,7 @@ interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
   rendererRef: MutableRefObject<SDFRenderer | null>
   colorPickerOpenRef: MutableRefObject<boolean>
+  colorPickerAnchorRef: MutableRefObject<{ px: number; py: number } | null>
 }
 
 const DIR_OPTIONS = [
@@ -101,7 +102,7 @@ function ScrubInput({ icon, value, min, max, onChange }: {
   )
 }
 
-export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPickerOpenRef }: Props) {
+export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPickerOpenRef, colorPickerAnchorRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const rafRef = useRef(0)
   const prevKeyRef = useRef('')
@@ -139,7 +140,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPicker
     return () => cancelAnimationFrame(rafRef.current)
   }, [canvasSizeRef, rendererRef])
 
-  if (!el || !pos) return null
+  if (!el || !pos || colorPickerOpenRef.current) return null
 
   const isFrame     = !!el.frame
   const isSkin      = !!el.skin
@@ -200,7 +201,18 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPicker
           <button
             className="ctx-color-btn"
             title="Color"
-            onClick={() => { colorPickerOpenRef.current = true }}
+            onClick={(e) => {
+              const canvas = rendererRef.current?.canvas
+              if (!canvas) return
+              const btnRect = e.currentTarget.getBoundingClientRect()
+              const canvasRect = canvas.getBoundingClientRect()
+              const dpr = window.devicePixelRatio || 1
+              colorPickerAnchorRef.current = {
+                px: (btnRect.left + btnRect.width / 2 - canvasRect.left) * dpr,
+                py: (btnRect.top + btnRect.height / 2 - canvasRect.top) * dpr,
+              }
+              colorPickerOpenRef.current = true
+            }}
           >
             <div className="ctx-color-swatch" style={{ background: colorHex }} />
           </button>
