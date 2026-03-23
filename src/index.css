@@ -968,26 +968,30 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 }
 
 .color-picker-shades {
+  overflow: hidden;
+  border-radius: var(--radius-2);
+}
+.color-picker-shades__track {
   display: flex;
-  gap: 2px;
-  justify-content: space-between;
+  width: 300%; /* 27 items, 9 visible at a time */
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .color-picker-shade {
+  flex: 0 0 calc(100% / 27);
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: none;
-  padding: 0;
+  padding: 1px;
   cursor: pointer;
-  flex: 1;
 }
 .color-picker-shade__swatch {
   width: 100%;
   aspect-ratio: 1;
   border-radius: var(--radius-1);
   border: 1.5px solid transparent;
-  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 .color-picker-shade__swatch:hover { transform: scale(1.08); }
 .color-picker-shade.active .color-picker-shade__swatch {

@@ -60,27 +60,10 @@ const STEP_COUNT = 9
 const ALL_STEPS = Array.from({ length: STEP_COUNT }, (_, i) => 0.10 + i * 0.10)
 // [0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
 
-// ── Circular shade rotation ──────────────────────────────────
-// Returns 9 steps rotated so the closest step to `targetL` is at center (index 4).
-
-function getRotatedSteps(targetL: number): number[] {
-  // Find the index of the closest step
-  let closestIdx = 0
-  let minDist = Infinity
-  for (let i = 0; i < STEP_COUNT; i++) {
-    const d = Math.abs(ALL_STEPS[i] - targetL)
-    if (d < minDist) { minDist = d; closestIdx = i }
-  }
-
-  // Rotate so closestIdx lands at position 4 (center)
-  const offset = closestIdx - 4
-  const result: number[] = []
-  for (let i = 0; i < STEP_COUNT; i++) {
-    const srcIdx = ((i + offset) % STEP_COUNT + STEP_COUNT) % STEP_COUNT
-    result.push(ALL_STEPS[srcIdx])
-  }
-  return result
-}
+// Tripled track for infinite carousel: [...steps, ...steps, ...steps] = 27 items.
+// The middle copy (indices 9–17) is the "home" — we translateX so the active
+// item in the middle copy sits at the visible center (position 4 of 9).
+const TRIPLED = [...ALL_STEPS, ...ALL_STEPS, ...ALL_STEPS]
 
 // ── Component ────────────────────────────────────────────────
 
@@ -143,9 +126,14 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
   const cursorLeft = `${(curH / 360) * 100}%`
   const cursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
 
-  // Rotated shade steps — selected color's L is always at center
+  // Active step index (0–8) in ALL_STEPS
   const [shadeH] = colorToHsl(color)
-  const rotatedSteps = getRotatedSteps(curL)
+  const activeIdx = ALL_STEPS.reduce((best, l, i) =>
+    Math.abs(l - curL) < Math.abs(ALL_STEPS[best] - curL) ? i : best, 0)
+
+  // translateX: center the active item from the middle copy (index 9+activeIdx)
+  // Each item = 100%/27 of track width. Window starts at (5+activeIdx).
+  const offsetPct = -((5 + activeIdx) / 27) * 100
 
   return (
     <>
@@ -163,21 +151,26 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
         />
       </div>
 
-      {/* Shade steps — circular rotation, center = active */}
+      {/* Shade carousel — slides so active is always centered */}
       <div className="color-picker-shades">
-        {rotatedSteps.map((l, i) => {
-          const c = hslToColor(shadeH, SAT, l)
-          const isCenter = i === 4
-          return (
-            <button
-              key={i}
-              className={`color-picker-shade${isCenter ? ' active' : ''}`}
-              onClick={() => onChange(c)}
-            >
-              <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
-            </button>
-          )
-        })}
+        <div
+          className="color-picker-shades__track"
+          style={{ transform: `translateX(${offsetPct}%)` }}
+        >
+          {TRIPLED.map((l, i) => {
+            const c = hslToColor(shadeH, SAT, l)
+            const isCenter = i === 9 + activeIdx
+            return (
+              <button
+                key={i}
+                className={`color-picker-shade${isCenter ? ' active' : ''}`}
+                onClick={() => onChange(c)}
+              >
+                <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
+              </button>
+            )
+          })}
+        </div>
       </div>
     </>
   )
