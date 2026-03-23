@@ -868,6 +868,9 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   font-size: var(--text-xs);
   color: var(--text-3);
   line-height: 1;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 .ctx-number {
   width: 32px;

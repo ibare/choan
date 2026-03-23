@@ -7,7 +7,7 @@ import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { SKIN_REGISTRY } from '../config/skins'
 import type { SDFRenderer } from '../engine/renderer'
-import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash } from '@phosphor-icons/react'
+import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash, Angle } from '@phosphor-icons/react'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -115,7 +115,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
           </button>
 
           <div className="ctx-radius-wrap">
-            <span className="ctx-label">R</span>
+            <Angle size={13} className="ctx-label" />
             <input
               className="ctx-number"
               type="number"
