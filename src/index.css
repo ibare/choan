@@ -922,6 +922,38 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .ctx-text-input:hover { border-color: var(--border); }
 .ctx-text-input:focus { border-color: var(--border-focus); }
 
+/* Icon picker popover */
+.ctx-icon-picker {
+  padding: var(--space-2);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-3);
+  box-shadow: var(--shadow-xl);
+  z-index: 300;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.ctx-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 28px);
+  gap: 2px;
+}
+.ctx-icon-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-1);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.ctx-icon-item:hover { background: var(--surface-3); color: var(--text-1); }
+.ctx-icon-item.active { background: var(--accent); color: #fff; }
+
 /* Color swatch trigger */
 .ctx-color-btn {
   display: flex;

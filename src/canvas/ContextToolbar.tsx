@@ -14,6 +14,7 @@ import {
   ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
+import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -116,6 +117,12 @@ function ScrubInput({ icon, value, min, max, onChange }: {
 
 type CS = Record<string, unknown>
 
+function IconSvg({ name, size = 16 }: { name: string; size?: number }) {
+  const d = (ICON_PATHS as Record<string, string>)[name]
+  if (!d) return null
+  return <svg viewBox="0 0 256 256" width={size} height={size} fill="currentColor"><path d={d} /></svg>
+}
+
 function SkinToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button className={`ctx-btn${active ? ' active' : ''}`} title={label} onClick={onClick}>
@@ -170,6 +177,39 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
         </button>
       )
     case 'search':     return textInput('query', 'Search...')
+    case 'icon':
+      return (
+        <RadixPopover.Root>
+          <RadixPopover.Trigger asChild>
+            <button className="ctx-btn" title="Change Icon">
+              <IconSvg name={(cs.icon as string) || 'heart'} size={15} />
+            </button>
+          </RadixPopover.Trigger>
+          <RadixPopover.Portal>
+            <RadixPopover.Content
+              className="ctx-icon-picker"
+              data-theme="dark"
+              side="top"
+              align="center"
+              sideOffset={8}
+            >
+              <div className="ctx-icon-grid">
+                {ICON_NAMES.map((name) => (
+                  <button
+                    key={name}
+                    className={`ctx-icon-item${(cs.icon || 'heart') === name ? ' active' : ''}`}
+                    title={name}
+                    onClick={() => setCS({ icon: name })}
+                  >
+                    <IconSvg name={name} size={16} />
+                  </button>
+                ))}
+              </div>
+              <RadixPopover.Arrow className="color-picker-arrow" />
+            </RadixPopover.Content>
+          </RadixPopover.Portal>
+        </RadixPopover.Root>
+      )
     default: return null
   }
 }
