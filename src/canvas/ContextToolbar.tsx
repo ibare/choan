@@ -7,7 +7,7 @@ import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { SKIN_REGISTRY } from '../config/skins'
 import type { SDFRenderer } from '../engine/renderer'
-import { ArrowRight, ArrowDown, SquaresFour, DotsNine, EyeSlash } from '@phosphor-icons/react'
+import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash } from '@phosphor-icons/react'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -15,10 +15,10 @@ interface Props {
 }
 
 const DIR_OPTIONS = [
-  { value: 'free',   Icon: DotsNine,    label: 'Free'   },
-  { value: 'row',    Icon: ArrowRight,  label: 'Row'    },
-  { value: 'column', Icon: ArrowDown,   label: 'Column' },
-  { value: 'grid',   Icon: SquaresFour, label: 'Grid'   },
+  { value: 'free',   Icon: SquareLogo,            label: 'Free'   },
+  { value: 'row',    Icon: SquareSplitHorizontal, label: 'Row'    },
+  { value: 'column', Icon: SquareSplitVertical,   label: 'Column' },
+  { value: 'grid',   Icon: SquaresFour,           label: 'Grid'   },
 ] as const
 
 type LayoutDir = 'free' | 'row' | 'column' | 'grid'
