@@ -137,14 +137,22 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
       onChange={(v) => setCS({ [key]: v / 100 })}
     />
   )
+  const textInput = (key: string, placeholder: string) => (
+    <input
+      className="ctx-text-input"
+      value={(cs[key] as string) || ''}
+      placeholder={placeholder}
+      onChange={(e) => setCS({ [key]: e.target.value })}
+    />
+  )
 
   switch (skin) {
     case 'switch':     return toggleBtn('on', 'On/Off')
     case 'checkbox':   return toggleBtn('checked', 'Checked')
     case 'radio':      return toggleBtn('selected', 'Selected')
-    case 'button':     return toggleBtn('pressed', 'Pressed')
+    case 'button':     return <>{textInput('label', 'Button')}{toggleBtn('pressed', 'Pressed')}</>
     case 'slider':     return pctScrub('value', 'Value')
-    case 'text-input': return toggleBtn('focused', 'Focused')
+    case 'text-input': return <>{textInput('placeholder', 'Type here...')}{toggleBtn('focused', 'Focused')}</>
     case 'progress':   return pctScrub('value', 'Value')
     case 'badge':
       return <ScrubInput icon={<Hash size={13} />} value={Number(cs.count) || 0} min={0} max={99} onChange={(v) => setCS({ count: v })} />
@@ -152,7 +160,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
       return <ScrubInput icon={<Star size={13} />} value={Number(cs.rating) || 0} min={0} max={5} onChange={(v) => setCS({ rating: v })} />
     case 'avatar':     return toggleBtn('online', 'Online')
     case 'dropdown':   return toggleBtn('open', 'Open')
-    case 'text':       return toggleBtn('bold', 'Bold')
+    case 'text':       return <>{textInput('text', 'Text')}{toggleBtn('bold', 'Bold')}</>
     case 'table-skeleton':
       return <ScrubInput icon={<Columns size={13} />} value={Number(cs.columns) || 3} min={1} max={10} onChange={(v) => setCS({ columns: v })} />
     case 'image':
@@ -161,6 +169,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void) {
           <ArrowsClockwise size={15} />
         </button>
       )
+    case 'search':     return textInput('query', 'Search...')
     default: return null
   }
 }

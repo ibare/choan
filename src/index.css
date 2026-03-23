@@ -905,6 +905,23 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .ctx-scrub__input::-webkit-outer-spin-button,
 .ctx-scrub__input::-webkit-inner-spin-button { -webkit-appearance: none; }
 
+/* Inline text input for skin options */
+.ctx-text-input {
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-2);
+  padding: 4px 8px;
+  font-size: var(--text-xs);
+  font-family: var(--font);
+  color: var(--text-1);
+  width: 80px;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.ctx-text-input::placeholder { color: var(--text-3); }
+.ctx-text-input:hover { border-color: var(--border); }
+.ctx-text-input:focus { border-color: var(--border-focus); }
+
 /* Color swatch trigger */
 .ctx-color-btn {
   display: flex;
