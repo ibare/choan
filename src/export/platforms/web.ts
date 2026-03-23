@@ -80,7 +80,7 @@ export const webRenderer: PlatformRenderer = {
   renderSkin(el: ChoanElement): string | null {
     if (el.frame) return `\`${el.frame}\` device frame`
     if (!el.skin) return null
-    const onlyNote = el.skinOnly ? ' (skin only)' : ''
+    const onlyNote = el.skinOnly ? ' (skin only)' : el.frameless ? ' (frameless)' : ''
     const content = describeComponentState(el.skin, el.componentState)
     const contentNote = content ? ` — ${content}` : ''
     return `\`${el.skin}\`${onlyNote}${contentNote}`

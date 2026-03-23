@@ -268,7 +268,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const maxRadius   = Math.min(el.width, el.height) / 2
   const radiusPx    = Math.round((el.radius ?? 0) * maxRadius)
   const colorHex    = colorToHex(el.color ?? 0xe0e0e0)
-  const isFrameless = !el.skin && (el.skinOnly ?? false)
+  const isFrameless = el.frameless ?? false
   const cs = (el.componentState ?? {}) as Record<string, unknown>
   const setCS = (patch: Record<string, unknown>) =>
     updateElement(el.id, { componentState: { ...cs, ...patch } })
@@ -335,7 +335,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
           <button
             className={`ctx-btn${isFrameless ? ' active' : ''}`}
             title="Frameless"
-            onClick={() => updateElement(el.id, { skinOnly: !isFrameless })}
+            onClick={() => updateElement(el.id, { frameless: !isFrameless })}
           >
             <EyeSlash size={15} />
           </button>

@@ -23,6 +23,7 @@ export function fingerprint(node: ElementNode): string {
     el.opacity.toFixed(2),
     el.skin ?? '',
     String(el.skinOnly ?? false),
+    String(el.frameless ?? false),
     el.frame ?? '',
     el.lineStyle ?? '',
     el.lineDirection ?? '',

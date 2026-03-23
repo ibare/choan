@@ -147,7 +147,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     const regularWithIdx: { el: ChoanElement; origIdx: number }[] = []
     const skinOnlyElements: ChoanElement[] = []
     for (let i = 0; i < elements.length; i++) {
-      if (elements[i].skinOnly) skinOnlyElements.push(elements[i])
+      if (elements[i].skinOnly || elements[i].frameless) skinOnlyElements.push(elements[i])
       else regularWithIdx.push({ el: elements[i], origIdx: i })
     }
 

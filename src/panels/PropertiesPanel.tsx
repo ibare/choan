@@ -138,8 +138,8 @@ export default function PropertiesPanel() {
             <PropRow label="Frameless" className="props-field-group">
               <input
                 type="checkbox"
-                checked={el.skinOnly ?? false}
-                onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked })}
+                checked={el.frameless ?? false}
+                onChange={(e) => updateElement(el.id, { frameless: e.target.checked })}
               />
             </PropRow>
           )}

@@ -43,6 +43,7 @@ export interface ChoanElement {
   safeInset?: { top: number; bottom: number; left: number; right: number }
   skin?: string                           // visual texture key (e.g. 'switch', 'profile-round')
   skinOnly?: boolean                      // hide SDF body, show only skin texture
+  frameless?: boolean                     // hide container background (separate from skinOnly)
   componentState?: Record<string, unknown>
 }
 

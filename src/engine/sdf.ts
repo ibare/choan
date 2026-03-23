@@ -158,7 +158,7 @@ export function cpuRayMarch(
       minDist = 1e10
       hitIdx = -1
       for (let i = 0; i < elements.length; i++) {
-        if (elements[i].skinOnly) continue
+        if (elements[i].skinOnly || elements[i].frameless) continue
         const d = evalElementSDF(px, py, pz, elements[i], canvasW, canvasH)
         if (d < minDist) {
           minDist = d
@@ -190,7 +190,7 @@ export function cpuSkinOnlyHit(
   let bestIdx = -1
 
   for (let i = 0; i < elements.length; i++) {
-    if (!elements[i].skinOnly) continue
+    if (!elements[i].skinOnly && !elements[i].frameless) continue
     const { wx, wy, wz, hw, hh, hd } = elementToWorld(elements[i], canvasW, canvasH)
     const frontZ = wz + hd
 

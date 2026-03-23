@@ -136,7 +136,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       const ei = EFFECT_OFFSET + i * 4
       data[ei + 0] = t * t          // pulse: quadratic ease-out
       data[ei + 1] = t * t * t      // flash: faster cubic decay
-      data[ei + 3] = el.skinOnly ? 1.0 : 0.0
+      data[ei + 3] = (el.skinOnly || el.frameless) ? 1.0 : 0.0
 
       // uTexRect[i]: atlas UV rect (0 if no texture)
       const tr = texRects?.get(el.id)
