@@ -108,11 +108,21 @@ export function useAnimateLoop({
       }
       // Include both skin and frame elements for atlas painting
       const skinnedEls = animatedElements.filter((el) => !!el.skin || !!el.frame)
-      // Map frame to skin name for painting
       const getSkinKey = (el: ChoanElement) => el.frame ? `${el.frame}-frame` : el.skin!
+
+      // Fast hash — avoids JSON.stringify per frame
+      const hashState = (el: ChoanElement) => {
+        const cs = el.componentState
+        if (!cs) return ''
+        let h = ''
+        for (const k in cs) h += k + ':' + (cs as Record<string, unknown>)[k] + '|'
+        return h
+      }
+      const makeKey = (el: ChoanElement, texW: number, texH: number) =>
+        `${getSkinKey(el)}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${hashState(el)}`
+
       const skinnedIds = new Set(skinnedEls.map((el) => el.id))
       let atlasNeedsRebuild = false
-      // Check if any previously skinned element lost its skin
       for (const id of atlasDirty.keys()) {
         if (!skinnedIds.has(id)) { atlasNeedsRebuild = true; break }
       }
@@ -121,34 +131,27 @@ export function useAnimateLoop({
           const texScale = el.frame ? 2 : dpr
           const texW = Math.round(el.width * texScale)
           const texH = Math.round(el.height * texScale)
-          const skinKey = getSkinKey(el)
-          const stateKey = `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${JSON.stringify(el.componentState ?? {})}`
-          if (atlasDirty.get(el.id) !== stateKey) { atlasNeedsRebuild = true; break }
+          if (atlasDirty.get(el.id) !== makeKey(el, texW, texH)) { atlasNeedsRebuild = true; break }
         }
       }
       if (atlasNeedsRebuild) {
         renderer.atlas.reset()
         atlasDirty.clear()
-        // Share atlas regions for identical skin+size+state combinations
-        const sharedRegions = new Map<string, string>() // stateKey → first element ID
+        const sharedRegions = new Map<string, string>()
         for (const el of skinnedEls) {
           const texScale = el.frame ? 2 : dpr
           const texW = Math.round(el.width * texScale)
           const texH = Math.round(el.height * texScale)
           if (texW < 1 || texH < 1) continue
-          const skinKey = getSkinKey(el)
-          const stateKey = `${skinKey}:${texW}x${texH}:${strokeStyle.color}:${strokeStyle.width}:${el.color}:${JSON.stringify(el.componentState ?? {})}`
-
+          const stateKey = makeKey(el, texW, texH)
           const existingId = sharedRegions.get(stateKey)
           if (existingId) {
-            // Reuse existing region — allocate with same ID alias
             renderer.atlas.alias(el.id, existingId)
           } else {
             const region = renderer.atlas.allocate(el.id, texW, texH)
             if (region) {
               const ctx = renderer.atlas.getContext(region)
-              const compState = { ...el.componentState, _elColor: el.color }
-              paintComponent(skinKey, ctx, texW, texH, compState, strokeStyle)
+              paintComponent(getSkinKey(el), ctx, texW, texH, { ...el.componentState, _elColor: el.color }, strokeStyle)
               sharedRegions.set(stateKey, el.id)
             }
           }

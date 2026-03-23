@@ -236,7 +236,7 @@ export function usePointerHandlers({
           const el = els.find((el) => el.id === selId)!
           const parentOfEl = el.parentId ? els.find((p) => p.id === el.parentId) : null
           const isManagedChild = el.parentId && parentOfEl?.layoutDirection !== 'free' && parentOfEl?.layoutDirection !== undefined
-          if (corner === 1 && !isManagedChild) {
+          if ((corner === 0 || corner === 1) && !isManagedChild) {
             const cp = [
               { x: el.x, y: el.y + el.height }, { x: el.x + el.width, y: el.y + el.height },
               { x: el.x + el.width, y: el.y }, { x: el.x, y: el.y },
