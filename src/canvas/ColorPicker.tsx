@@ -104,7 +104,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
     const img = ctx.createImageData(canvas.width, canvas.height)
     const d = img.data
     for (let y = 0; y < canvas.height; y++) {
-      const l = L_MAX - (y / canvas.height) * L_RANGE
+      const l = 1.0 - (y / canvas.height) // full range: white(1.0) → black(0.0)
       const [r, g, b] = hslToRgb(0, 0, l)
       for (let x = 0; x < canvas.width; x++) {
         const i = (y * canvas.width + x) * 4
@@ -131,7 +131,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
     const rect = canvas.getBoundingClientRect()
     const ny = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
     void clientX // only Y matters
-    onChange(hslToColor(0, 0, L_MAX - ny * L_RANGE))
+    onChange(hslToColor(0, 0, 1.0 - ny))
   }
 
   const handleDown = (src: 'color' | 'bw') => (e: React.PointerEvent) => {
@@ -152,8 +152,8 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
   const colorCursorLeft = `${(curH / 360) * 100}%`
   const colorCursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
 
-  // Cursor for BW strip
-  const bwCursorTop = `${((L_MAX - Math.max(L_MIN, Math.min(L_MAX, curL))) / L_RANGE) * 100}%`
+  // Cursor for BW strip (full 0–1 range)
+  const bwCursorTop = `${(1.0 - Math.max(0, Math.min(1, curL))) * 100}%`
 
   // Shade carousel
   const shadeSat = isGray ? 0 : SAT
