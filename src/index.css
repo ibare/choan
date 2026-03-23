@@ -904,15 +904,14 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .ctx-scrub__input::-webkit-outer-spin-button,
 .ctx-scrub__input::-webkit-inner-spin-button { -webkit-appearance: none; }
 
-/* Color swatch button */
+/* Color swatch */
 .ctx-color-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: none;
-  background: transparent;
   cursor: pointer;
   border-radius: var(--radius-2);
   transition: background var(--transition-fast);
@@ -926,6 +925,13 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   border: 1.5px solid rgba(255,255,255,0.2);
   box-shadow: 0 0 0 1px var(--border);
   flex-shrink: 0;
+}
+.ctx-color-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
 }
 
 /* Skin picker popover */

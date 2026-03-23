@@ -34,7 +34,6 @@ export function drawOverlay(
   rs: RenderSettings,
   splitOverlay?: SplitOverlay,
   colorWheelTex?: { texture: WebGLTexture; size: number; ringCount: number; getCellCenter: (fi: number, si: number) => { x: number; y: number } },
-  colorPickerAnchor?: { px: number; py: number } | null,
 ): void {
   const { w, h } = canvasSize
   const aspect = w / h
@@ -128,14 +127,9 @@ export function drawOverlay(
   if (colorPickerOpen && selectedIds.length === 1 && colorWheelTex) {
     const pickEl = elements.find((e) => e.id === selectedIds[0])
     if (pickEl) {
-      let anchor: { px: number; py: number }
-      if (colorPickerAnchor) {
-        anchor = colorPickerAnchor
-      } else {
-        const [anchorWx, anchorWy] = p2w(pickEl.x + pickEl.width, pickEl.y)
-        const anchorZ = pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
-        anchor = ov.projectToScreen(anchorWx, anchorWy, anchorZ)
-      }
+      const [anchorWx, anchorWy] = p2w(pickEl.x + pickEl.width, pickEl.y)
+      const anchorZ = pickEl.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
+      const anchor = ov.projectToScreen(anchorWx, anchorWy, anchorZ)
 
       const dpr = window.devicePixelRatio || 1
       const wheelSizePx = colorWheelTex.size * dpr * 0.9

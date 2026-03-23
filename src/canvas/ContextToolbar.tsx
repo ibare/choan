@@ -12,8 +12,6 @@ import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, Ey
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
   rendererRef: MutableRefObject<SDFRenderer | null>
-  colorPickerOpenRef: MutableRefObject<boolean>
-  colorPickerAnchorRef: MutableRefObject<{ px: number; py: number } | null>
 }
 
 const DIR_OPTIONS = [
@@ -26,6 +24,7 @@ const DIR_OPTIONS = [
 type LayoutDir = 'free' | 'row' | 'column' | 'grid'
 
 const colorToHex = (n: number) => `#${n.toString(16).padStart(6, '0')}`
+const hexToColor = (s: string) => parseInt(s.slice(1), 16)
 
 // ── Scrubable number input ───────────────────────────────────
 // Hover → ew-resize cursor, drag horizontally to scrub.
@@ -102,7 +101,7 @@ function ScrubInput({ icon, value, min, max, onChange }: {
   )
 }
 
-export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPickerOpenRef, colorPickerAnchorRef }: Props) {
+export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const rafRef = useRef(0)
   const prevKeyRef = useRef('')
@@ -140,7 +139,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPicker
     return () => cancelAnimationFrame(rafRef.current)
   }, [canvasSizeRef, rendererRef])
 
-  if (!el || !pos || colorPickerOpenRef.current) return null
+  if (!el || !pos) return null
 
   const isFrame     = !!el.frame
   const isSkin      = !!el.skin
@@ -198,24 +197,15 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, colorPicker
             onChange={(v) => updateElement(el.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
           />
 
-          <button
-            className="ctx-color-btn"
-            title="Color"
-            onClick={(e) => {
-              const canvas = rendererRef.current?.canvas
-              if (!canvas) return
-              const btnRect = e.currentTarget.getBoundingClientRect()
-              const canvasRect = canvas.getBoundingClientRect()
-              const dpr = window.devicePixelRatio || 1
-              colorPickerAnchorRef.current = {
-                px: (btnRect.left + btnRect.width / 2 - canvasRect.left) * dpr,
-                py: (btnRect.top + btnRect.height / 2 - canvasRect.top) * dpr,
-              }
-              colorPickerOpenRef.current = true
-            }}
-          >
+          <label className="ctx-color-btn" title="Color">
             <div className="ctx-color-swatch" style={{ background: colorHex }} />
-          </button>
+            <input
+              type="color"
+              value={colorHex}
+              className="ctx-color-input"
+              onChange={(e) => updateElement(el.id, { color: hexToColor(e.target.value) })}
+            />
+          </label>
         </>
       )}
 

@@ -25,8 +25,6 @@ export default function SDFCanvas() {
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
   const animatedElementsRef = useRef<ChoanElement[]>([])
   const splitModeRef = useRef<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>({ active: false, count: 2, elementId: '', direction: 'horizontal' })
-  const colorPickerAnchorRef = useRef<{ px: number; py: number } | null>(null)
-
   const { elements, selectedIds, tool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
   const [altPressed, setAltPressed] = useState(false)
@@ -39,7 +37,7 @@ export default function SDFCanvas() {
     isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef,
     snapLinesRef,
-  } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef, colorPickerAnchorRef })
+  } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef })
 
   useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef, controlsRef)
 
@@ -49,7 +47,6 @@ export default function SDFCanvas() {
     isDrawingRef, drawElIdRef, snapLinesRef, colorPickerOpenRef, colorPickerHoverRef,
     animatedElementsRef,
     splitModeRef,
-    colorPickerAnchorRef,
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {
@@ -130,7 +127,7 @@ export default function SDFCanvas() {
       <RenderSettingsPanel />
       <NavigationGizmo controlsRef={controlsRef} />
       <SplitLabels splitModeRef={splitModeRef} canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
-      <ContextToolbar canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} colorPickerOpenRef={colorPickerOpenRef} colorPickerAnchorRef={colorPickerAnchorRef} />
+      <ContextToolbar canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
     </div>
   )
 }

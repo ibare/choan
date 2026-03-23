@@ -52,7 +52,6 @@ export function useAnimateLoop({
   colorPickerHoverRef: MutableRefObject<number>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
   splitModeRef: MutableRefObject<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>
-  colorPickerAnchorRef: MutableRefObject<{ px: number; py: number } | null>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -176,7 +175,6 @@ export function useAnimateLoop({
         rs,
         splitModeRef.current,
         renderer.colorWheel,
-        colorPickerAnchorRef.current,
       )
     }
     animate()

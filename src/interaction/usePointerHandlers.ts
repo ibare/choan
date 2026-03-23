@@ -54,7 +54,6 @@ export function usePointerHandlers({
   zoomScaleRef: MutableRefObject<number>
   mountRef: MutableRefObject<HTMLDivElement | null>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
-  colorPickerAnchorRef: MutableRefObject<{ px: number; py: number } | null>
 }): UsePointerHandlersResult {
   const screenToPixel = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
     const renderer = rendererRef.current
@@ -230,19 +229,10 @@ export function usePointerHandlers({
 
         const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
         if (corner >= 0) {
-          if (corner === 2) { colorPickerAnchorRef.current = null; colorPickerOpenRef.current = true; colorPickerHoverRef.current = -1; return }
-          if (corner === 3 && els.find((el) => el.id === selId)?.type === 'rectangle') {
-            isRadiusDragRef.current = true
-            radiusStartRef.current = els.find((el) => el.id === selId)?.radius ?? 0
-            const pixel = screenToPixel(e.clientX, e.clientY)
-            if (pixel) radiusDragStartPixelRef.current = pixel
-            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-            return
-          }
           const el = els.find((el) => el.id === selId)!
           const parentOfEl = el.parentId ? els.find((p) => p.id === el.parentId) : null
           const isManagedChild = el.parentId && parentOfEl?.layoutDirection !== 'free' && parentOfEl?.layoutDirection !== undefined
-          if ((corner === 0 || corner === 1) && !isManagedChild) {
+          if (!isManagedChild) {
             const cp = [
               { x: el.x, y: el.y + el.height }, { x: el.x + el.width, y: el.y + el.height },
               { x: el.x + el.width, y: el.y }, { x: el.x, y: el.y },
