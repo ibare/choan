@@ -932,7 +932,12 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   z-index: 300;
   max-height: 280px;
   overflow-y: auto;
+  scrollbar-width: none;
 }
+.ctx-icon-picker:hover { scrollbar-width: thin; }
+.ctx-icon-picker::-webkit-scrollbar { width: 4px; }
+.ctx-icon-picker::-webkit-scrollbar-thumb { background: transparent; border-radius: 2px; }
+.ctx-icon-picker:hover::-webkit-scrollbar-thumb { background: var(--border); }
 .ctx-icon-grid {
   display: grid;
   grid-template-columns: repeat(8, 28px);
