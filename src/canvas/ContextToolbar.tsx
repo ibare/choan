@@ -8,6 +8,7 @@ import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { SKIN_REGISTRY } from '../config/skins'
 import type { SDFRenderer } from '../engine/renderer'
 import { SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour, EyeSlash, Angle } from '@phosphor-icons/react'
+import ColorPicker from './ColorPicker'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -197,15 +198,28 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef }: Props) {
             onChange={(v) => updateElement(el.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
           />
 
-          <label className="ctx-color-btn" title="Color">
-            <div className="ctx-color-swatch" style={{ background: colorHex }} />
-            <input
-              type="color"
-              value={colorHex}
-              className="ctx-color-input"
-              onChange={(e) => updateElement(el.id, { color: hexToColor(e.target.value) })}
-            />
-          </label>
+          <RadixPopover.Root>
+            <RadixPopover.Trigger asChild>
+              <button className="ctx-color-btn" title="Color">
+                <div className="ctx-color-swatch" style={{ background: colorHex }} />
+              </button>
+            </RadixPopover.Trigger>
+            <RadixPopover.Portal>
+              <RadixPopover.Content
+                className="color-picker"
+                data-theme="dark"
+                side="top"
+                align="center"
+                sideOffset={8}
+              >
+                <ColorPicker
+                  color={el.color ?? 0xe0e0e0}
+                  onChange={(c) => updateElement(el.id, { color: c })}
+                />
+                <RadixPopover.Arrow className="color-picker-arrow" />
+              </RadixPopover.Content>
+            </RadixPopover.Portal>
+          </RadixPopover.Root>
         </>
       )}
 
