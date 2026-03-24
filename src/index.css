@@ -895,7 +895,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   align-items: center;
   gap: 4px;
   background: var(--surface-2);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-2);
   padding: 4px 8px 4px 6px;
   min-width: 52px;
@@ -903,7 +903,6 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   transition: border-color var(--transition-fast), background var(--transition-fast);
   user-select: none;
 }
-.ctx-scrub:hover { border-color: var(--border); }
 .ctx-scrub.editing { cursor: text; border-color: var(--border-focus); background: var(--accent-subtle); }
 .ctx-scrub__icon {
   display: flex;
@@ -917,7 +916,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   color: var(--text-1);
   font-family: var(--font);
   font-variant-numeric: tabular-nums;
-  min-width: 16px;
+  width: 28px;
   text-align: right;
   pointer-events: none;
 }
@@ -926,6 +925,9 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   background: transparent;
   border: none;
   outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
   font-size: var(--text-xs);
   color: var(--text-1);
   font-family: var(--font);
@@ -939,7 +941,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 /* Inline text input for skin options */
 .ctx-text-input {
   background: var(--surface-2);
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius-2);
   padding: 4px 8px;
   font-size: var(--text-xs);
@@ -947,10 +949,12 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   color: var(--text-1);
   width: 80px;
   outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  appearance: none;
   transition: border-color var(--transition-fast);
 }
 .ctx-text-input::placeholder { color: var(--text-3); }
-.ctx-text-input:hover { border-color: var(--border); }
 .ctx-text-input:focus { border-color: var(--border-focus); }
 
 /* Icon picker popover */

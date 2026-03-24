@@ -10,7 +10,7 @@ import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
 import {
   SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
-  EyeSlash, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
+  Rectangle, RectangleDashed, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
   ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
@@ -369,11 +369,10 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
           <Button
             className="ctx-btn"
-            active={isFrameless}
             title="Frameless"
             onClick={() => updateElement(el.id, { frameless: !isFrameless })}
           >
-            <EyeSlash size={15} />
+            {isFrameless ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
           </Button>
 
           <ScrubInput
@@ -419,11 +418,10 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
           <Button
             className="ctx-btn"
-            active={el.skinOnly}
             title="Only Skin"
             onClick={() => updateElement(el.id, { skinOnly: !el.skinOnly })}
           >
-            <EyeSlash size={15} />
+            {el.skinOnly ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
           </Button>
         </>
       )}
