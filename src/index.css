@@ -919,6 +919,10 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   flex-shrink: 0;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
+/* Match inner radius to toolbar outer shape (outer 24px - padding 6px = 18px) */
+.context-toolbar > :first-child { border-radius: 18px; }
+.context-toolbar > :last-child  { border-radius: 18px; }
+
 .ctx-btn:hover { background: var(--surface-3); color: var(--text-1); }
 .ctx-btn.ui-btn--active { background: var(--accent); color: #fff; }
 

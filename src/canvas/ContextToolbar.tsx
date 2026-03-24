@@ -231,15 +231,16 @@ const PLACEMENT_TRANSFORM = {
   bottom: 'translateX(-50%) translateY(10px)',
 } as const
 
-const SPRING = { type: 'spring', stiffness: 400, damping: 28, mass: 0.8 } as const
+const SPRING        = { type: 'spring', stiffness: 400, damping: 28, mass: 0.8 } as const
+const EXIT_FAST     = { duration: 0.08, ease: 'easeIn' } as const
 
 const TOOLBAR_VARIANTS = {
-  hidden: { opacity: 0, scale: 0.88 },
+  hidden:  { opacity: 0, scale: 0.88, transition: EXIT_FAST },
   visible: { opacity: 1, scale: 1 },
 }
 
 const GROUP_VARIANTS = {
-  hidden: { opacity: 0, scale: 0.82 },
+  hidden:  { opacity: 0, scale: 0.82, transition: EXIT_FAST },
   visible: { opacity: 1, scale: 1 },
 }
 
@@ -371,7 +372,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
           ))}
 
           {/* Container extras */}
-          <AnimatePresence>
+          <AnimatePresence mode="popLayout">
             {isContainer && (
               <motion.div key="container-section" layout style={FLEX_ROW}
                 variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
@@ -379,7 +380,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
               >
 
                 {/* Layout-dependent options: Gap, Padding, Columns */}
-                <AnimatePresence>
+                <AnimatePresence mode="popLayout">
                   {(dir === 'row' || dir === 'column' || dir === 'grid') && (
                     <motion.div key="layout-extras" layout style={FLEX_ROW}
                       variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
@@ -460,7 +461,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
           </AnimatePresence>
 
           {/* Skin: type-specific options + Only Skin toggle */}
-          <AnimatePresence>
+          <AnimatePresence mode="popLayout">
             {isSkin && (
               <motion.div key="skin-section" layout style={FLEX_ROW}
                 variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
