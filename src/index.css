@@ -926,6 +926,22 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .ctx-btn:hover { background: var(--surface-3); color: var(--text-1); }
 .ctx-btn.ui-btn--active { background: var(--accent); color: #fff; }
 
+@keyframes ctx-split-blink {
+  0%, 100% { color: var(--text-2); }
+  50%       { color: #f87171; }
+}
+/* Extends ctx-scrub__icon — adds click + blink (double-class for specificity over pointer-events: none) */
+.ctx-scrub__icon.ctx-split-icon {
+  pointer-events: auto;
+  cursor: pointer;
+  animation: ctx-split-blink 1.4s ease-in-out infinite;
+}
+.ctx-scrub__icon.ctx-split-icon--disabled {
+  cursor: default;
+  animation: none;
+  opacity: 0.4;
+}
+
 .ctx-sep {
   width: 1px;
   height: 16px;

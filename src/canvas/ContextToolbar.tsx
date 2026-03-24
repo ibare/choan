@@ -3,6 +3,8 @@
 
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import type { SplitMode } from '../interaction/useKeyboardHandlers'
+import { splitElement } from '../interaction/splitElement'
 import * as RadixPopover from '@radix-ui/react-popover'
 import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
@@ -13,6 +15,7 @@ import {
   SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
   Rectangle, RectangleDashed, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
   ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB, Play, Pause,
+  Knife, RowsPlusBottom,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
@@ -26,6 +29,7 @@ interface Props {
   isResizingRef: MutableRefObject<boolean>
   isDrawingRef: MutableRefObject<boolean>
   controlsRef: MutableRefObject<OrbitControls | null>
+  splitModeRef: MutableRefObject<SplitMode>
 }
 
 const DIR_OPTIONS = [
@@ -246,9 +250,102 @@ const GROUP_VARIANTS = {
 
 const FLEX_ROW = { display: 'flex', alignItems: 'center', gap: 1 } as const
 
-export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef }: Props) {
+// ── Split input — controlled by parent so N key / wheel / Shift sync correctly ──
+function SplitInput({ count, dir, onCountChange, onDirToggle, onConfirm, onCancel }: {
+  count: number
+  dir: 'horizontal' | 'vertical'
+  onCountChange: (n: number) => void
+  onDirToggle: () => void
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dragRef = useRef({ active: false, startX: 0, startVal: 0, moved: false })
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (editing) return
+    dragRef.current = { active: true, startX: e.clientX, startVal: count, moved: false }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    e.preventDefault()
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d.active) return
+    const dx = e.clientX - d.startX
+    if (Math.abs(dx) > 3) {
+      d.moved = true
+      onCountChange(Math.max(2, Math.round(d.startVal + dx / 8)))
+    }
+  }
+
+  const handlePointerUp = () => {
+    const d = dragRef.current
+    if (!d.active) return
+    d.active = false
+    if (!d.moved) {
+      setEditing(true)
+      setDraft(String(count))
+      requestAnimationFrame(() => { inputRef.current?.focus(); inputRef.current?.select() })
+    }
+  }
+
+  const commitEdit = () => {
+    onCountChange(Math.max(2, Number(draft) || 2))
+    setEditing(false)
+  }
+
+  return (
+    <div
+      className={`ctx-scrub${editing ? ' editing' : ''}`}
+      onPointerDown={editing ? undefined : handlePointerDown}
+      onPointerMove={editing ? undefined : handlePointerMove}
+      onPointerUp={editing ? undefined : handlePointerUp}
+    >
+      <span
+        className={`ctx-scrub__icon ctx-split-icon${editing ? ' ctx-split-icon--disabled' : ''}`}
+        style={{ pointerEvents: editing ? 'none' : undefined }}
+        onClick={(e) => { if (editing) return; e.stopPropagation(); onDirToggle() }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <RowsPlusBottom
+          size={13}
+          style={{
+            transform: dir === 'horizontal' ? 'rotate(-90deg)' : 'none',
+            transition: 'transform 0.15s ease',
+          }}
+        />
+      </span>
+      {editing ? (
+        <input
+          ref={inputRef}
+          className="ctx-scrub__input"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.stopPropagation(); commitEdit(); onConfirm() }
+            if (e.key === 'Escape') { e.stopPropagation(); setEditing(false); onCancel() }
+          }}
+        />
+      ) : (
+        <span className="ctx-scrub__value">{count}</span>
+      )}
+    </div>
+  )
+}
+
+export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef, splitModeRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number; placement: 'top' | 'right' | 'bottom' } | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
+  const [splitOpen, setSplitOpen] = useState(false)
+  const [splitCount, setSplitCount] = useState(2)
+  const [splitDir, setSplitDir] = useState<'horizontal' | 'vertical'>('horizontal')
+  const splitOpenRef  = useRef(false)
+  const splitCountRef = useRef(2)
+  const splitDirRef   = useRef<'horizontal' | 'vertical'>('horizontal')
   const rafRef = useRef(0)
   const prevKeyRef = useRef('')
 
@@ -315,10 +412,25 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
         prevKeyRef.current = key
         setPos({ x: nx, y: ny, placement })
       }
+
+      // Sync split UI with splitModeRef — catches N key, scroll wheel, Shift, Escape
+      const sm = splitModeRef.current
+      if (sm.active) {
+        if (!splitOpenRef.current) setSplitOpen(true)
+        if (sm.count !== splitCountRef.current) setSplitCount(sm.count)
+        if (sm.direction !== splitDirRef.current) setSplitDir(sm.direction)
+      } else if (splitOpenRef.current) {
+        setSplitOpen(false)
+      }
     }
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [canvasSizeRef, rendererRef])
+  }, [canvasSizeRef, rendererRef, splitModeRef])
+
+  // Keep refs in sync for RAF access (avoids stale closures)
+  splitOpenRef.current  = splitOpen
+  splitCountRef.current = splitCount
+  splitDirRef.current   = splitDir
 
   const isFrame     = !!el?.frame
   const isSkin      = !!el?.skin
@@ -340,6 +452,39 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
     if (!el) return
     updateElement(el.id, { layoutDirection: d })
     queueMicrotask(() => runLayout(el.id))
+  }
+
+  const resetSplitState = () => {
+    splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
+    if (controlsRef.current) controlsRef.current.wheelEnabled = true
+    setSplitOpen(false); setSplitCount(2); setSplitDir('horizontal')
+  }
+
+  const activateSplit = () => {
+    if (!el) return
+    splitModeRef.current = { active: true, count: 2, elementId: el.id, direction: 'horizontal' }
+    if (controlsRef.current) controlsRef.current.wheelEnabled = false
+    setSplitOpen(true); setSplitCount(2); setSplitDir('horizontal')
+  }
+
+  const confirmSplit = () => {
+    const { count, elementId, direction } = splitModeRef.current
+    resetSplitState()
+    splitElement(count, elementId, direction)
+  }
+
+  const cancelSplit = () => resetSplitState()
+
+  const onSplitCountChange = (n: number) => {
+    const v = Math.max(2, n)
+    setSplitCount(v)
+    splitModeRef.current = { ...splitModeRef.current, count: v }
+  }
+
+  const onSplitDirToggle = () => {
+    const next: 'horizontal' | 'vertical' = splitDir === 'horizontal' ? 'vertical' : 'horizontal'
+    setSplitDir(next)
+    splitModeRef.current = { ...splitModeRef.current, direction: next }
   }
 
   return (
@@ -431,6 +576,21 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                   max={Math.round(maxRadius)}
                   onChange={(v) => updateElement(el!.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
                 />
+
+                {/* Knife → split input */}
+                <AnimatePresence mode="popLayout">
+                  {!splitOpen ? (
+                    <motion.div key="knife-btn" variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden" transition={SPRING}>
+                      <Button className="ctx-btn" title="Split" onClick={activateSplit}>
+                        <Knife size={15} />
+                      </Button>
+                    </motion.div>
+                  ) : (
+                    <motion.div key="split-input" variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden" transition={SPRING}>
+                      <SplitInput count={splitCount} dir={splitDir} onCountChange={onSplitCountChange} onDirToggle={onSplitDirToggle} onConfirm={confirmSplit} onCancel={cancelSplit} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <RadixPopover.Root>
                   <RadixPopover.Trigger asChild>

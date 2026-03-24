@@ -6,6 +6,7 @@ import { nanoid } from '../canvas/nanoid'
 import type { ChoanElement } from '../store/useChoanStore'
 import type { OrbitControls } from '../engine/controls'
 import { resolveHotkey } from './hotkeyRegistry'
+import { splitElement } from './splitElement'
 
 export type ActionHandler = () => void
 
@@ -32,76 +33,7 @@ export function useKeyboardHandlers(
     const { count, elementId, direction } = splitModeRef.current
     splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
     if (controlsRef?.current) controlsRef.current.wheelEnabled = true
-
-    if (count <= 1) return // 1 = cancel
-
-    const store = useChoanStore.getState()
-    const el = store.elements.find((e) => e.id === elementId)
-    if (!el) return
-
-    const parent = el.parentId ? store.elements.find((e) => e.id === el.parentId) : null
-    const isAutoLayout = parent && parent.layoutDirection !== 'free' && parent.layoutDirection !== undefined
-    const gap = isAutoLayout ? 0 : 8
-
-    const isH = direction === 'horizontal'
-    const sliceSize = (isH ? el.width : el.height) / count
-    const totalSize = sliceSize * count + gap * (count - 1)
-    const startPos = (isH ? el.x : el.y) - (totalSize - (isH ? el.width : el.height)) / 2
-
-    // Collect entire descendant subtree (recursive)
-    const allElements = store.elements
-    function collectDescendants(parentId: string): ChoanElement[] {
-      const direct = allElements.filter((e) => e.parentId === parentId)
-      const result: ChoanElement[] = []
-      for (const child of direct) {
-        result.push(child)
-        result.push(...collectDescendants(child.id))
-      }
-      return result
-    }
-    const descendants = collectDescendants(elementId)
-
-    // Create at original position/size first (for spring animation)
-    const newIds: string[] = []
-    for (let i = 0; i < count; i++) {
-      const id = nanoid()
-      newIds.push(id)
-      store.addElement({ ...el, id, x: el.x, y: el.y, width: el.width, height: el.height, label: `${el.label} ${i + 1}`, parentId: el.parentId })
-
-      // Duplicate entire subtree — map old IDs to new IDs for parent references
-      const idMap = new Map<string, string>()
-      idMap.set(elementId, id)
-      for (const desc of descendants) {
-        const newDescId = nanoid()
-        idMap.set(desc.id, newDescId)
-      }
-      for (const desc of descendants) {
-        store.addElement({ ...desc, id: idMap.get(desc.id)!, parentId: idMap.get(desc.parentId!)! })
-      }
-    }
-
-    // Remove original descendants (deepest first) then container
-    for (let i = descendants.length - 1; i >= 0; i--) store.removeElement(descendants[i].id)
-    store.removeElement(elementId)
-    store.setSelectedIds([])
-
-    // Next frame: update to final positions → spring animation + re-layout children
-    // applyLayout is now recursive, so runLayout propagates to all descendants
-    requestAnimationFrame(() => {
-      const s = useChoanStore.getState()
-      for (let i = 0; i < newIds.length; i++) {
-        s.updateElement(newIds[i], isH
-          ? { x: startPos + (sliceSize + gap) * i, width: sliceSize }
-          : { y: startPos + (sliceSize + gap) * i, height: sliceSize },
-        )
-        if (el.layoutDirection && el.layoutDirection !== 'free') {
-          s.runLayout(newIds[i])
-        }
-      }
-      if (isAutoLayout && el.parentId) {
-        s.runLayout(el.parentId)
-      }
-    })
+    splitElement(count, elementId, direction)
   }, [])
 
   const builtinActions = useCallback((): Record<string, ActionHandler> => ({
