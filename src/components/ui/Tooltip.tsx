@@ -9,7 +9,7 @@ interface TooltipProps {
   delay?: number
 }
 
-export function Tooltip({ content, children, side = 'right', delay = 400 }: TooltipProps) {
+export function Tooltip({ content, children, side = 'bottom', delay = 400 }: TooltipProps) {
   return (
     <RadixTooltip.Root delayDuration={delay}>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>

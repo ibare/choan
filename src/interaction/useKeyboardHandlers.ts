@@ -23,7 +23,7 @@ export function useKeyboardHandlers(
   controlsRef?: MutableRefObject<OrbitControls | null>,
   customActions?: Record<string, ActionHandler>,
 ): void {
-  const { removeElement, setTool } = useChoanStore()
+  const { removeElement, setTool, setPendingSkin, setPendingFrame } = useChoanStore()
   const copiedRef = useRef<ChoanElement[]>([])
   const customActionsRef = useRef(customActions)
   customActionsRef.current = customActions
@@ -178,7 +178,7 @@ export function useKeyboardHandlers(
       }
       store.selectElement(rootId)
     },
-    'tool:select': () => setTool('select'),
+    'tool:select': () => { setTool('select'); setPendingSkin(null); setPendingFrame(null) },
     'tool:rectangle': () => setTool('rectangle'),
 
     // Split mode
@@ -196,7 +196,7 @@ export function useKeyboardHandlers(
       if (!splitModeRef.current.active) return
       executeSplit()
     },
-  }), [removeElement, setTool, colorPickerOpenRef, colorPickerHoverRef, executeSplit])
+  }), [removeElement, setTool, setPendingSkin, setPendingFrame, colorPickerOpenRef, colorPickerHoverRef, executeSplit])
 
   useEffect(() => {
     // Wheel to adjust split count

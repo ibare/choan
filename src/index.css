@@ -869,6 +869,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   justify-content: center;
   width: 28px;
   height: 28px;
+  padding: 0;
   border: none;
   border-radius: var(--radius-2);
   background: transparent;
