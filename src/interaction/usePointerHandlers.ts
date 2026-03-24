@@ -74,6 +74,7 @@ export function usePointerHandlers({
 
   const colorPickerOpenRef = useRef(false)
   const colorPickerHoverRef = useRef(-1)
+  const colorPickerAnchorRef = useRef<{ px: number; py: number } | null>(null)
 
   const isDraggingRef = useRef(false)
   const dragStartPixelRef = useRef({ x: 0, y: 0 })

@@ -1,5 +1,5 @@
 import type { ChoanElement } from '../../../store/useElementStore'
-import { el, ctr, child } from './_builder'
+import { ctr, child } from './_builder'
 
 // ── 1. Toggle controls — switch, checkbox, radio in a settings column ─────────
 

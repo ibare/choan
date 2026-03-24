@@ -14,7 +14,7 @@ import type { OrbitControls } from '../engine/controls'
 import {
   SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
   Rectangle, RectangleDashed, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
-  ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB, Play, Pause,
+  ToggleRight, Percent, Hash, Star, ArrowsClockwise, Play, Pause,
   Knife, RowsPlusBottom, LinkSimpleHorizontal,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
@@ -43,7 +43,6 @@ const DIR_OPTIONS = [
 type LayoutDir = 'free' | 'row' | 'column' | 'grid'
 
 const colorToHex = (n: number) => `#${n.toString(16).padStart(6, '0')}`
-const hexToColor = (s: string) => parseInt(s.slice(1), 16)
 
 // ── Scrubable number input ───────────────────────────────────
 // Hover → ew-resize cursor, drag horizontally to scrub.
@@ -146,7 +145,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
   const toggleBtn = (key: string, label: string) => (
     <SkinToggle label={label} active={bool(key)} onClick={() => setCS({ [key]: !bool(key) })} />
   )
-  const pctScrub = (key: string, label: string) => (
+  const pctScrub = (key: string, _label: string) => (
     <ScrubInput
       icon={<Percent size={13} />}
       value={Math.round((Number(cs[key]) || 0) * 100)}
@@ -442,7 +441,6 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
       // Container CSS size
       const containerW = w
-      const containerH = h
 
       // Estimate toolbar size for space checks
       const TOOLBAR_H = 44
