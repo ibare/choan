@@ -323,7 +323,7 @@ export function usePointerHandlers({
       label: pendingFrame ? (pendingFrame === 'browser' ? 'Browser' : 'Mobile') : (tool === 'rectangle' ? 'Box' : tool === 'circle' ? 'Circle' : 'Line'),
       role: tool === 'rectangle' ? 'container' : undefined,
       color: drawColor, x: pixel.x, y: pixel.y, z: 0, width: 1, height: 1,
-      ...(pendingSkin ? { skin: pendingSkin, skinOnly: true } : {}),
+      ...(pendingSkin ? { skin: pendingSkin, skinOnly: true, componentState: pendingSkin === 'image' ? { seed: Math.floor(Math.random() * 9999) } : undefined } : {}),
       ...frameExtra,
     }
     addElement(newEl)
