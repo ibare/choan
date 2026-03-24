@@ -361,6 +361,9 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const prevKeyRef = useRef('')
 
   const { selectedIds, elements, updateElement, runLayout } = useElementStore()
+
+  // Derive used colors from canvas elements (reactive, auto-cleans)
+  const usedColors = [...new Set(elements.map((e) => e.color).filter((c): c is number => c !== undefined))]
   const el = selectedIds.length === 1
     ? elements.find((e) => e.id === selectedIds[0]) ?? null
     : null
@@ -696,6 +699,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                       <ColorPicker
                         color={el!.color ?? 0xe0e0e0}
                         onChange={(c) => applyUpdate({ color: c })}
+                        history={usedColors}
                       />
                       <RadixPopover.Arrow className="color-picker-arrow" />
                     </RadixPopover.Content>

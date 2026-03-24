@@ -66,9 +66,10 @@ const BW_TRIPLED = [...BW_STEPS, ...BW_STEPS, ...BW_STEPS]
 interface ColorPickerProps {
   color: number
   onChange: (color: number) => void
+  history?: number[]
 }
 
-export default function ColorPicker({ color, onChange }: ColorPickerProps) {
+export default function ColorPicker({ color, onChange, history = [] }: ColorPickerProps) {
   const colorCanvasRef = useRef<HTMLCanvasElement>(null)
   const bwCanvasRef = useRef<HTMLCanvasElement>(null)
   const dragRef = useRef<'color' | 'bw' | false>(false)
@@ -229,6 +230,51 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
           })}
         </div>
       </div>
+
+      {/* Color history — derived from canvas elements, carousel when >= 9 */}
+      {history.length > 0 && (() => {
+        const N = history.length
+        const hActiveIdx = history.indexOf(color)
+        const centerIdx = hActiveIdx >= 0 ? hActiveIdx : 0
+
+        if (N >= 9) {
+          const tripled = [...history, ...history, ...history]
+          const hOffsetPct = -((N + centerIdx - 4) / (3 * N)) * 100
+          return (
+            <div className="color-picker-shades">
+              <div
+                className="color-picker-shades__track"
+                style={{ width: `${N * 100 / 3}%`, transform: `translateX(${hOffsetPct}%)` }}
+              >
+                {tripled.map((c, i) => (
+                  <button
+                    key={i}
+                    className={`color-picker-shade${i === N + centerIdx ? ' active' : ''}`}
+                    style={{ flex: `0 0 calc(100% / ${3 * N})` }}
+                    onClick={() => onChange(c)}
+                  >
+                    <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <div className="color-picker-history">
+            {history.map((c, i) => (
+              <button
+                key={i}
+                className={`color-picker-shade${c === color ? ' active' : ''}`}
+                onClick={() => onChange(c)}
+              >
+                <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
+              </button>
+            ))}
+          </div>
+        )
+      })()}
     </>
   )
 }

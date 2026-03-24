@@ -1174,6 +1174,18 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   box-shadow: 0 0 0 1px var(--border);
 }
 
+.color-picker-history {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-radius: var(--radius-2);
+  margin-top: 2px;
+}
+.color-picker-history::-webkit-scrollbar { display: none; }
+.color-picker-history .color-picker-shade {
+  flex: 0 0 calc(100% / 9);
+}
+
 /* Skin picker popover */
 .ctx-skin-picker {
   display: grid;
