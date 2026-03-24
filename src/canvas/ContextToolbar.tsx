@@ -164,7 +164,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
     case 'text-input': return <>{textInput('placeholder', 'Type here...')}{toggleBtn('focused', 'Focused')}</>
     case 'progress':   return pctScrub('value', 'Value')
     case 'badge':
-      return <ScrubInput icon={<Hash size={13} />} value={Number(cs.count) || 0} min={0} max={99} onChange={(v) => setCS({ count: v })} />
+      return <ScrubInput icon={<Hash size={13} />} value={Math.max(1, Number(cs.count) || 1)} min={1} max={99} onChange={(v) => setCS({ count: Math.max(1, v) })} />
     case 'star-rating':
       return <ScrubInput icon={<Star size={13} />} value={Number(cs.rating) || 0} min={0} max={5} onChange={(v) => setCS({ rating: v })} />
     case 'avatar':     return toggleBtn('online', 'Online')
