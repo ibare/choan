@@ -15,6 +15,8 @@ import {
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
+import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -125,9 +127,9 @@ function IconSvg({ name, size = 16 }: { name: string; size?: number }) {
 
 function SkinToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <button className={`ctx-btn${active ? ' active' : ''}`} title={label} onClick={onClick}>
+    <Button className="ctx-btn" active={active} title={label} onClick={onClick}>
       <ToggleRight size={15} />
-    </button>
+    </Button>
   )
 }
 
@@ -145,7 +147,7 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
     />
   )
   const textInput = (key: string, placeholder: string) => (
-    <input
+    <Input
       className="ctx-text-input"
       value={(cs[key] as string) || ''}
       placeholder={placeholder}
@@ -172,18 +174,18 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
       return <ScrubInput icon={<Columns size={13} />} value={Number(cs.columns) || 3} min={1} max={10} onChange={(v) => setCS({ columns: v })} />
     case 'image':
       return (
-        <button className="ctx-btn" title="Shuffle" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
+        <Button className="ctx-btn" title="Shuffle" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
           <ArrowsClockwise size={15} />
-        </button>
+        </Button>
       )
     case 'search':     return textInput('query', 'Search...')
     case 'icon':
       return (
         <RadixPopover.Root open={iconOpen} onOpenChange={setIconOpen}>
           <RadixPopover.Trigger asChild>
-            <button className="ctx-btn" title="Change Icon">
+            <Button className="ctx-btn" title="Change Icon">
               <IconSvg name={(cs.icon as string) || 'heart'} size={15} />
-            </button>
+            </Button>
           </RadixPopover.Trigger>
           <RadixPopover.Portal>
             <RadixPopover.Content
@@ -195,14 +197,15 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
             >
               <div className="ctx-icon-grid">
                 {ICON_NAMES.map((name) => (
-                  <button
+                  <Button
                     key={name}
-                    className={`ctx-icon-item${(cs.icon || 'heart') === name ? ' active' : ''}`}
+                    className="ctx-icon-item"
+                    active={(cs.icon || 'heart') === name}
                     title={name}
                     onClick={() => { setCS({ icon: name }); setIconOpen(false) }}
                   >
                     <IconSvg name={name} size={16} />
-                  </button>
+                  </Button>
                 ))}
               </div>
               <RadixPopover.Arrow className="color-picker-arrow" />
@@ -318,14 +321,15 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
     >
       {/* Layout direction — Frame and Container */}
       {(isFrame || isContainer) && DIR_OPTIONS.map(({ value, Icon, label }) => (
-        <button
+        <Button
           key={value}
-          className={`ctx-btn${dir === value ? ' active' : ''}`}
+          className="ctx-btn"
+          active={dir === value}
           title={label}
           onClick={() => handleLayout(value)}
         >
           <Icon size={15} />
-        </button>
+        </Button>
       ))}
 
       {/* Container extras */}
@@ -363,13 +367,14 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
           <div className="ctx-sep" />
 
-          <button
-            className={`ctx-btn${isFrameless ? ' active' : ''}`}
+          <Button
+            className="ctx-btn"
+            active={isFrameless}
             title="Frameless"
             onClick={() => updateElement(el.id, { frameless: !isFrameless })}
           >
             <EyeSlash size={15} />
-          </button>
+          </Button>
 
           <ScrubInput
             icon={<Angle size={13} />}
@@ -381,9 +386,9 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
           <RadixPopover.Root>
             <RadixPopover.Trigger asChild>
-              <button className="ctx-color-btn" title="Color">
+              <Button className="ctx-color-btn" title="Color">
                 <div className="ctx-color-swatch" style={{ background: colorHex }} />
-              </button>
+              </Button>
             </RadixPopover.Trigger>
             <RadixPopover.Portal>
               <RadixPopover.Content
@@ -412,13 +417,14 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
           <div className="ctx-sep" />
 
-          <button
-            className={`ctx-btn${el.skinOnly ? ' active' : ''}`}
+          <Button
+            className="ctx-btn"
+            active={el.skinOnly}
             title="Only Skin"
             onClick={() => updateElement(el.id, { skinOnly: !el.skinOnly })}
           >
             <EyeSlash size={15} />
-          </button>
+          </Button>
         </>
       )}
     </div>

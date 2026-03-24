@@ -9,6 +9,8 @@ import type { DisplayLayer, RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../canvas/nanoid'
 import { Play, Pause, Stop, Plus, X, FilmStrip } from '@phosphor-icons/react'
+import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
 import { buildLayerTree } from '../animation/buildLayerTree'
 import { kfAnimator } from '../rendering/kfAnimator'
 import TimelineCanvas from './TimelineCanvas'
@@ -135,12 +137,12 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       {/* Header: playback controls + bundle tabs */}
       <div className="timeline-header-bar">
         <div className="playback-controls">
-          <button className="btn-small" onClick={handlePlayPause} title={previewState === 'playing' ? 'Pause' : 'Play'}>
+          <Button className="btn-small" onClick={handlePlayPause} title={previewState === 'playing' ? 'Pause' : 'Play'}>
             {previewState === 'playing' ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
-          </button>
-          <button className="btn-small" onClick={handleStop} title="Stop"><Stop size={14} weight="fill" /></button>
-          <button className="btn-small" onClick={handleCreateBundle} title="New Animation"><Plus size={14} /></button>
-          <button className={`btn-small ${ghostPreview ? 'active' : ''}`} onClick={toggleGhostPreview} title="Ghost Preview"><FilmStrip size={14} /></button>
+          </Button>
+          <Button className="btn-small" onClick={handleStop} title="Stop"><Stop size={14} weight="fill" /></Button>
+          <Button className="btn-small" onClick={handleCreateBundle} title="New Animation"><Plus size={14} /></Button>
+          <Button className="btn-small" active={ghostPreview} onClick={toggleGhostPreview} title="Ghost Preview"><FilmStrip size={14} /></Button>
           {previewState !== 'stopped' && (
             <span className="preview-state-label">{previewState === 'playing' ? 'Playing' : 'Paused'}</span>
           )}
@@ -148,23 +150,24 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
         <div className="timeline-tabs">
           {animationBundles.map((b) => (
             editingBundleName === b.id ? (
-              <input
+              <Input
                 key={b.id} className="field-input timeline-tab-name-input" autoFocus value={bundleNameDraft}
                 onChange={(e) => setBundleNameDraft(e.target.value)}
                 onBlur={commitBundleName}
                 onKeyDown={(e) => { if (e.key === 'Enter') commitBundleName(); if (e.key === 'Escape') setEditingBundleName(null) }}
               />
             ) : (
-              <button
+              <Button
                 key={b.id}
-                className={`btn-small ${activeBundleId === b.id ? 'active' : ''}`}
+                className="btn-small"
+                active={activeBundleId === b.id}
                 onClick={() => { setSelectedBundleId(b.id); setEditingBundle(b.id) }}
                 onDoubleClick={() => startEditBundleName(b.id, b.name)}
-              >{b.name}</button>
+              >{b.name}</Button>
             )
           ))}
           {activeBundleId && (
-            <button className="btn-icon timeline-tab-delete" onClick={() => { removeAnimationBundle(activeBundleId); setSelectedBundleId(null); setEditingBundle(null) }}><X size={12} /></button>
+            <Button className="btn-icon timeline-tab-delete" size="icon" onClick={() => { removeAnimationBundle(activeBundleId); setSelectedBundleId(null); setEditingBundle(null) }}><X size={12} /></Button>
           )}
         </div>
       </div>

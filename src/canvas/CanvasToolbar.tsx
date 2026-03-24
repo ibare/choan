@@ -4,6 +4,7 @@ import type { Tool } from '../store/useChoanStore'
 import { Cursor, Rectangle, Browser, DeviceMobile } from '@phosphor-icons/react'
 import { SKIN_REGISTRY } from '../config/skins'
 import { Tooltip } from '../components/ui/Tooltip'
+import { Button } from '../components/ui/Button'
 
 interface CanvasToolbarProps {
   tool: Tool
@@ -23,53 +24,58 @@ export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTo
   return (
     <div className="side-toolbar">
       <Tooltip content="Select (V)">
-        <button
-          className={`side-tool ${isSelectActive ? 'active' : ''}`}
+        <Button
+          className="side-tool"
+          active={isSelectActive}
           onClick={() => { onSetTool('select'); clearAll() }}
         >
           <Cursor size={18} />
-        </button>
+        </Button>
       </Tooltip>
 
       <Tooltip content="Rectangle (R)">
-        <button
-          className={`side-tool ${isRectActive ? 'active' : ''}`}
+        <Button
+          className="side-tool"
+          active={isRectActive}
           onClick={() => { onSetTool('rectangle'); clearAll() }}
         >
           <Rectangle size={18} />
-        </button>
+        </Button>
       </Tooltip>
 
       <div className="toolbar-separator" />
 
       <Tooltip content="Browser Frame">
-        <button
-          className={`side-tool ${pendingFrame === 'browser' ? 'active' : ''}`}
+        <Button
+          className="side-tool"
+          active={pendingFrame === 'browser'}
           onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('browser') }}
         >
           <Browser size={18} />
-        </button>
+        </Button>
       </Tooltip>
 
       <Tooltip content="Mobile Frame">
-        <button
-          className={`side-tool ${pendingFrame === 'mobile' ? 'active' : ''}`}
+        <Button
+          className="side-tool"
+          active={pendingFrame === 'mobile'}
           onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingFrame('mobile') }}
         >
           <DeviceMobile size={18} />
-        </button>
+        </Button>
       </Tooltip>
 
       <div className="toolbar-separator" />
 
       {SKIN_REGISTRY.map(({ id, label, Icon }) => (
         <Tooltip key={id} content={label}>
-          <button
-            className={`side-tool ${pendingSkin === id ? 'active' : ''}`}
+          <Button
+            className="side-tool"
+            active={pendingSkin === id}
             onClick={() => { onSetTool('rectangle'); clearAll(); onSetPendingSkin(id) }}
           >
             <Icon size={18} />
-          </button>
+          </Button>
         </Tooltip>
       ))}
     </div>

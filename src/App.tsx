@@ -17,7 +17,6 @@ export default function App() {
     setTool, setPendingSkin, setPendingFrame,
   } = useChoanStore()
 
-  const [projectName, setProjectName]   = useState('My UI')
   const [exportMsg, setExportMsg]       = useState('')
   const [theme, setTheme]               = useState<'light' | 'dark'>('dark')
   const [timelineHeight, setTimelineHeight] = useState(180)
@@ -54,7 +53,7 @@ export default function App() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${projectName}.md`
+    a.download = 'choan.md'
     a.click()
     URL.revokeObjectURL(url)
     setTimeout(() => setExportMsg(''), 3000)
@@ -64,12 +63,7 @@ export default function App() {
     <TooltipProvider>
       <div className="app" data-theme={theme}>
         <div className="toolbar">
-          <span className="app-logo">초안</span>
-          <input
-            className="project-name"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-          />
+          <span className="app-logo">Choan</span>
           <div className="toolbar-spacer" />
           <div className="action-group">
             <Button variant="primary" onClick={handleExport}>Export MD</Button>

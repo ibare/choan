@@ -3,6 +3,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { Button } from '../components/ui/Button'
 
 export interface TileItem {
   value: string
@@ -53,23 +54,24 @@ export default function TilePopover({ items, value, onChange, columns = 6, place
 
   return (
     <div className="tile-popover-wrap">
-      <button ref={triggerRef} className="tile-popover-trigger" onClick={handleOpen}>
+      <Button ref={triggerRef} className="tile-popover-trigger" onClick={handleOpen}>
         {current?.icon && <span className="tile-popover-preview">{current.icon}</span>}
         <span>{current?.label || placeholder}</span>
-      </button>
+      </Button>
       {open && createPortal(
         <div ref={popoverRef} className="tile-popover" style={style}>
           <div className="tile-popover-grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
             {items.map((item) => (
-              <button
+              <Button
                 key={item.value}
-                className={`tile-popover-item ${item.value === value ? 'active' : ''}`}
+                className="tile-popover-item"
+                active={item.value === value}
                 title={item.label}
                 onClick={() => { onChange(item.value); setOpen(false) }}
               >
                 {item.icon && <span className="tile-popover-icon">{item.icon}</span>}
                 <span className="tile-popover-label">{item.label}</span>
-              </button>
+              </Button>
             ))}
           </div>
         </div>,

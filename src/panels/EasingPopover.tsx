@@ -1,6 +1,7 @@
 // Easing type selector popover for keyframe editing.
 
 import { createPortal } from 'react-dom'
+import { Button } from '../components/ui/Button'
 import type { EasingType } from '../animation/types'
 import type { DisplayClipEntry } from './timelineTypes'
 import { LEFT_WIDTH, RULER_HEIGHT, LAYER_HEADER_HEIGHT, TRACK_HEIGHT } from './timelineTypes'
@@ -38,13 +39,14 @@ export default function EasingPopover({ layerIdx, trackIdx, kfIdx, screenX, scre
         onPointerDown={(e) => e.stopPropagation()}
       >
         {EASING_TYPES.map((et) => (
-          <button
+          <Button
             key={et}
-            className={`easing-option ${currentEasing === et ? 'active' : ''}`}
+            className="easing-option"
+            active={currentEasing === et}
             onClick={() => onSelect(et)}
           >
             {et}
-          </button>
+          </Button>
         ))}
       </div>
     </>,

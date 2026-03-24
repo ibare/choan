@@ -1,20 +1,8 @@
 import { useState } from 'react'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { GearSix } from '@phosphor-icons/react'
-
-function Slider({ label, value, min, max, step, onChange }: {
-  label: string; value: number; min: number; max: number; step: number
-  onChange: (v: number) => void
-}) {
-  return (
-    <div className="rs-row">
-      <label className="rs-label">{label}</label>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))} />
-      <span className="rs-value">{value.toFixed(step < 0.01 ? 3 : 2)}</span>
-    </div>
-  )
-}
+import { Slider } from '../components/ui/Slider'
+import { Button } from '../components/ui/Button'
 
 function Vec2Slider({ label, value, min, max, step, onChange }: {
   label: string; value: [number, number]; min: number; max: number; step: number
@@ -78,9 +66,9 @@ export default function RenderSettingsPanel() {
 
   if (!open) {
     return (
-      <button className="rs-toggle" onClick={() => setOpen(true)} title="Render Settings">
+      <Button variant="ghost" size="icon" className="rs-toggle" onClick={() => setOpen(true)} title="Render Settings">
         <GearSix size={16} />
-      </button>
+      </Button>
     )
   }
 
@@ -89,8 +77,8 @@ export default function RenderSettingsPanel() {
       <div className="rs-header">
         <span>Render Settings</span>
         <div style={{ display: 'flex', gap: 4 }}>
-          <button className="rs-btn" onClick={() => store.reset()}>Reset</button>
-          <button className="rs-btn" onClick={() => setOpen(false)}>Close</button>
+          <Button className="rs-btn" onClick={() => store.reset()}>Reset</Button>
+          <Button className="rs-btn" onClick={() => setOpen(false)}>Close</Button>
         </div>
       </div>
       <div className="rs-body">

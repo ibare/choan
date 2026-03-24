@@ -15,6 +15,7 @@ import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Slider } from '../components/ui/Slider'
 import { Button } from '../components/ui/Button'
+import { Checkbox } from '../components/ui/Checkbox'
 import { ALL_SKIN_IDS } from '../config/skins'
 
 const LINE_STYLE_OPTIONS = [
@@ -119,10 +120,9 @@ export default function PropertiesPanel() {
 
           {el.skin && (
             <PropRow label="Skin Only" columns="1-1">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={el.skinOnly ?? false}
-                onChange={(e) => updateElement(el.id, { skinOnly: e.target.checked })}
+                onChange={(checked) => updateElement(el.id, { skinOnly: checked })}
               />
             </PropRow>
           )}
@@ -136,10 +136,9 @@ export default function PropertiesPanel() {
         <>
           {!el.skin && (
             <PropRow label="Frameless" className="props-field-group">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={el.frameless ?? false}
-                onChange={(e) => updateElement(el.id, { frameless: e.target.checked })}
+                onChange={(checked) => updateElement(el.id, { frameless: checked })}
               />
             </PropRow>
           )}
@@ -179,10 +178,9 @@ export default function PropertiesPanel() {
               />
             </PropRow>
             <PropRow label="Arrow">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={el.hasArrow ?? false}
-                onChange={(e) => updateElement(el.id, { hasArrow: e.target.checked })}
+                onChange={(checked) => updateElement(el.id, { hasArrow: checked })}
               />
             </PropRow>
           </>

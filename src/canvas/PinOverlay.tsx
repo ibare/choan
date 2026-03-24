@@ -6,6 +6,7 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { pixelToWorld } from '../coords/coordinateSystem'
 import { PushPin, ArrowsOutSimple } from '@phosphor-icons/react'
+import { Button } from '../components/ui/Button'
 
 interface PinOverlayProps {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -69,9 +70,10 @@ export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayPro
       {pins.map((p) => {
         const isActive = p.sizing !== 'equal'
         return (
-          <button
+          <Button
             key={p.id}
-            className={`pin-button ${isActive ? 'active' : ''}`}
+            className="pin-button"
+            active={isActive}
             style={{ left: p.x, top: p.y }}
             title={p.sizing}
             onClick={() => {
@@ -84,7 +86,7 @@ export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayPro
           >
             {p.sizing === 'fill' && <ArrowsOutSimple size={12} weight="bold" />}
             {(p.sizing === 'fixed-px' || p.sizing === 'fixed-ratio') && <PushPin size={12} weight="fill" />}
-          </button>
+          </Button>
         )
       })}
     </>

@@ -2,6 +2,7 @@
 
 import type { AnimatableProperty } from '../animation/types'
 import { X } from '@phosphor-icons/react'
+import { Button } from '../components/ui/Button'
 import { type DisplayClipEntry, formatValue, TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, INDENT_PX } from './timelineTypes'
 
 interface TimelineSidebarProps {
@@ -27,7 +28,7 @@ export default function TimelineSidebar({
             <span className="tl-left-label">{entry.label}</span>
             {entry.bundleId && (
               <div className="tl-left-actions">
-                <button className="btn-icon" onClick={() => onRemoveClip(entry.bundleId!, entry.clip.id)}><X size={10} /></button>
+                <Button className="btn-icon" size="icon" onClick={() => onRemoveClip(entry.bundleId!, entry.clip.id)}><X size={10} /></Button>
               </div>
             )}
           </div>
@@ -40,7 +41,7 @@ export default function TimelineSidebar({
                 {formatValue(track.property as AnimatableProperty, track.keyframes[track.keyframes.length - 1]?.value)}
               </span>
               {entry.bundleId && (
-                <button className="btn-icon tl-track-del" onClick={() => onRemoveTrack(entry.clip.id, ti, entry.bundleId)}><X size={10} /></button>
+                <Button className="btn-icon tl-track-del" size="icon" onClick={() => onRemoveTrack(entry.clip.id, ti, entry.bundleId)}><X size={10} /></Button>
               )}
             </div>
           ))}
