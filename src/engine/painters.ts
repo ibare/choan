@@ -457,7 +457,7 @@ function paintTableSkeleton(ctx: OffscreenCanvasRenderingContext2D, w: number, h
   }
 }
 
-// ── Generative Landscape Image ──
+// ── Generative Image ──────────────────────────────────────────────────────────
 
 function seededRandom(seed: number) {
   let s = seed
@@ -470,262 +470,420 @@ function seededRandom(seed: number) {
 function paintImage(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, state: Record<string, unknown>, stroke: StrokeStyle) {
   const seed = Number(state.seed) || 42
   const rng = seededRandom(seed)
-
-  // Pick genre deterministically from seed (RNG first values cluster near 0)
   const genres = [genLandscape, genCity, genOcean, genAbstract, genSpace]
   const genre = genres[Math.abs(seed) % genres.length]
   genre(ctx, w, h, rng)
-
-  // Outline
   ctx.beginPath()
   ctx.rect(0, 0, w, h)
   outlined(ctx, stroke)
 }
 
 type RNG = () => number
-const jitter = (rng: RNG, v: number, range: number) => v + (rng() - 0.5) * range
-const hsl = (h: number, s: number, l: number) => `hsl(${h},${s}%,${l}%)`
+const hsl = (h: number, s: number, l: number) => `hsl(${Math.round(h)},${Math.round(s)}%,${Math.round(l)}%)`
+
+// ── Value Noise — seeded 2D grid with smooth bilinear interpolation ──
+function makeNoise(rng: RNG, res = 8): (x: number, y: number) => number {
+  const g = Array.from({ length: res + 1 }, () => Array.from({ length: res + 1 }, rng))
+  const smooth = (t: number) => t * t * (3 - 2 * t)
+  return (nx: number, ny: number): number => {
+    const xi = Math.floor(nx) % res, yi = Math.floor(ny) % res
+    const xf = nx - Math.floor(nx), yf = ny - Math.floor(ny)
+    const sx = smooth(xf), sy = smooth(yf)
+    return (
+      g[xi][yi] * (1 - sx) * (1 - sy) +
+      g[xi + 1][yi] * sx * (1 - sy) +
+      g[xi][yi + 1] * (1 - sx) * sy +
+      g[xi + 1][yi + 1] * sx * sy
+    )
+  }
+}
+
+// ── fBm — stacked octaves of noise ──
+function fbm(noise: (x: number, y: number) => number, x: number, y: number, oct = 4): number {
+  let v = 0, amp = 0.5, freq = 1, total = 0
+  for (let i = 0; i < oct; i++) {
+    v += noise(x * freq, y * freq) * amp
+    total += amp; amp *= 0.5; freq *= 2
+  }
+  return v / total
+}
 
 // ── Genre: Landscape ──
-
 function genLandscape(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+  const noise = makeNoise(rng, 8)
+
   const moods = [
-    { sky: [210, 55, 65], bot: [200, 40, 85], mt: [150, 25, 35], gnd: [90, 30, 45], sun: 'rgba(255,250,220,0.95)' },
-    { sky: [25, 75, 55], bot: [40, 80, 75], mt: [20, 30, 30], gnd: [35, 40, 35], sun: 'rgba(255,180,80,0.95)' },
-    { sky: [270, 40, 25], bot: [240, 35, 45], mt: [260, 20, 20], gnd: [220, 15, 25], sun: 'rgba(220,210,255,0.8)' },
-    { sky: [340, 50, 65], bot: [20, 60, 80], mt: [280, 20, 40], gnd: [30, 25, 50], sun: 'rgba(255,220,200,0.9)' },
-    { sky: [45, 30, 75], bot: [35, 50, 60], mt: [30, 35, 40], gnd: [40, 45, 55], sun: 'rgba(255,240,200,0.9)' },
+    { sky: [215, 55, 60], hor: [205, 35, 82], mt: [160, 22, 30], gnd: [100, 28, 38], sun: [52, 95, 74] },
+    { sky: [22, 68, 50], hor: [38, 72, 72], mt: [18, 28, 26], gnd: [32, 36, 30], sun: [40, 95, 74] },
+    { sky: [265, 35, 20], hor: [238, 30, 38], mt: [255, 18, 18], gnd: [215, 12, 20], sun: [280, 55, 80] },
+    { sky: [338, 48, 60], hor: [20, 58, 78], mt: [275, 18, 36], gnd: [28, 22, 46], sun: [45, 95, 80] },
+    { sky: [42, 28, 72], hor: [32, 45, 58], mt: [28, 30, 36], gnd: [38, 40, 50], sun: [50, 90, 85] },
   ]
   const m = moods[Math.floor(rng() * moods.length)]
-  const g = ctx.createLinearGradient(0, 0, 0, h * 0.7)
-  g.addColorStop(0, hsl(jitter(rng, m.sky[0], 30), jitter(rng, m.sky[1], 15), jitter(rng, m.sky[2], 10)))
-  g.addColorStop(1, hsl(jitter(rng, m.bot[0], 30), jitter(rng, m.bot[1], 15), jitter(rng, m.bot[2], 10)))
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
 
-  // Sun
-  const sx = w * (0.1 + rng() * 0.8), sy = h * (0.08 + rng() * 0.3), sr = Math.min(w, h) * (0.05 + rng() * 0.07)
-  ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fillStyle = m.sun; ctx.fill()
+  // Sky gradient
+  const skyG = ctx.createLinearGradient(0, 0, 0, h)
+  skyG.addColorStop(0, hsl(m.sky[0], m.sky[1], m.sky[2]))
+  skyG.addColorStop(0.6, hsl(m.hor[0], m.hor[1], m.hor[2]))
+  skyG.addColorStop(1, hsl(m.hor[0], m.hor[1] * 0.5, m.hor[2] * 0.75))
+  ctx.fillStyle = skyG; ctx.fillRect(0, 0, w, h)
 
-  // Mountains
-  for (let l = 0; l < 2 + Math.floor(rng() * 3); l++) {
-    const t = l / 3, baseY = h * (0.3 + rng() * 0.15 + t * 0.2)
-    ctx.beginPath(); ctx.moveTo(-10, h)
-    const peaks = 3 + Math.floor(rng() * 5), segW = (w + 20) / peaks
-    for (let i = 0; i <= peaks; i++) {
-      const px = -10 + i * segW, amp = h * (0.05 + rng() * 0.25) * (1 - t * 0.4)
-      if (i === 0) ctx.lineTo(-10, baseY)
-      ctx.quadraticCurveTo(px + segW * (0.3 + rng() * 0.4), baseY - amp, px + segW, baseY + rng() * h * 0.03)
+  // Sun / Moon with atmospheric glow
+  const sx = w * (0.12 + rng() * 0.76), sy = h * (0.06 + rng() * 0.2)
+  const sr = Math.min(w, h) * (0.035 + rng() * 0.04)
+  const sunGlow = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 7)
+  sunGlow.addColorStop(0, `hsla(${m.sun[0]},${m.sun[1]}%,${m.sun[2]}%,0.35)`)
+  sunGlow.addColorStop(0.4, `hsla(${m.sun[0]},${Math.round(m.sun[1] * 0.6)}%,${m.sun[2]}%,0.1)`)
+  sunGlow.addColorStop(1, 'rgba(255,200,100,0)')
+  ctx.fillStyle = sunGlow; ctx.fillRect(0, 0, w, h * 0.5)
+  ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2)
+  ctx.fillStyle = hsl(m.sun[0], m.sun[1], m.sun[2]); ctx.fill()
+
+  // 3 mountain layers (far → near) via fBm terrain profiles
+  const layers = [
+    { baseY: 0.30, amp: 0.18, scale: 1.6, oct: 5, off: rng() * 10 },
+    { baseY: 0.44, amp: 0.21, scale: 1.2, oct: 4, off: rng() * 10 },
+    { baseY: 0.57, amp: 0.17, scale: 0.9, oct: 3, off: rng() * 10 },
+  ]
+  for (let li = 0; li < layers.length; li++) {
+    const { baseY, amp, scale, oct, off } = layers[li]
+    const t = li / (layers.length - 1)
+    ctx.beginPath(); ctx.moveTo(0, h)
+    for (let x = 0; x <= w; x += 2) {
+      const n = fbm(noise, (x / w + off) * scale, 0.3 + li * 0.2, oct)
+      ctx.lineTo(x, h * baseY - n * h * amp)
     }
-    ctx.lineTo(w + 10, h); ctx.closePath()
-    ctx.fillStyle = hsl(jitter(rng, m.mt[0], 40), m.mt[1] + t * 5, m.mt[2] + t * 25); ctx.fill()
+    ctx.lineTo(w, h); ctx.closePath()
+    ctx.fillStyle = hsl(m.mt[0] + t * 20, m.mt[1] + t * 10, m.mt[2] + t * 22)
+    ctx.fill()
   }
 
-  // Ground + clouds
-  ctx.fillStyle = hsl(jitter(rng, m.gnd[0], 30), m.gnd[1], m.gnd[2])
-  ctx.fillRect(0, h * 0.78, w, h * 0.22)
-  drawClouds(ctx, w, h, rng, m.sky[2] < 35)
+  // Ground
+  const gY = h * 0.72
+  const gG = ctx.createLinearGradient(0, gY, 0, h)
+  gG.addColorStop(0, hsl(m.gnd[0], m.gnd[1], m.gnd[2]))
+  gG.addColorStop(1, hsl(m.gnd[0] - 5, m.gnd[1] * 0.8, m.gnd[2] - 8))
+  ctx.fillStyle = gG; ctx.fillRect(0, gY, w, h - gY)
+
+  // Horizon haze
+  const hazeG = ctx.createLinearGradient(0, h * 0.52, 0, h * 0.72)
+  hazeG.addColorStop(0, `hsla(${m.hor[0]},${Math.round(m.hor[1] * 0.4)}%,${m.hor[2]}%,0.28)`)
+  hazeG.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = hazeG; ctx.fillRect(0, h * 0.52, w, h * 0.2)
+
+  drawClouds(ctx, w, h, rng, m.sky[2] < 30)
 }
 
 // ── Genre: City Skyline ──
-
 function genCity(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
   const isNight = rng() > 0.5
-  const skyH = isNight ? [240, 20, 15] : [210 + rng() * 40, 50, 60 + rng() * 20]
-  const g = ctx.createLinearGradient(0, 0, 0, h)
-  g.addColorStop(0, hsl(skyH[0], skyH[1], skyH[2]))
-  g.addColorStop(1, hsl(skyH[0] + 20, skyH[1] - 10, skyH[2] + (isNight ? 5 : 15)))
-  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h)
+  const skyHue = isNight ? 235 + rng() * 15 : 205 + rng() * 40
+  const skyL = isNight ? 10 + rng() * 8 : 55 + rng() * 20
+  const skyS = isNight ? 20 + rng() * 15 : 45 + rng() * 20
 
-  if (isNight) for (let i = 0; i < 50; i++) {
-    ctx.beginPath(); ctx.arc(rng() * w, rng() * h * 0.5, 0.5 + rng(), 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(255,255,240,${0.3 + rng() * 0.7})`; ctx.fill()
-  } else drawClouds(ctx, w, h, rng, false)
+  const skyG = ctx.createLinearGradient(0, 0, 0, h * 0.85)
+  skyG.addColorStop(0, hsl(skyHue, skyS, skyL))
+  skyG.addColorStop(1, hsl(skyHue + 15, skyS * 0.8, skyL + (isNight ? 8 : 18)))
+  ctx.fillStyle = skyG; ctx.fillRect(0, 0, w, h)
 
-  // Buildings
-  const buildingCount = 8 + Math.floor(rng() * 10)
-  for (let i = 0; i < buildingCount; i++) {
-    const bw = w * (0.04 + rng() * 0.08)
-    const bh = h * (0.15 + rng() * 0.45)
-    const bx = rng() * (w - bw)
-    const by = h - bh
-    const light = isNight ? 15 + rng() * 15 : 40 + rng() * 25
-    ctx.fillStyle = hsl(220 + rng() * 30, 10 + rng() * 15, light)
-    ctx.fillRect(bx, by, bw, bh)
+  if (isNight) {
+    for (let i = 0; i < 100; i++) {
+      const sz = 0.2 + rng() * 1.5
+      ctx.beginPath()
+      ctx.arc(rng() * w, rng() * h * 0.6, sz, 0, Math.PI * 2)
+      ctx.fillStyle = `rgba(255,255,${220 + Math.floor(rng() * 35)},${0.3 + rng() * 0.7})`
+      ctx.fill()
+    }
+  } else {
+    drawClouds(ctx, w, h, rng, false)
+  }
 
-    // Windows
-    const winRows = Math.floor(bh / (8 + rng() * 6))
-    const winCols = Math.max(1, Math.floor(bw / (6 + rng() * 4)))
-    const winW = bw * 0.12, winH = bh / winRows * 0.4
-    for (let r = 1; r < winRows; r++) {
-      for (let c = 0; c < winCols; c++) {
-        if (rng() < 0.3) continue
-        const wx = bx + (c + 0.5) * (bw / winCols) - winW / 2
-        const wy = by + r * (bh / winRows) - winH / 2
-        ctx.fillStyle = isNight
-          ? `rgba(255,230,${150 + rng() * 100},${0.5 + rng() * 0.5})`
-          : `rgba(200,220,240,${0.4 + rng() * 0.3})`
-        ctx.fillRect(wx, wy, winW, winH)
+  // 3 depth layers of buildings (far → near)
+  for (let layer = 0; layer < 3; layer++) {
+    const t = layer / 2
+    const baseY = h * (0.5 + t * 0.2)
+    const maxBH = h * (0.18 + t * 0.28)
+    const bLight = isNight ? 12 + t * 14 : 38 + t * 20
+    const bHue = 210 + rng() * 30
+
+    let x = -rng() * 20
+    while (x < w + 20) {
+      const bw = w * (0.025 + rng() * 0.05 + t * 0.02)
+      const bh = maxBH * (0.35 + rng() * 0.65)
+      const by = baseY - bh
+
+      ctx.fillStyle = hsl(bHue + rng() * 20, 8 + t * 8, bLight + rng() * 14)
+      ctx.fillRect(x, by, bw, bh + 2)
+
+      // Windows
+      if (bw > w * 0.025 && bh > h * 0.05) {
+        const cols = Math.max(1, Math.round(bw / (w * 0.011)))
+        const rows = Math.max(1, Math.round(bh / (h * 0.055)))
+        const cw = bw / cols, rh2 = bh / rows
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (rng() < 0.22) continue
+            ctx.fillStyle = isNight
+              ? `rgba(255,${200 + Math.floor(rng() * 55)},${100 + Math.floor(rng() * 120)},${0.4 + rng() * 0.6})`
+              : `rgba(200,220,245,${0.25 + rng() * 0.3})`
+            ctx.fillRect(x + c * cw + cw * 0.2, by + r * rh2 + rh2 * 0.2, cw * 0.6, rh2 * 0.55)
+          }
+        }
       }
+
+      x += bw + rng() * 5 - 1
     }
   }
 
-  // Road
-  ctx.fillStyle = hsl(0, 0, isNight ? 12 : 35)
-  ctx.fillRect(0, h * 0.92, w, h * 0.08)
+  // Ground
+  const roadY = h * 0.88
+  ctx.fillStyle = hsl(0, 0, isNight ? 10 : 28)
+  ctx.fillRect(0, roadY, w, h - roadY)
+
+  // Night: puddle reflection
+  if (isNight) {
+    const refG = ctx.createLinearGradient(0, roadY, 0, h)
+    refG.addColorStop(0, `hsla(${skyHue},25%,${Math.round(skyL * 2.5)}%,0.18)`)
+    refG.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = refG; ctx.fillRect(0, roadY, w, h - roadY)
+  }
 }
 
 // ── Genre: Ocean ──
-
 function genOcean(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
-  const horizon = h * (0.3 + rng() * 0.2)
-  const skyHue = 200 + rng() * 40
-  const sg = ctx.createLinearGradient(0, 0, 0, horizon)
-  sg.addColorStop(0, hsl(skyHue, 50 + rng() * 20, 60 + rng() * 20))
-  sg.addColorStop(1, hsl(skyHue + 15, 40, 80 + rng() * 10))
-  ctx.fillStyle = sg; ctx.fillRect(0, 0, w, horizon)
+  const noise = makeNoise(rng, 8)
+  const horizon = h * (0.28 + rng() * 0.18)
+  const isGolden = rng() > 0.6
+  const skyHue = isGolden ? 25 + rng() * 15 : 198 + rng() * 30
 
-  // Sun near horizon
-  const sx = w * (0.2 + rng() * 0.6), sy = horizon * (0.4 + rng() * 0.4), sr = Math.min(w, h) * (0.06 + rng() * 0.05)
-  const sunG = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 4)
-  sunG.addColorStop(0, 'rgba(255,240,200,0.9)')
-  sunG.addColorStop(0.3, 'rgba(255,200,150,0.2)')
-  sunG.addColorStop(1, 'rgba(255,200,150,0)')
+  // Sky
+  const skyG = ctx.createLinearGradient(0, 0, 0, horizon)
+  skyG.addColorStop(0, hsl(skyHue, isGolden ? 65 : 50, isGolden ? 52 : 58))
+  skyG.addColorStop(1, hsl(skyHue + (isGolden ? 15 : 12), isGolden ? 72 : 38, isGolden ? 72 : 80))
+  ctx.fillStyle = skyG; ctx.fillRect(0, 0, w, horizon)
+
+  // Sun with atmospheric glow
+  const sx = w * (0.2 + rng() * 0.6), sy = horizon * (0.35 + rng() * 0.4)
+  const sr = Math.min(w, h) * (0.05 + rng() * 0.04)
+  const sunHue = isGolden ? 38 : 55
+  const sunG = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 6)
+  sunG.addColorStop(0, `hsla(${sunHue},90%,82%,0.5)`)
+  sunG.addColorStop(0.3, `hsla(${sunHue},70%,72%,0.15)`)
+  sunG.addColorStop(1, 'rgba(255,200,100,0)')
   ctx.fillStyle = sunG; ctx.fillRect(0, 0, w, horizon)
-  ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,250,230,0.95)'; ctx.fill()
+  ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2)
+  ctx.fillStyle = hsl(sunHue, 95, 88); ctx.fill()
 
-  // Water
-  const waterHue = 195 + rng() * 30
-  const wg = ctx.createLinearGradient(0, horizon, 0, h)
-  wg.addColorStop(0, hsl(waterHue, 40 + rng() * 20, 50 + rng() * 15))
-  wg.addColorStop(1, hsl(waterHue + 10, 50, 30 + rng() * 15))
-  ctx.fillStyle = wg; ctx.fillRect(0, horizon, w, h - horizon)
+  // Water base gradient
+  const waterHue = isGolden ? 192 : 196 + rng() * 24
+  const wG = ctx.createLinearGradient(0, horizon, 0, h)
+  wG.addColorStop(0, hsl(waterHue, 44 + rng() * 16, 48 + rng() * 12))
+  wG.addColorStop(0.5, hsl(waterHue + 8, 50 + rng() * 14, 34 + rng() * 10))
+  wG.addColorStop(1, hsl(waterHue + 12, 55, 20 + rng() * 10))
+  ctx.fillStyle = wG; ctx.fillRect(0, horizon, w, h - horizon)
 
-  // Waves
-  for (let i = 0; i < 12 + rng() * 10; i++) {
-    const wy = horizon + (h - horizon) * (0.05 + rng() * 0.9)
-    ctx.beginPath(); ctx.moveTo(0, wy)
-    const segs = 5 + Math.floor(rng() * 6)
-    for (let s = 0; s < segs; s++) {
-      const x1 = (s + 0.5) * w / segs, y1 = wy + (rng() - 0.5) * 6
-      const x2 = (s + 1) * w / segs, y2 = wy + (rng() - 0.5) * 3
-      ctx.quadraticCurveTo(x1, y1, x2, y2)
+  // Sun path reflection
+  const refW = sr * (2 + rng() * 2)
+  const refG = ctx.createLinearGradient(0, horizon, 0, h)
+  refG.addColorStop(0, `hsla(${sunHue},80%,82%,0.22)`)
+  refG.addColorStop(0.6, `hsla(${sunHue},80%,82%,0.08)`)
+  refG.addColorStop(1, `hsla(${sunHue},80%,82%,0.01)`)
+  ctx.fillStyle = refG
+  ctx.fillRect(sx - refW, horizon, refW * 2, h - horizon)
+
+  // fBm wave lines (far → near)
+  const waveOff = rng() * 10
+  const waveLayers = 10 + Math.floor(rng() * 6)
+  for (let wi = 0; wi < waveLayers; wi++) {
+    const t = wi / (waveLayers - 1)
+    const wY = horizon + (h - horizon) * (0.04 + t * 0.9)
+    const amp = (h - horizon) * (0.007 + t * 0.028)
+    const scale = 2.5 - t * 0.8
+
+    ctx.beginPath(); ctx.moveTo(0, wY)
+    for (let x = 0; x <= w; x += 3) {
+      const n = fbm(noise, (x / w + waveOff + wi * 0.4) * scale, wi * 0.12, 3)
+      ctx.lineTo(x, wY + (n - 0.5) * amp * 2)
     }
-    ctx.strokeStyle = `rgba(255,255,255,${0.08 + rng() * 0.12})`
-    ctx.lineWidth = 1 + rng() * 2; ctx.stroke()
+    ctx.strokeStyle = `rgba(255,255,255,${0.05 + t * 0.14})`
+    ctx.lineWidth = 0.5 + t * 1.8; ctx.stroke()
   }
-
-  // Sun reflection
-  ctx.fillStyle = `rgba(255,240,200,${0.05 + rng() * 0.1})`
-  ctx.fillRect(sx - sr * 0.8, horizon, sr * 1.6, h - horizon)
 
   drawClouds(ctx, w, horizon, rng, false)
 }
 
-// ── Genre: Abstract Geometric ──
-
+// ── Genre: Abstract ──
 function genAbstract(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+  const noise = makeNoise(rng, 6)
   const baseHue = rng() * 360
-  ctx.fillStyle = hsl(baseHue, 15 + rng() * 20, 90 + rng() * 8)
+  const palette: [number, number, number][] = [
+    [baseHue, 60 + rng() * 30, 44 + rng() * 22],
+    [(baseHue + 120 + rng() * 40) % 360, 55 + rng() * 30, 50 + rng() * 20],
+    [(baseHue + 240 + rng() * 40) % 360, 50 + rng() * 25, 55 + rng() * 18],
+    [(baseHue + 60 + rng() * 30) % 360, 65 + rng() * 25, 40 + rng() * 25],
+  ]
+
+  // Background
+  ctx.fillStyle = hsl(baseHue, 12 + rng() * 15, 90 + rng() * 7)
   ctx.fillRect(0, 0, w, h)
 
-  const shapes = 6 + Math.floor(rng() * 12)
-  for (let i = 0; i < shapes; i++) {
-    const type = Math.floor(rng() * 3)
-    const hue = (baseHue + rng() * 180) % 360
-    const sat = 40 + rng() * 40
-    const light = 40 + rng() * 40
-    const alpha = 0.3 + rng() * 0.5
-    ctx.fillStyle = `hsla(${hue},${sat}%,${light}%,${alpha})`
+  // Soft gradient blobs (Voronoi-like cells)
+  for (let i = 0; i < 3 + Math.floor(rng() * 4); i++) {
+    const bx = rng() * w, by = rng() * h
+    const br = Math.min(w, h) * (0.22 + rng() * 0.38)
+    const [bh, bs, bl] = palette[i % palette.length]
+    const bG = ctx.createRadialGradient(bx, by, 0, bx, by, br)
+    bG.addColorStop(0, `hsla(${bh},${bs}%,${bl}%,${0.5 + rng() * 0.3})`)
+    bG.addColorStop(0.55, `hsla(${bh},${Math.round(bs * 0.8)}%,${bl}%,${0.15 + rng() * 0.15})`)
+    bG.addColorStop(1, `hsla(${bh},${Math.round(bs * 0.5)}%,${bl}%,0)`)
+    ctx.fillStyle = bG; ctx.fillRect(0, 0, w, h)
+  }
 
+  // Noise-warped geometric shapes
+  for (let i = 0; i < 5 + Math.floor(rng() * 8); i++) {
+    const [sh, ss, sl] = palette[Math.floor(rng() * palette.length)]
+    const alpha = 0.15 + rng() * 0.35
+    ctx.fillStyle = `hsla(${sh},${ss}%,${sl}%,${alpha})`
+
+    const type = Math.floor(rng() * 3)
     if (type === 0) {
-      // Circle
-      const r = Math.min(w, h) * (0.05 + rng() * 0.2)
-      ctx.beginPath(); ctx.arc(rng() * w, rng() * h, r, 0, Math.PI * 2); ctx.fill()
+      const ex = rng() * w, ey = rng() * h
+      const rx = Math.min(w, h) * (0.05 + rng() * 0.18), ry = rx * (0.5 + rng())
+      ctx.save(); ctx.translate(ex, ey); ctx.rotate(rng() * Math.PI * 2)
+      ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2)
+      ctx.fill(); ctx.restore()
     } else if (type === 1) {
-      // Rectangle
-      const rw = w * (0.1 + rng() * 0.35), rh = h * (0.1 + rng() * 0.35)
-      ctx.save(); ctx.translate(rng() * w, rng() * h); ctx.rotate(rng() * Math.PI)
-      ctx.fillRect(-rw / 2, -rh / 2, rw, rh); ctx.restore()
-    } else {
-      // Triangle
+      // Noise-warped polygon
+      const cx = rng() * w, cy = rng() * h
+      const sides = 3 + Math.floor(rng() * 4)
+      const r = Math.min(w, h) * (0.05 + rng() * 0.18)
       ctx.beginPath()
-      const cx = rng() * w, cy = rng() * h, s = Math.min(w, h) * (0.1 + rng() * 0.2)
-      for (let j = 0; j < 3; j++) {
-        const a = (j / 3) * Math.PI * 2 + rng() * 0.5
-        const px = cx + Math.cos(a) * s, py = cy + Math.sin(a) * s
+      for (let j = 0; j < sides; j++) {
+        const a = (j / sides) * Math.PI * 2 + rng() * 0.5
+        const warp = fbm(noise, cx / w + Math.cos(a) * 0.08, cy / h + Math.sin(a) * 0.08, 3)
+        const pr = r * (0.7 + warp * 0.65)
+        const [px, py] = [cx + Math.cos(a) * pr, cy + Math.sin(a) * pr]
         j === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
       }
       ctx.closePath(); ctx.fill()
+    } else {
+      // Bezier curve
+      ctx.strokeStyle = `hsla(${sh},${ss}%,${Math.round(sl * 0.6)}%,${alpha * 0.9})`
+      ctx.lineWidth = 1 + rng() * 3
+      ctx.beginPath()
+      ctx.moveTo(rng() * w, rng() * h)
+      ctx.bezierCurveTo(rng() * w, rng() * h, rng() * w, rng() * h, rng() * w, rng() * h)
+      ctx.stroke()
     }
-  }
-
-  // Accent lines
-  for (let i = 0; i < 3 + Math.floor(rng() * 5); i++) {
-    ctx.beginPath()
-    ctx.moveTo(rng() * w, rng() * h)
-    ctx.lineTo(rng() * w, rng() * h)
-    ctx.strokeStyle = `hsla(${(baseHue + 90) % 360},50%,30%,${0.2 + rng() * 0.3})`
-    ctx.lineWidth = 1 + rng() * 3; ctx.stroke()
   }
 }
 
 // ── Genre: Space ──
-
 function genSpace(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
   // Deep space background
-  const bgG = ctx.createLinearGradient(0, 0, w * rng(), h)
-  bgG.addColorStop(0, hsl(240 + rng() * 40, 30 + rng() * 30, 5 + rng() * 8))
-  bgG.addColorStop(1, hsl(260 + rng() * 60, 20 + rng() * 20, 8 + rng() * 10))
+  const bgHue = 230 + rng() * 50
+  const bgG = ctx.createLinearGradient(0, 0, w * 0.5, h)
+  bgG.addColorStop(0, hsl(bgHue, 30 + rng() * 25, 5 + rng() * 8))
+  bgG.addColorStop(1, hsl(bgHue + 30, 20 + rng() * 20, 8 + rng() * 10))
   ctx.fillStyle = bgG; ctx.fillRect(0, 0, w, h)
 
-  // Nebula blobs
+  // Nebula blobs (layered radial gradients)
   for (let i = 0; i < 2 + Math.floor(rng() * 3); i++) {
-    const nx = rng() * w, ny = rng() * h, nr = Math.min(w, h) * (0.2 + rng() * 0.3)
+    const nx = rng() * w, ny = rng() * h
+    const nr = Math.min(w, h) * (0.2 + rng() * 0.32)
     const nHue = rng() * 360
-    const ng = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr)
-    ng.addColorStop(0, `hsla(${nHue},60%,50%,${0.1 + rng() * 0.15})`)
-    ng.addColorStop(0.5, `hsla(${nHue + 30},40%,40%,${0.05 + rng() * 0.08})`)
-    ng.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = ng; ctx.fillRect(0, 0, w, h)
+    for (let j = 0; j < 2; j++) {
+      const ox = nx + (rng() - 0.5) * nr * 0.5, oy = ny + (rng() - 0.5) * nr * 0.5
+      const or = nr * (0.6 + j * 0.45)
+      const nG = ctx.createRadialGradient(ox, oy, 0, ox, oy, or)
+      nG.addColorStop(0, `hsla(${nHue + j * 30},65%,55%,${0.08 + rng() * 0.12})`)
+      nG.addColorStop(0.45, `hsla(${nHue + j * 20},45%,40%,${0.03 + rng() * 0.07})`)
+      nG.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.fillStyle = nG; ctx.fillRect(0, 0, w, h)
+    }
   }
 
-  // Stars
-  for (let i = 0; i < 80 + rng() * 120; i++) {
-    const sr = 0.3 + rng() * 2
-    ctx.beginPath(); ctx.arc(rng() * w, rng() * h, sr, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(255,255,${220 + rng() * 35},${0.3 + rng() * 0.7})`; ctx.fill()
+  // Stars (varied brightness and color temperature)
+  for (let i = 0; i < 120 + Math.floor(rng() * 100); i++) {
+    const sx = rng() * w, sy = rng() * h, sr = 0.2 + rng() * 1.8
+    ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2)
+    ctx.fillStyle = sr > 1.2
+      ? hsl(rng() > 0.6 ? 220 + rng() * 40 : 38 + rng() * 20, sr > 1.5 ? 30 : 10, 85 + rng() * 12)
+      : `rgba(255,255,255,${0.3 + rng() * 0.7})`
+    ctx.fill()
+    // Diffraction spikes on bright stars
+    if (sr > 1.5) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)'
+      ctx.lineWidth = 0.5
+      ctx.beginPath()
+      ctx.moveTo(sx - sr * 3, sy); ctx.lineTo(sx + sr * 3, sy)
+      ctx.moveTo(sx, sy - sr * 3); ctx.lineTo(sx, sy + sr * 3)
+      ctx.stroke()
+    }
   }
 
   // Planet
   const px = w * (0.2 + rng() * 0.6), py = h * (0.2 + rng() * 0.6)
-  const pr = Math.min(w, h) * (0.08 + rng() * 0.15)
-  const planetHue = rng() * 360
-  const pg = ctx.createRadialGradient(px - pr * 0.3, py - pr * 0.3, pr * 0.1, px, py, pr)
-  pg.addColorStop(0, hsl(planetHue, 40 + rng() * 30, 55 + rng() * 20))
-  pg.addColorStop(1, hsl(planetHue + 20, 30, 25 + rng() * 15))
-  ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fillStyle = pg; ctx.fill()
+  const pr = Math.min(w, h) * (0.1 + rng() * 0.13)
+  const pHue = rng() * 360
+  const pG = ctx.createRadialGradient(px - pr * 0.35, py - pr * 0.35, pr * 0.05, px, py, pr)
+  pG.addColorStop(0, hsl(pHue, 40 + rng() * 25, 60 + rng() * 20))
+  pG.addColorStop(0.7, hsl(pHue + 15, 35, 34 + rng() * 14))
+  pG.addColorStop(1, hsl(pHue + 25, 25, 18 + rng() * 10))
+  ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fillStyle = pG; ctx.fill()
+
+  // Surface bands
+  ctx.save()
+  ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.clip()
+  const bandCount = 2 + Math.floor(rng() * 3)
+  for (let i = 0; i < bandCount; i++) {
+    const bY = py - pr + (i + 0.5) * pr * 2 / bandCount + (rng() - 0.5) * pr * 0.3
+    const bH = pr * (0.1 + rng() * 0.2)
+    ctx.fillStyle = `hsla(${pHue + (rng() - 0.5) * 30},${35 + rng() * 20}%,${40 + rng() * 20}%,${0.2 + rng() * 0.3})`
+    ctx.fillRect(px - pr, bY - bH / 2, pr * 2, bH)
+  }
+  ctx.restore()
+
+  // Atmosphere rim
+  const rimG = ctx.createRadialGradient(px, py, pr * 0.82, px, py, pr * 1.22)
+  rimG.addColorStop(0, 'rgba(0,0,0,0)')
+  rimG.addColorStop(0.5, `hsla(${pHue + 40},55%,68%,0.18)`)
+  rimG.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = rimG; ctx.fillRect(px - pr * 1.3, py - pr * 1.3, pr * 2.6, pr * 2.6)
 
   // Ring (50% chance)
   if (rng() > 0.5) {
-    ctx.save(); ctx.translate(px, py); ctx.scale(1, 0.3); ctx.rotate(rng() * 0.5 - 0.25)
-    ctx.beginPath(); ctx.arc(0, 0, pr * 1.6, 0, Math.PI * 2)
-    ctx.strokeStyle = `hsla(${planetHue + 40},30%,60%,0.5)`; ctx.lineWidth = pr * 0.08; ctx.stroke()
+    ctx.save(); ctx.translate(px, py); ctx.scale(1, 0.28); ctx.rotate(rng() * 0.6 - 0.3)
+    for (let ri = 0; ri < 3; ri++) {
+      const rr = pr * (1.45 + ri * 0.22)
+      const rw = pr * (0.1 + rng() * 0.08)
+      ctx.beginPath(); ctx.arc(0, 0, rr, 0, Math.PI * 2)
+      ctx.strokeStyle = `hsla(${pHue + 30},25%,58%,${0.5 - ri * 0.12})`
+      ctx.lineWidth = rw * (1 - ri * 0.25); ctx.stroke()
+    }
     ctx.restore()
   }
 }
 
 // ── Shared: Clouds ──
-
 function drawClouds(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, isNight: boolean) {
   const count = isNight ? Math.floor(rng() * 2) : 1 + Math.floor(rng() * 4)
   for (let i = 0; i < count; i++) {
-    const cx = w * rng(), cy = h * (0.05 + rng() * 0.25)
-    const cw = w * (0.06 + rng() * 0.15), ch = cw * (0.3 + rng() * 0.3)
-    const alpha = isNight ? 0.15 : 0.4 + rng() * 0.4
+    const cx = w * rng(), cy = h * (0.06 + rng() * 0.28)
+    const cw = w * (0.08 + rng() * 0.16), ch = cw * (0.28 + rng() * 0.28)
+    const alpha = isNight ? 0.12 : 0.35 + rng() * 0.45
     ctx.fillStyle = `rgba(255,255,255,${alpha})`
-    for (let j = 0; j < 3; j++) {
+    const puffs = 3 + Math.floor(rng() * 3)
+    for (let j = 0; j < puffs; j++) {
+      const t = j / Math.max(1, puffs - 1) - 0.5
       ctx.beginPath()
-      ctx.ellipse(cx + (j - 1) * cw * 0.4, cy + rng() * ch * 0.3, cw * (0.4 + rng() * 0.3), ch * (0.5 + rng() * 0.3), 0, 0, Math.PI * 2)
+      ctx.ellipse(
+        cx + t * cw * 0.85,
+        cy + rng() * ch * 0.25,
+        cw * (0.35 + rng() * 0.25),
+        ch * (0.5 + rng() * 0.35),
+        0, 0, Math.PI * 2,
+      )
       ctx.fill()
     }
   }
