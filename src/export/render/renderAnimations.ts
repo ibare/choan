@@ -4,7 +4,6 @@ import { hexToCSS } from '../core/colorUtils'
 
 function formatValue(property: string, value: number): string {
   if (property === 'color') return hexToCSS(value)
-  if (property === 'opacity') return value.toFixed(2)
   if (property === 'radius') return (value * 100).toFixed(0) + '%'
   return String(Math.round(value))
 }

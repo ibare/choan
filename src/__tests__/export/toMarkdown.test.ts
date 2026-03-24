@@ -8,7 +8,6 @@ function makeEl(id: string, overrides: Partial<ChoanElement> = {}): ChoanElement
     id, type: 'rectangle', label: id,
     x: 0, y: 0, z: 0,
     width: 100, height: 100,
-    opacity: 1,
     ...overrides,
   }
 }
@@ -80,7 +79,7 @@ describe('toMarkdown — 애니메이션 번들', () => {
     id: 'b1', name: 'Fade In',
     clips: [{
       id: 'c1', elementId: 'el', duration: 300, easing: 'ease',
-      tracks: [{ property: 'opacity', keyframes: [{ time: 0, value: 0 }, { time: 300, value: 1 }] }],
+      tracks: [{ property: 'y', keyframes: [{ time: 0, value: 100 }, { time: 300, value: 0 }] }],
     }],
   }
 

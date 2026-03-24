@@ -322,7 +322,7 @@ export function usePointerHandlers({
       id, type: tool as ChoanElement['type'],
       label: pendingFrame ? (pendingFrame === 'browser' ? 'Browser' : 'Mobile') : (tool === 'rectangle' ? 'Box' : tool === 'circle' ? 'Circle' : 'Line'),
       role: tool === 'rectangle' ? 'container' : undefined,
-      color: drawColor, x: pixel.x, y: pixel.y, z: 0, width: 1, height: 1, opacity: 1,
+      color: drawColor, x: pixel.x, y: pixel.y, z: 0, width: 1, height: 1,
       ...(pendingSkin ? { skin: pendingSkin, skinOnly: true } : {}),
       ...frameExtra,
     }

@@ -14,18 +14,6 @@ describe('interpolateValue — numeric properties', () => {
   })
 })
 
-describe('interpolateValue — opacity (0~1 clamped)', () => {
-  it('t=0.5 → 0.5', () => {
-    expect(interpolateValue('opacity', 0, 1, 0.5)).toBe(0.5)
-  })
-  it('범위를 초과하면 1로 clamp', () => {
-    expect(interpolateValue('opacity', 0, 2, 1)).toBe(1)
-  })
-  it('음수는 0으로 clamp', () => {
-    expect(interpolateValue('opacity', -1, 0, 0)).toBe(0)
-  })
-})
-
 describe('interpolateValue — radius (0~1 clamped)', () => {
   it('정상 범위 보간', () => {
     expect(interpolateValue('radius', 0, 1, 0.5)).toBe(0.5)

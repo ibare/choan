@@ -7,9 +7,9 @@ export const skeletonLoading: ChoanElement[] = [
   ctr('sk-root', 'Loading State', { width: 375, height: 400, layoutDirection: 'column', layoutGap: 16, layoutPadding: 16, color: 0xf5f5f5 }),
   // Skeleton card
   { ...ctr('sk-card', 'Skeleton Card', { width: 343, height: 120, layoutDirection: 'column', layoutGap: 8, layoutPadding: 12, radius: 0.06, color: 0xffffff }), parentId: 'sk-root', z: 1 },
-  child('sk-header-line', 'Header Line', 'sk-card', { z: 2, width: 200, height: 16, radius: 0.5, opacity: 0.15, color: 0x000000 }),
-  child('sk-body-line1', 'Body Line 1', 'sk-card', { z: 2, width: 319, height: 12, radius: 0.5, opacity: 0.1, color: 0x000000 }),
-  child('sk-body-line2', 'Body Line 2', 'sk-card', { z: 2, width: 280, height: 12, radius: 0.5, opacity: 0.1, color: 0x000000 }),
+  child('sk-header-line', 'Header Line', 'sk-card', { z: 2, width: 200, height: 16, radius: 0.5, color: 0xd1d5db }),
+  child('sk-body-line1', 'Body Line 1', 'sk-card', { z: 2, width: 319, height: 12, radius: 0.5, color: 0xe5e7eb }),
+  child('sk-body-line2', 'Body Line 2', 'sk-card', { z: 2, width: 280, height: 12, radius: 0.5, color: 0xe5e7eb }),
   // Table skeleton
   child('sk-table', 'Data Table Skeleton', 'sk-root', { z: 1, width: 343, height: 200, skin: 'table-skeleton', componentState: { columns: 5 } }),
 ]

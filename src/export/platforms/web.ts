@@ -60,10 +60,6 @@ export const webRenderer: PlatformRenderer = {
       parts.push(`background: ${hexToCSS(el.color)}`)
     }
 
-    if (el.opacity < 1) {
-      parts.push(`opacity: ${el.opacity.toFixed(2)}`)
-    }
-
     if (el.z !== 0) {
       parts.push(`z-index: ${el.z}`)
     }

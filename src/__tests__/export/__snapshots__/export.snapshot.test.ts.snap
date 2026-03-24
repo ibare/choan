@@ -39,28 +39,28 @@ exports[`Animation snapshots > fade in (opacity 0 → 1) 1`] = `
 
 ---
 
-## Fade In Screen  _(Container)_
+## Slide Up Screen  _(Container)_
 **Layout:** Column \`flex-direction: column\`
 **Size:** 375 × 812px
 
 ### Modal Overlay  _(Rectangle)_
 **Size:** 375 × 812px (균등 분할)
-**Style:** background: #000000 | opacity: 0.00 | z-index: 1
+**Style:** background: #000000 | z-index: 1
 
 ### Modal Card  _(Rectangle)_
 **Size:** 311 × 240px (균등 분할)
-**Style:** border-radius: 12px | background: #FFFFFF | opacity: 0.00 | z-index: 2
+**Style:** border-radius: 12px | background: #FFFFFF | z-index: 2
 
 ---
 
 ## Animations
 
-### Fade In
+### Slide Up
 
 | Element | Property | From | To | Duration | Easing |
 |---------|----------|------|----|----------|--------|
-| Modal Overlay | opacity | 0.00 | 0.50 | (300ms) | ease-in-out |
-| Modal Card | opacity | 0.00 | 1.00 | (300ms) | ease-in-out |
+| Modal Overlay | y | 812 | 0 | (300ms) | ease-in-out |
+| Modal Card | y | 400 | 200 | (300ms) | ease-in-out |
 "
 `;
 
@@ -73,7 +73,7 @@ exports[`Animation snapshots > multi-track (opacity + y + color) 1`] = `
 
 ## Hero Banner  _(Rectangle)_
 **Size:** 375 × 200px
-**Style:** background: #6366F1 | opacity: 0.00
+**Style:** background: #6366F1
 
 ---
 
@@ -83,7 +83,7 @@ exports[`Animation snapshots > multi-track (opacity + y + color) 1`] = `
 
 | Element | Property | From | To | Duration | Easing |
 |---------|----------|------|----|----------|--------|
-| Hero Banner | opacity | 0.00 | 1.00 | (400ms) | ease-in-out |
+| Hero Banner | radius | 0% | 50% | (400ms) | ease-in-out |
 | Hero Banner | y | 160 | 100 | (400ms) | ease-in-out |
 | Hero Banner | color | #818CF8 | #6366F1 | (400ms) | ease-in-out |
 "
@@ -108,7 +108,7 @@ exports[`Animation snapshots > slide in (x translate + overlay) 1`] = `
 ### Overlay  _(Rectangle)_
 **Size:** 375 × 812px
 **Position:** position: absolute | left: 0px, top: 0px
-**Style:** background: #000000 | opacity: 0.00 | z-index: 1
+**Style:** background: #000000 | z-index: 1
 
 ---
 
@@ -119,7 +119,6 @@ exports[`Animation snapshots > slide in (x translate + overlay) 1`] = `
 | Element | Property | From | To | Duration | Easing |
 |---------|----------|------|----|----------|--------|
 | Side Panel | x | -320 | 0 | (350ms) | ease-in-out |
-| Overlay | opacity | 0.00 | 0.40 | (350ms) | ease-in-out |
 "
 `;
 
@@ -138,7 +137,7 @@ exports[`Animation snapshots > staggered list entrance 1`] = `
 
 ### [패턴 ×4] List Item 1  _(Rectangle)_
 **Size:** 343 × 56px (균등 분할)
-**Style:** border-radius: 3px | background: #FFFFFF | opacity: 0.00 | z-index: 1
+**Style:** border-radius: 3px | background: #FFFFFF | z-index: 1
 
 ---
 
@@ -148,13 +147,9 @@ exports[`Animation snapshots > staggered list entrance 1`] = `
 
 | Element | Property | From | To | Duration | Easing |
 |---------|----------|------|----|----------|--------|
-| List Item 1 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
 | List Item 1 | y | 20 | 0 | (200ms) | ease-in-out |
-| List Item 2 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
 | List Item 2 | y | 20 | 0 | (200ms) | ease-in-out |
-| List Item 3 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
 | List Item 3 | y | 20 | 0 | (200ms) | ease-in-out |
-| List Item 4 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
 | List Item 4 | y | 20 | 0 | (200ms) | ease-in-out |
 "
 `;
@@ -495,7 +490,7 @@ exports[`Layout snapshots > deep hierarchy (3-level nesting) 1`] = `
 
 ##### Card Body  _(Rectangle)_
 **Size:** 319 × 64px (균등 분할)
-**Style:** opacity: 0.70 | z-index: 3
+**Style:** background: #F3F4F6 | z-index: 3
 
 ---
 "
@@ -1376,15 +1371,15 @@ exports[`State variation snapshots > skeleton loading 1`] = `
 
 #### Header Line  _(Rectangle)_
 **Size:** 200 × 16px (균등 분할)
-**Style:** border-radius: 4px | background: #000000 | opacity: 0.15 | z-index: 2
+**Style:** border-radius: 4px | background: #D1D5DB | z-index: 2
 
 #### Body Line 1  _(Rectangle)_
 **Size:** 319 × 12px (균등 분할)
-**Style:** border-radius: 3px | background: #000000 | opacity: 0.10 | z-index: 2
+**Style:** border-radius: 3px | background: #E5E7EB | z-index: 2
 
 #### Body Line 2  _(Rectangle)_
 **Size:** 280 × 12px (균등 분할)
-**Style:** border-radius: 3px | background: #000000 | opacity: 0.10 | z-index: 2
+**Style:** border-radius: 3px | background: #E5E7EB | z-index: 2
 
 ### Data Table Skeleton \`table-skeleton\`  _(Rectangle / Skin)_
 **Size:** 343 × 200px (균등 분할)

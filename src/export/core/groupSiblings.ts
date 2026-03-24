@@ -77,10 +77,6 @@ function diffNodes(pattern: ElementNode, exc: ElementNode): string[] {
     diffs.push(`border-radius: ${fromPx}px → ${toPx}px`)
   }
 
-  if (p.opacity.toFixed(2) !== e.opacity.toFixed(2)) {
-    diffs.push(`opacity: ${p.opacity.toFixed(2)} → ${e.opacity.toFixed(2)}`)
-  }
-
   if (p.skin !== e.skin) {
     diffs.push(`skin: ${p.skin ?? '(없음)'} → ${e.skin ?? '(없음)'}`)
   }

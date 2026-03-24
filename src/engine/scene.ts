@@ -119,7 +119,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       data[ci + 0] = r
       data[ci + 1] = g
       data[ci + 2] = b
-      data[ci + 3] = el.opacity
+      data[ci + 3] = el.opacity ?? 1
 
       // Color-change effect: detect change, compute intensity
       const prevColor = prevColors.get(el.id)

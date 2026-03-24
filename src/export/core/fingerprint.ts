@@ -20,7 +20,6 @@ export function fingerprint(node: ElementNode): string {
     String(Math.round(el.height)),
     String(el.color ?? ''),
     String((el.radius ?? 0).toFixed(2)),
-    el.opacity.toFixed(2),
     el.skin ?? '',
     String(el.skinOnly ?? false),
     String(el.frameless ?? false),

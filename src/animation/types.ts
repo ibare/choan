@@ -1,6 +1,6 @@
 // Animation system type definitions
 
-export type AnimatableProperty = 'x' | 'y' | 'width' | 'height' | 'opacity' | 'color' | 'radius'
+export type AnimatableProperty = 'x' | 'y' | 'width' | 'height' | 'color' | 'radius'
 
 // Per-keyframe granular easing (Keyframe.easing) and clip-level fallback (AnimationClip.easing).
 // 'ease' maps to CSS cubic-bezier(0.25, 0.1, 0.25, 1.0) — resolveEasing() handles all values.

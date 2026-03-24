@@ -38,7 +38,7 @@ export function interpolateValue(
   const v = lerp(from, to, t)
 
   // Clamp by property constraints
-  if (property === 'opacity' || property === 'radius') return Math.max(0, Math.min(1, v))
+  if (property === 'radius') return Math.max(0, Math.min(1, v))
   if (property === 'width' || property === 'height') return Math.max(1, v)
   return v
 }

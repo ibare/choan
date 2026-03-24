@@ -77,5 +77,5 @@ export const deepHierarchy: ChoanElement[] = [
   { ...ctr('deep-card', 'Card', { width: 343, height: 160, layoutDirection: 'column', layoutGap: 8, layoutPadding: 12, radius: 0.08, color: 0xffffff }), parentId: 'deep-content', z: 2 },
   // Level 3 — card children
   child('deep-card-title', 'Card Title', 'deep-card', { z: 3, width: 319, height: 24 }),
-  child('deep-card-body', 'Card Body', 'deep-card', { z: 3, width: 319, height: 64, opacity: 0.7 }),
+  child('deep-card-body', 'Card Body', 'deep-card', { z: 3, width: 319, height: 64, color: 0xf3f4f6 }),
 ]

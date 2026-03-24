@@ -16,7 +16,7 @@ export interface PlatformRenderer {
   /** Size description in platform terms, considering parent layout context. */
   renderSize(el: ChoanElement, parent: ChoanElement | null): string
 
-  /** Visual style properties (background, border-radius, opacity, etc.). */
+  /** Visual style properties (background, border-radius, etc.). */
   renderVisual(el: ChoanElement): string[]
 
   /** Component/skin reference description, or null if no skin. */

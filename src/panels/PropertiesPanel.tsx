@@ -199,15 +199,6 @@ export default function PropertiesPanel() {
           </div>
         </PropRow>
 
-        <PropRow label="Opacity">
-          <Slider
-            value={el.opacity}
-            min={0} max={1} step={0.05}
-            formatValue={(v) => `${Math.round(v * 100)}%`}
-            onChange={(v) => updateAnimatable('opacity', v)}
-          />
-        </PropRow>
-
         <PropRow label={`Position${isManaged ? ' (auto)' : ''}`}>
           <div className="ui-row-gap-2">
             <Input

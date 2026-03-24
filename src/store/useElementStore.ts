@@ -27,7 +27,7 @@ export interface ChoanElement {
   z: number
   width: number
   height: number
-  opacity: number
+  opacity?: number  // internal rendering hint only (multiSelectTint, ghostPreview)
   lineStyle?: LineStyle
   lineDirection?: LineDirection
   hasArrow?: boolean

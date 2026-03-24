@@ -82,7 +82,7 @@ export function addGhostElements(
         ghostElements.push({
           ...el, ...patch,
           id: `__ghost_${el.id}_${Math.round(t)}`,
-          opacity: isKeyframeTime ? (el.opacity ?? 1) : GHOST_OPACITY_INBETWEEN * (el.opacity ?? 1),
+          opacity: isKeyframeTime ? 1 : GHOST_OPACITY_INBETWEEN,
         })
       }
     }

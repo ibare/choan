@@ -8,7 +8,6 @@ function makeEl(id: string): ChoanElement {
     id, type: 'rectangle', label: `Box ${id}`,
     x: 10, y: 20, z: 0,
     width: 100, height: 50,
-    opacity: 1,
   }
 }
 
@@ -84,7 +83,6 @@ describe('serialize → deserialize 라운드트립', () => {
     expect(restored.y).toBe(el.y)
     expect(restored.width).toBe(el.width)
     expect(restored.height).toBe(el.height)
-    expect(restored.opacity).toBe(el.opacity)
   })
 
   it('animationBundles 복원', () => {
