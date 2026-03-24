@@ -1,0 +1,1456 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Animation snapshots > color change (dark mode) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 812px
+
+---
+
+## Theming Screen  _(Container)_
+**Layout:** Column \`flex-direction: column\`
+**Size:** 375 × 812px
+
+### Background  _(Rectangle)_
+**Size:** 375 × 812px (균등 분할)
+**Style:** background: #FFFFFF | z-index: 1
+
+### Theme Toggle \`button\`  _(Rectangle / Skin)_
+**Size:** 80 × 36px (균등 분할)
+**Style:** border-radius: 9px | background: #6366F1 | z-index: 1
+**Component:** \`button\` — label: "Toggle"
+
+---
+
+## Animations
+
+### Dark Mode
+
+| Element | Property | From | To | Duration | Easing |
+|---------|----------|------|----|----------|--------|
+| Background | color | #FFFFFF | #111827 | (500ms) | ease-in-out |
+"
+`;
+
+exports[`Animation snapshots > fade in (opacity 0 → 1) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 812px
+
+---
+
+## Fade In Screen  _(Container)_
+**Layout:** Column \`flex-direction: column\`
+**Size:** 375 × 812px
+
+### Modal Overlay  _(Rectangle)_
+**Size:** 375 × 812px (균등 분할)
+**Style:** background: #000000 | opacity: 0.00 | z-index: 1
+
+### Modal Card  _(Rectangle)_
+**Size:** 311 × 240px (균등 분할)
+**Style:** border-radius: 12px | background: #FFFFFF | opacity: 0.00 | z-index: 2
+
+---
+
+## Animations
+
+### Fade In
+
+| Element | Property | From | To | Duration | Easing |
+|---------|----------|------|----|----------|--------|
+| Modal Overlay | opacity | 0.00 | 0.50 | (300ms) | ease-in-out |
+| Modal Card | opacity | 0.00 | 1.00 | (300ms) | ease-in-out |
+"
+`;
+
+exports[`Animation snapshots > multi-track (opacity + y + color) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 200px
+
+---
+
+## Hero Banner  _(Rectangle)_
+**Size:** 375 × 200px
+**Style:** background: #6366F1 | opacity: 0.00
+
+---
+
+## Animations
+
+### Hero Entrance
+
+| Element | Property | From | To | Duration | Easing |
+|---------|----------|------|----|----------|--------|
+| Hero Banner | opacity | 0.00 | 1.00 | (400ms) | ease-in-out |
+| Hero Banner | y | 160 | 100 | (400ms) | ease-in-out |
+| Hero Banner | color | #818CF8 | #6366F1 | (400ms) | ease-in-out |
+"
+`;
+
+exports[`Animation snapshots > slide in (x translate + overlay) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 812px
+
+---
+
+## Slide In Screen  _(Container)_
+**Layout:** Free — 자식 요소는 절대 위치로 배치
+**Size:** 375 × 812px
+
+### Side Panel  _(Rectangle)_
+**Size:** 320 × 812px
+**Position:** position: absolute | left: -320px, top: 0px
+**Style:** background: #1F2937 | z-index: 1
+
+### Overlay  _(Rectangle)_
+**Size:** 375 × 812px
+**Position:** position: absolute | left: 0px, top: 0px
+**Style:** background: #000000 | opacity: 0.00 | z-index: 1
+
+---
+
+## Animations
+
+### Slide In Menu
+
+| Element | Property | From | To | Duration | Easing |
+|---------|----------|------|----|----------|--------|
+| Side Panel | x | -320 | 0 | (350ms) | ease-in-out |
+| Overlay | opacity | 0.00 | 0.40 | (350ms) | ease-in-out |
+"
+`;
+
+exports[`Animation snapshots > staggered list entrance 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 500px
+
+---
+
+## Staggered List  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 16px
+**Size:** 375 × 500px
+
+> **4개 항목** — 4개 모두 동일 패턴
+
+### [패턴 ×4] List Item 1  _(Rectangle)_
+**Size:** 343 × 56px (균등 분할)
+**Style:** border-radius: 3px | background: #FFFFFF | opacity: 0.00 | z-index: 1
+
+---
+
+## Animations
+
+### Stagger Entrance
+
+| Element | Property | From | To | Duration | Easing |
+|---------|----------|------|----|----------|--------|
+| List Item 1 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
+| List Item 1 | y | 20 | 0 | (200ms) | ease-in-out |
+| List Item 2 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
+| List Item 2 | y | 20 | 0 | (200ms) | ease-in-out |
+| List Item 3 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
+| List Item 3 | y | 20 | 0 | (200ms) | ease-in-out |
+| List Item 4 | opacity | 0.00 | 1.00 | (200ms) | ease-in-out |
+| List Item 4 | y | 20 | 0 | (200ms) | ease-in-out |
+"
+`;
+
+exports[`Component snapshots > avatar variants (online / offline / large) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 100px
+
+---
+
+## Avatar Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 16px | padding: 16px
+**Size:** 375 × 100px
+
+### Online User \`avatar\`  _(Circle / Skin)_
+**Size:** 48 × 48px (균등 분할)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`avatar\` — "JD" (online)
+
+### Offline User \`avatar\`  _(Circle / Skin)_
+**Size:** 48 × 48px (균등 분할)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`avatar\` — "AK"
+
+### Profile Avatar \`avatar\`  _(Circle / Skin)_
+**Size:** 80 × 80px (균등 분할)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`avatar\` — "MR" (online)
+
+---
+"
+`;
+
+exports[`Component snapshots > button variants (primary / secondary / pressed / danger) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 300px
+
+---
+
+## Button Showcase  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 12px | padding: 16px
+**Size:** 375 × 300px
+
+### Primary Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 6px | background: #6366F1 | z-index: 1
+**Component:** \`button\` — label: "Get Started"
+
+### Secondary Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 6px | background: #E5E7EB | z-index: 1
+**Component:** \`button\` — label: "Learn More"
+
+### Pressed Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 6px | background: #4F46E5 | z-index: 1
+**Component:** \`button\` — label: "Confirm" (pressed)
+
+### Danger Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 6px | background: #EF4444 | z-index: 1
+**Component:** \`button\` — label: "Delete Account"
+
+---
+"
+`;
+
+exports[`Component snapshots > dropdown (closed / open) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 200px
+
+---
+
+## Dropdown Section  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 12px | padding: 16px
+**Size:** 375 × 200px
+
+### Country Dropdown \`dropdown\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`dropdown\` — "Select Country"
+
+### Language Dropdown \`dropdown\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`dropdown\` — "English" (open)
+
+---
+"
+`;
+
+exports[`Component snapshots > media & data display (image / icon / badge / table-skeleton) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 400px
+
+---
+
+## Media Panel  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 16px | padding: 16px
+**Size:** 375 × 400px
+
+### Hero Image \`image\`  _(Rectangle / Skin)_
+**Size:** 343 × 180px (균등 분할)
+**Style:** border-radius: 5px | z-index: 1
+**Component:** \`image\` — seed: 42
+
+### Feature Icon \`icon\`  _(Rectangle / Skin)_
+**Size:** 48 × 48px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: star
+
+### Notification Badge \`badge\`  _(Circle / Skin)_
+**Size:** 24 × 24px (균등 분할)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`badge\` — count: 12
+
+### Data Table \`table-skeleton\`  _(Rectangle / Skin)_
+**Size:** 343 × 120px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`table-skeleton\` — 4 columns
+
+---
+"
+`;
+
+exports[`Component snapshots > slider controls 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 200px
+
+---
+
+## Slider Panel  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 20px | padding: 24px
+**Size:** 375 × 200px
+
+### Volume \`slider\`  _(Rectangle / Skin)_
+**Size:** 327 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`slider\` — value: 70%
+
+### Brightness \`slider\`  _(Rectangle / Skin)_
+**Size:** 327 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`slider\` — value: 40%
+
+### Speed \`slider\`  _(Rectangle / Skin)_
+**Size:** 327 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`slider\` — value: 100%
+
+---
+"
+`;
+
+exports[`Component snapshots > star rating (5 / 3 / 1 stars) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 200px
+
+---
+
+## Rating Section  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 16px | padding: 16px
+**Size:** 375 × 200px
+
+### Five Stars \`star-rating\`  _(Rectangle / Skin)_
+**Size:** 120 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`star-rating\` — rating: 5 / 5
+
+### Three Stars \`star-rating\`  _(Rectangle / Skin)_
+**Size:** 120 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`star-rating\` — rating: 3 / 5
+
+### One Star \`star-rating\`  _(Rectangle / Skin)_
+**Size:** 120 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`star-rating\` — rating: 1 / 5
+
+---
+"
+`;
+
+exports[`Component snapshots > text inputs (normal / focused / search) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 240px
+
+---
+
+## Login Form Fields  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 12px | padding: 16px
+**Size:** 375 × 240px
+
+### Email Input \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`text-input\` — placeholder: "Email address"
+
+### Password Input \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`text-input\` — placeholder: "Password" (focused)
+
+### Search \`search\`  _(Rectangle / Skin)_
+**Size:** 343 × 40px (균등 분할)
+**Style:** border-radius: 20px | z-index: 1
+**Component:** \`search\`
+
+---
+"
+`;
+
+exports[`Component snapshots > toggle controls (switch / checkbox / radio) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 300px
+
+---
+
+## Toggle Controls  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 1px
+**Size:** 375 × 300px
+
+### Notifications Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Notifications \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 24px
+**Style:** z-index: 2
+**Component:** \`text\` — "Notifications"
+
+#### Notifications Toggle \`switch\`  _(Rectangle / Skin)_
+**Size:** 51 × 31px (고정)
+**Style:** z-index: 2
+**Component:** \`switch\` — on
+
+### Remember Me Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Remember Me \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 24px
+**Style:** z-index: 2
+**Component:** \`text\` — "Remember Me"
+
+#### Remember Me Checkbox \`checkbox\`  _(Rectangle / Skin)_
+**Size:** 20 × 20px (고정)
+**Style:** z-index: 2
+**Component:** \`checkbox\` — checked
+
+### Option A Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Option A \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 24px
+**Style:** z-index: 2
+**Component:** \`text\` — "Option A"
+
+#### Option A Radio \`radio\`  _(Circle / Skin)_
+**Size:** 20 × 20px (고정)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`radio\` — selected
+
+---
+"
+`;
+
+exports[`Layout snapshots > column layout 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 240 × 600px
+
+---
+
+## Sidebar  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 4px | padding: 16px
+**Size:** 240 × 600px
+
+> **4개 항목** — 4개 모두 동일 패턴
+
+### [패턴 ×4] Home  _(Rectangle)_
+**Size:** 208 × 44px (균등 분할)
+**Style:** z-index: 1
+
+---
+"
+`;
+
+exports[`Layout snapshots > deep hierarchy (3-level nesting) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 812px
+
+---
+
+## Page  _(Container)_
+**Layout:** Column \`flex-direction: column\`
+**Size:** 375 × 812px
+
+### Header  _(Container)_
+**Layout:** Row \`flex-direction: row\`
+**Size:** 375 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Logo  _(Rectangle)_
+**Size:** 80 × 32px (고정)
+**Style:** z-index: 2
+
+#### Nav Title  _(Rectangle)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 32px
+**Style:** z-index: 2
+
+### Content  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 16px
+**Size:** 375 × 756px (균등 분할)
+**Style:** z-index: 1
+
+#### Card  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 12px
+**Size:** 343 × 160px (균등 분할)
+**Style:** border-radius: 6px | background: #FFFFFF | z-index: 2
+
+##### Card Title  _(Rectangle)_
+**Size:** 319 × 24px (균등 분할)
+**Style:** z-index: 3
+
+##### Card Body  _(Rectangle)_
+**Size:** 319 × 64px (균등 분할)
+**Style:** opacity: 0.70 | z-index: 3
+
+---
+"
+`;
+
+exports[`Layout snapshots > free layout 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 812px
+
+---
+
+## Screen  _(Container)_
+**Layout:** Free — 자식 요소는 절대 위치로 배치
+**Size:** 375 × 812px
+
+### Background  _(Rectangle)_
+**Size:** 375 × 812px
+**Position:** position: absolute | left: 0px, top: 0px
+**Style:** background: #F5F5F5 | z-index: 1
+
+### Card  _(Rectangle)_
+**Size:** 343 × 200px
+**Position:** position: absolute | left: 16px, top: 80px
+**Style:** border-radius: 8px | background: #FFFFFF | z-index: 2
+
+### CTA Button  _(Rectangle)_
+**Size:** 343 × 48px
+**Position:** position: absolute | left: 16px, top: 700px
+**Style:** border-radius: 12px | background: #6366F1 | z-index: 2
+
+---
+"
+`;
+
+exports[`Layout snapshots > grid layout 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 300px
+
+---
+
+## Icon Grid  _(Container)_
+**Layout:** Grid \`grid-template-columns: repeat(3, 1fr)\` | gap: 16px | padding: 16px
+**Size:** 375 × 300px
+
+> **6개 항목** — 6개 모두 동일 패턴
+
+### [패턴 ×6] Camera  _(Rectangle)_
+**Size:** 100 × 100px (균등 분할)
+**Style:** z-index: 1
+
+---
+"
+`;
+
+exports[`Layout snapshots > mixed sizing (fill / fixed-px in a row) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 64px
+
+---
+
+## List Item  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 12px | padding: 16px
+**Size:** 375 × 64px
+
+### Avatar  _(Circle)_
+**Size:** 40 × 40px (고정)
+**Style:** border-radius: 50% | z-index: 1
+
+### Title  _(Rectangle)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 40px
+**Style:** z-index: 1
+
+### Badge \`badge\`  _(Rectangle / Skin)_
+**Size:** 60 × 24px (고정)
+**Style:** z-index: 1
+**Component:** \`badge\` — count: 3
+
+---
+"
+`;
+
+exports[`Layout snapshots > nested layout (row inside column) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 500px
+
+---
+
+## Form  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 12px | padding: 16px
+**Size:** 375 × 500px
+
+> **3개 항목** — 2개 공통 패턴, 1개 예외
+
+### [패턴 ×2] Name Field  _(Rectangle)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** z-index: 1
+
+### [예외 #3] Button Row  _(Container)_
+**변경된 속성:**
+- (구조적 차이 있음)
+
+---
+"
+`;
+
+exports[`Layout snapshots > row layout 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 56px
+
+---
+
+## Toolbar  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px | padding: 12px
+**Size:** 375 × 56px
+
+> **3개 항목** — 2개 공통 패턴, 1개 예외
+
+### [패턴 ×2] Back  _(Rectangle)_
+**Size:** 40 × 40px (고정)
+**Style:** z-index: 1
+
+### [예외 #2] Title  _(Rectangle)_
+**변경된 속성:**
+- size: 40×40px → 200×40px
+
+---
+"
+`;
+
+exports[`Platform rendering snapshots > dashboard grid — web (default) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 500px
+
+---
+
+## Dashboard  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 16px
+**Size:** 375 × 500px
+**Style:** background: #F5F5F5
+
+### Dashboard Title \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 32px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Overview" (24px, bold)
+
+### Metric Cards  _(Container)_
+**Layout:** Grid \`grid-template-columns: repeat(2, 1fr)\` | gap: 8px
+**Size:** 343 × 200px (균등 분할)
+**Style:** z-index: 1
+
+> **4개 항목** — 4개 모두 동일 패턴
+
+#### [패턴 ×4] Revenue Card  _(Rectangle)_
+**Size:** 165 × 96px (균등 분할)
+**Style:** border-radius: 4px | background: #FFFFFF | z-index: 2
+
+### Recent Orders Table \`table-skeleton\`  _(Rectangle / Skin)_
+**Size:** 343 × 160px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`table-skeleton\` — 4 columns
+
+---
+"
+`;
+
+exports[`Platform rendering snapshots > login form — Android 1`] = `
+"# UI Spec
+**Platform:** Android (Jetpack Compose)
+**Viewport:** 375 × 812px
+
+---
+
+## Login Screen  _(Container)_
+**Layout:** Free — 자식 요소는 절대 위치로 배치
+**Size:** 375 × 812
+
+### App Logo \`icon\`  _(Circle / Skin)_
+**Size:** 120 × 120
+
+### Welcome Title \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 48
+
+### Subtitle \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 24
+
+### Email Field \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48
+
+### Password Field \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48
+
+### Login Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 52
+
+### Forgot Password \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 24
+
+---
+"
+`;
+
+exports[`Platform rendering snapshots > login form — iOS 1`] = `
+"# UI Spec
+**Platform:** iOS (SwiftUI)
+**Viewport:** 375 × 812px
+
+---
+
+## Login Screen  _(Container)_
+**Layout:** Free — 자식 요소는 절대 위치로 배치
+**Size:** 375 × 812
+
+### App Logo \`icon\`  _(Circle / Skin)_
+**Size:** 120 × 120
+
+### Welcome Title \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 48
+
+### Subtitle \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 24
+
+### Email Field \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48
+
+### Password Field \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48
+
+### Login Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 52
+
+### Forgot Password \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 24
+
+---
+"
+`;
+
+exports[`Screen snapshots > chat bubbles (incoming + outgoing) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 500px
+
+---
+
+## Chat Screen  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 16px
+**Size:** 375 × 500px
+**Style:** background: #F0F0F0
+
+### Incoming Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px
+**Size:** 343 × 60px (균등 분할)
+**Style:** z-index: 1
+
+#### Sender Avatar \`avatar\`  _(Circle / Skin)_
+**Size:** 32 × 32px (고정)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`avatar\` — "AK"
+
+#### Incoming Message \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 44px
+**Style:** border-radius: 6px | background: #FFFFFF | z-index: 2
+**Component:** \`text\` — "Hey, how are you?"
+
+### Outgoing Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px
+**Size:** 343 × 60px (균등 분할)
+**Style:** z-index: 1
+
+#### Outgoing Message \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 44px
+**Style:** border-radius: 6px | background: #6366F1 | z-index: 2
+**Component:** \`text\` — "I'm doing great!"
+
+### Second Incoming Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px
+**Size:** 343 × 80px (균등 분할)
+**Style:** z-index: 1
+
+#### Sender Avatar 2 \`avatar\`  _(Circle / Skin)_
+**Size:** 32 × 32px (고정)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`avatar\` — "AK"
+
+#### Long Incoming Message \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 64px
+**Style:** border-radius: 6px | background: #FFFFFF | z-index: 2
+**Component:** \`text\` — "Let's catch up soon? Maybe this weekend?"
+
+---
+"
+`;
+
+exports[`Screen snapshots > dashboard grid 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 500px
+
+---
+
+## Dashboard  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 16px
+**Size:** 375 × 500px
+**Style:** background: #F5F5F5
+
+### Dashboard Title \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 32px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Overview" (24px, bold)
+
+### Metric Cards  _(Container)_
+**Layout:** Grid \`grid-template-columns: repeat(2, 1fr)\` | gap: 8px
+**Size:** 343 × 200px (균등 분할)
+**Style:** z-index: 1
+
+> **4개 항목** — 4개 모두 동일 패턴
+
+#### [패턴 ×4] Revenue Card  _(Rectangle)_
+**Size:** 165 × 96px (균등 분할)
+**Style:** border-radius: 4px | background: #FFFFFF | z-index: 2
+
+### Recent Orders Table \`table-skeleton\`  _(Rectangle / Skin)_
+**Size:** 343 × 160px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`table-skeleton\` — 4 columns
+
+---
+"
+`;
+
+exports[`Screen snapshots > empty state 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 500px
+
+---
+
+## Empty State  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 16px | padding: 24px
+**Size:** 375 × 500px
+**Style:** background: #FFFFFF
+
+### Empty Icon \`icon\`  _(Rectangle / Skin)_
+**Size:** 80 × 80px (고정)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: inbox
+
+### Empty Title \`text\`  _(Rectangle / Skin)_
+**Size:** 327 × 28px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Nothing here yet" (20px, bold)
+
+### Empty Body \`text\`  _(Rectangle / Skin)_
+**Size:** 327 × 44px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Start by creating your first project."
+
+### CTA Button \`button\`  _(Rectangle / Skin)_
+**Size:** 200 × 48px (고정)
+**Style:** border-radius: 12px | background: #6366F1 | z-index: 1
+**Component:** \`button\` — label: "Create Project"
+
+---
+"
+`;
+
+exports[`Screen snapshots > feed card 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 320px
+
+---
+
+## Feed Card  _(Container)_
+**Layout:** Column \`flex-direction: column\`
+**Size:** 375 × 320px
+**Style:** border-radius: 8px | background: #FFFFFF
+
+### Cover Image \`image\`  _(Rectangle / Skin)_
+**Size:** 375 × 200px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`image\` — seed: 7
+
+### Meta Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Author Avatar \`avatar\`  _(Circle / Skin)_
+**Size:** 32 × 32px (고정)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`avatar\` — "JD"
+
+#### Author Name \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 32px
+**Style:** z-index: 2
+**Component:** \`text\` — "Jane Doe" (bold)
+
+#### Category Badge \`badge\`  _(Rectangle / Skin)_
+**Size:** 60 × 24px (고정)
+**Style:** border-radius: 12px | z-index: 2
+**Component:** \`badge\`
+
+### Post Title \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 44px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "How to build better UIs" (18px, bold)
+
+---
+"
+`;
+
+exports[`Screen snapshots > login form 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 812px
+
+---
+
+## Login Screen  _(Container)_
+**Layout:** Column \`flex-direction: column\`
+**Size:** 375 × 812px
+**Style:** background: #FFFFFF
+
+### App Logo \`icon\`  _(Circle / Skin)_
+**Size:** 120 × 120px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`icon\` — icon: app
+
+### Welcome Title \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Welcome Back" (32px, bold)
+
+### Subtitle \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Sign in to continue"
+
+### Email Field \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`text-input\` — placeholder: "Email address"
+
+### Password Field \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`text-input\` — placeholder: "Password"
+
+### Login Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 52px (균등 분할)
+**Style:** border-radius: 7px | background: #6366F1 | z-index: 1
+**Component:** \`button\` — label: "Sign In"
+
+### Forgot Password \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 24px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Forgot Password?"
+
+---
+"
+`;
+
+exports[`Screen snapshots > navigation bar 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 56px
+
+---
+
+## Top Nav Bar  _(Container)_
+**Layout:** Row \`flex-direction: row\`
+**Size:** 375 × 56px
+**Style:** background: #1F2937
+
+### Brand Logo \`text\`  _(Rectangle / Skin)_
+**Size:** 100 × 40px (고정)
+**Style:** z-index: 1
+**Component:** \`text\` — "Choan" (bold)
+
+### Nav Spacer  _(Rectangle)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 40px
+**Style:** z-index: 1
+
+### Nav Links  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px
+**Size:** 160 × 40px (균등 분할)
+**Style:** z-index: 1
+
+#### Home Link  _(Rectangle)_
+**Size:** 40 × 40px (균등 분할)
+**Style:** z-index: 2
+
+#### Explore Link  _(Rectangle)_
+**Size:** 40 × 40px (균등 분할)
+**Style:** z-index: 2
+
+#### Notifications Link \`badge\`  _(Rectangle / Skin)_
+**Size:** 40 × 40px (균등 분할)
+**Style:** z-index: 2
+**Component:** \`badge\` — count: 5
+
+#### Profile Link \`avatar\`  _(Circle / Skin)_
+**Size:** 40 × 40px (균등 분할)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`avatar\` — "JD"
+
+---
+"
+`;
+
+exports[`Screen snapshots > product card 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 180 × 280px
+
+---
+
+## Product Card  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 12px
+**Size:** 180 × 280px
+**Style:** border-radius: 6px | background: #FFFFFF
+
+### Product Image \`image\`  _(Rectangle / Skin)_
+**Size:** 156 × 140px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`image\` — seed: 99
+
+### Product Name \`text\`  _(Rectangle / Skin)_
+**Size:** 156 × 20px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Wireless Headphones" (14px, bold)
+
+### Price \`text\`  _(Rectangle / Skin)_
+**Size:** 156 × 20px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "$89.99" (16px, bold)
+
+### Rating \`star-rating\`  _(Rectangle / Skin)_
+**Size:** 100 × 16px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`star-rating\` — rating: 4 / 5
+
+### Add to Cart \`button\`  _(Rectangle / Skin)_
+**Size:** 156 × 36px (균등 분할)
+**Style:** border-radius: 9px | background: #6366F1 | z-index: 1
+**Component:** \`button\` — label: "Add to Cart"
+
+---
+"
+`;
+
+exports[`Screen snapshots > profile header 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 280px
+
+---
+
+## Profile Header  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 12px | padding: 16px
+**Size:** 375 × 280px
+**Style:** background: #FFFFFF
+
+### Cover Photo \`image\`  _(Rectangle / Skin)_
+**Size:** 375 × 120px (고정)
+**Style:** z-index: 1
+**Component:** \`image\` — seed: 15
+
+### Profile Photo \`avatar\`  _(Circle / Skin)_
+**Size:** 80 × 80px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`avatar\` — "AK" (online)
+
+### Display Name \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 28px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "Alex Kim" (22px, bold)
+
+### Stats Row  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 8px
+**Size:** 343 × 48px (균등 분할)
+**Style:** z-index: 1
+
+#### Posts Count \`text\`  _(Rectangle / Skin)_
+**Size:** 100 × 48px (균등 분할)
+**Style:** z-index: 2
+**Component:** \`text\` — "142 posts"
+
+#### Followers Count \`text\`  _(Rectangle / Skin)_
+**Size:** 100 × 48px (균등 분할)
+**Style:** z-index: 2
+**Component:** \`text\` — "4.2K followers"
+
+### Follow Button \`button\`  _(Rectangle / Skin)_
+**Size:** 343 × 40px (균등 분할)
+**Style:** border-radius: 10px | background: #6366F1 | z-index: 1
+**Component:** \`button\` — label: "Follow"
+
+---
+"
+`;
+
+exports[`Screen snapshots > settings screen (toggle list) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 600px
+
+---
+
+## Settings  _(Container)_
+**Layout:** Column \`flex-direction: column\`
+**Size:** 375 × 600px
+**Style:** background: #F2F2F7
+
+### Notifications \`text\`  _(Rectangle / Skin)_
+**Size:** 375 × 36px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`text\` — "NOTIFICATIONS" (13px)
+
+### Push Notifications  _(Container)_
+**Layout:** Row \`flex-direction: row\` | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** background: #FFFFFF | z-index: 1
+
+#### Push Notifications Label \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 24px
+**Style:** z-index: 2
+**Component:** \`text\` — "Push Notifications"
+
+#### Push Notifications Toggle \`switch\`  _(Rectangle / Skin)_
+**Size:** 51 × 31px (고정)
+**Style:** z-index: 2
+**Component:** \`switch\` — on
+
+### Email Alerts  _(Container)_
+**Layout:** Row \`flex-direction: row\` | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** background: #FFFFFF | z-index: 1
+
+#### Email Alerts Label \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 24px
+**Style:** z-index: 2
+**Component:** \`text\` — "Email Alerts"
+
+#### Email Alerts Toggle \`switch\`  _(Rectangle / Skin)_
+**Size:** 51 × 31px (고정)
+**Style:** z-index: 2
+**Component:** \`switch\` — off
+
+### Sound  _(Container)_
+**Layout:** Row \`flex-direction: row\` | padding: 16px
+**Size:** 375 × 56px (균등 분할)
+**Style:** background: #FFFFFF | z-index: 1
+
+#### Sound Label \`text\`  _(Rectangle / Skin)_
+**Size:** flex: 1 (가로 남은 공간 채움) × 24px
+**Style:** z-index: 2
+**Component:** \`text\` — "Sound"
+
+#### Sound Toggle \`switch\`  _(Rectangle / Skin)_
+**Size:** 51 × 31px (고정)
+**Style:** z-index: 2
+**Component:** \`switch\` — on
+
+---
+"
+`;
+
+exports[`Screen snapshots > tab bar 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 83px
+
+---
+
+## Bottom Tab Bar  _(Container)_
+**Layout:** Row \`flex-direction: row\`
+**Size:** 375 × 83px
+**Style:** background: #FFFFFF
+
+### Home Tab \`icon\`  _(Rectangle / Skin)_
+**Size:** 75 × 83px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: home
+
+### Search Tab \`icon\`  _(Rectangle / Skin)_
+**Size:** 75 × 83px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: search
+
+### Create Tab \`icon\`  _(Rectangle / Skin)_
+**Size:** 75 × 83px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: plus
+
+### Notifications Tab \`icon\`  _(Rectangle / Skin)_
+**Size:** 75 × 83px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: bell
+
+### Profile Tab \`icon\`  _(Rectangle / Skin)_
+**Size:** 75 × 83px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`icon\` — icon: user
+
+---
+"
+`;
+
+exports[`State variation snapshots > badge counts (0 / 1 / 5 / 99 / 100) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 100px
+
+---
+
+## Badge Counts  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 24px | padding: 16px
+**Size:** 375 × 100px
+
+### Badge Zero \`badge\`  _(Circle / Skin)_
+**Size:** 24 × 24px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`badge\`
+
+### Badge One \`badge\`  _(Circle / Skin)_
+**Size:** 24 × 24px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`badge\` — count: 1
+
+### Badge Five \`badge\`  _(Circle / Skin)_
+**Size:** 24 × 24px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`badge\` — count: 5
+
+### Badge 99 \`badge\`  _(Circle / Skin)_
+**Size:** 24 × 24px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`badge\` — count: 99
+
+### Badge Overflow \`badge\`  _(Circle / Skin)_
+**Size:** 32 × 24px (고정)
+**Style:** border-radius: 50% | z-index: 1
+**Component:** \`badge\` — count: 100
+
+---
+"
+`;
+
+exports[`State variation snapshots > form validation states (normal / focused / error) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 320px
+
+---
+
+## Form States  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 12px | padding: 16px
+**Size:** 375 × 320px
+
+### Normal Field Group  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 4px
+**Size:** 343 × 72px (균등 분할)
+**Style:** z-index: 1
+
+#### Normal Label \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 20px (균등 분할)
+**Style:** z-index: 2
+**Component:** \`text\` — "Email" (14px)
+
+#### Normal Input \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 2
+**Component:** \`text-input\` — placeholder: "you@example.com"
+
+### Focused Field Group  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 4px
+**Size:** 343 × 72px (균등 분할)
+**Style:** z-index: 1
+
+#### Focused Label \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 20px (균등 분할)
+**Style:** z-index: 2
+**Component:** \`text\` — "Password" (14px)
+
+#### Focused Input \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | z-index: 2
+**Component:** \`text-input\` — placeholder: "Min. 8 characters" (focused)
+
+### Error Field Group  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 4px
+**Size:** 343 × 88px (균등 분할)
+**Style:** z-index: 1
+
+#### Error Label \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 20px (균등 분할)
+**Style:** z-index: 2
+**Component:** \`text\` — "Username" (14px)
+
+#### Error Input \`text-input\`  _(Rectangle / Skin)_
+**Size:** 343 × 48px (균등 분할)
+**Style:** border-radius: 4px | background: #FEE2E2 | z-index: 2
+**Component:** \`text-input\` — placeholder: "Enter username"
+
+#### Error Message \`text\`  _(Rectangle / Skin)_
+**Size:** 343 × 16px (균등 분할)
+**Style:** background: #EF4444 | z-index: 2
+**Component:** \`text\` — "Username already taken" (12px)
+
+---
+"
+`;
+
+exports[`State variation snapshots > progress bar variants (0% → 100%) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 280px
+
+---
+
+## Progress Variants  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 20px | padding: 24px
+**Size:** 375 × 280px
+
+### Progress 0% \`progress\`  _(Rectangle / Skin)_
+**Size:** 327 × 8px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`progress\` — 0%
+
+### Progress 25% \`progress\`  _(Rectangle / Skin)_
+**Size:** 327 × 8px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`progress\` — 25%
+
+### Progress 50% \`progress\`  _(Rectangle / Skin)_
+**Size:** 327 × 8px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`progress\` — 50%
+
+### Progress 75% \`progress\`  _(Rectangle / Skin)_
+**Size:** 327 × 8px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`progress\` — 75%
+
+### Progress 100% \`progress\`  _(Rectangle / Skin)_
+**Size:** 327 × 8px (균등 분할)
+**Style:** border-radius: 4px | z-index: 1
+**Component:** \`progress\` — 100%
+
+---
+"
+`;
+
+exports[`State variation snapshots > skeleton loading 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 400px
+
+---
+
+## Loading State  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 16px | padding: 16px
+**Size:** 375 × 400px
+**Style:** background: #F5F5F5
+
+### Skeleton Card  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 8px | padding: 12px
+**Size:** 343 × 120px (균등 분할)
+**Style:** border-radius: 4px | background: #FFFFFF | z-index: 1
+
+#### Header Line  _(Rectangle)_
+**Size:** 200 × 16px (균등 분할)
+**Style:** border-radius: 4px | background: #000000 | opacity: 0.15 | z-index: 2
+
+#### Body Line 1  _(Rectangle)_
+**Size:** 319 × 12px (균등 분할)
+**Style:** border-radius: 3px | background: #000000 | opacity: 0.10 | z-index: 2
+
+#### Body Line 2  _(Rectangle)_
+**Size:** 280 × 12px (균등 분할)
+**Style:** border-radius: 3px | background: #000000 | opacity: 0.10 | z-index: 2
+
+### Data Table Skeleton \`table-skeleton\`  _(Rectangle / Skin)_
+**Size:** 343 × 200px (균등 분할)
+**Style:** z-index: 1
+**Component:** \`table-skeleton\` — 5 columns
+
+---
+"
+`;
+
+exports[`State variation snapshots > toggle states (on/off × switch/checkbox/radio) 1`] = `
+"# UI Spec
+**Platform:** Web (HTML / CSS Flexbox)
+**Viewport:** 375 × 280px
+
+---
+
+## Toggle States  _(Container)_
+**Layout:** Column \`flex-direction: column\` | gap: 16px | padding: 16px
+**Size:** 375 × 280px
+
+### Switch States  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 24px
+**Size:** 343 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Switch ON \`switch\`  _(Rectangle / Skin)_
+**Size:** 51 × 31px (고정)
+**Style:** z-index: 2
+**Component:** \`switch\` — on
+
+#### Switch OFF \`switch\`  _(Rectangle / Skin)_
+**Size:** 51 × 31px (고정)
+**Style:** z-index: 2
+**Component:** \`switch\` — off
+
+### Checkbox States  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 24px
+**Size:** 343 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Checkbox Checked \`checkbox\`  _(Rectangle / Skin)_
+**Size:** 20 × 20px (고정)
+**Style:** z-index: 2
+**Component:** \`checkbox\` — checked
+
+#### Checkbox Unchecked \`checkbox\`  _(Rectangle / Skin)_
+**Size:** 20 × 20px (고정)
+**Style:** z-index: 2
+**Component:** \`checkbox\` — unchecked
+
+### Radio States  _(Container)_
+**Layout:** Row \`flex-direction: row\` | gap: 24px
+**Size:** 343 × 56px (균등 분할)
+**Style:** z-index: 1
+
+#### Radio Selected \`radio\`  _(Circle / Skin)_
+**Size:** 20 × 20px (고정)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`radio\` — selected
+
+#### Radio Unselected \`radio\`  _(Circle / Skin)_
+**Size:** 20 × 20px (고정)
+**Style:** border-radius: 50% | z-index: 2
+**Component:** \`radio\` — unselected
+
+---
+"
+`;
