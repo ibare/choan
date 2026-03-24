@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import SiteNav from './SiteNav'
+import { track } from '../utils/analytics'
 
 export default function LandingPage() {
   return (
@@ -19,7 +20,7 @@ export default function LandingPage() {
           or ambiguous screenshots.
         </p>
         <div className="hero__actions">
-          <Link to="/app" className="btn-primary">Get started for free</Link>
+          <Link to="/app" className="btn-primary" onClick={() => track('landing-cta-click')}>Get started for free</Link>
           <Link to="/features" className="btn-ghost">Learn More</Link>
         </div>
       </section>

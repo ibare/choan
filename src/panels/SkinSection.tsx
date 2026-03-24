@@ -5,6 +5,7 @@ import { PropRow } from '../components/ui/PropRow'
 import { Switch } from '../components/ui/Switch'
 import { SkinEditor } from '../components/panels/SkinEditor'
 import TilePopover, { type TileItem } from './TilePopover'
+import { track } from '../utils/analytics'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
 import { ALL_SKIN_IDS } from '../config/skins'
 
@@ -54,6 +55,7 @@ export default function SkinSection({ el, isContainer, onUpdate }: Props) {
           const skin = v || undefined
           const patch: Record<string, unknown> = { skin, skinOnly: !!skin }
           if (skin === 'image') patch.componentState = { seed: Math.floor(Math.random() * 9999) }
+          if (skin) track('apply-skin', { skin })
           onUpdate(patch)
         }}
       />

@@ -18,6 +18,7 @@ import { getCameraRayParams } from '../engine/camera'
 import { screenToRay } from '../engine/sdf'
 import { handleColorPickerClick, computeColorPickerHover } from './colorPickerHandlers'
 import { SKIN_BY_ID } from '../config/skins'
+import { track } from '../utils/analytics'
 import { handleDragMove, finalizeDrag } from './dragHandlers'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
 import { handleDrawMove, finalizeDrawn } from './drawHandlers'
@@ -333,6 +334,7 @@ export function usePointerHandlers({
       ...frameExtra,
     }
     addElement(newEl)
+    track('create-element', { type: newEl.type, skin: newEl.skin ?? 'none', frame: newEl.frame ?? 'none' })
     selectElement(id)
     isDrawingRef.current = true
     drawElIdRef.current = id

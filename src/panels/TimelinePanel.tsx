@@ -11,6 +11,7 @@ import { nanoid } from '../canvas/nanoid'
 import { Play, Pause, Stop, Plus, X, FilmStrip } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Tooltip } from '../components/ui/Tooltip'
+import { track } from '../utils/analytics'
 import { Input } from '../components/ui/Input'
 import { buildLayerTree } from '../animation/buildLayerTree'
 import { kfAnimator } from '../rendering/kfAnimator'
@@ -93,6 +94,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     }))
     const bundle: AnimationBundle = { id: nanoid(), name: `Animation ${animationBundles.length + 1}`, clips }
     addAnimationBundle(bundle)
+    track('create-animation')
     setSelectedBundleId(bundle.id)
     setEditingBundle(bundle.id)
   }

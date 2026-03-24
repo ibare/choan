@@ -42,6 +42,7 @@ function loadFile(data: {
 }) {
   useElementStore.getState().loadElements(data.elements)
   useAnimationStore.getState().loadAnimation(data.animationClips, data.animationBundles)
+  import('../utils/analytics').then(({ track }) => track('load-file', { elementCount: data.elements.length }))
 }
 
 function reset() {

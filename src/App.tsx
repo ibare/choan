@@ -9,6 +9,7 @@ import { toMarkdown } from './export/toMarkdown'
 import { Tooltip, TooltipProvider } from './components/ui/Tooltip'
 import { Button } from './components/ui/Button'
 import { Moon, Sun } from '@phosphor-icons/react'
+import { track } from './utils/analytics'
 
 export default function App() {
   const {
@@ -43,6 +44,7 @@ export default function App() {
 
   const handleExport = async () => {
     const md = toMarkdown(elements, animationBundles)
+    track('export-markdown', { elementCount: elements.length })
     try {
       await navigator.clipboard.writeText(md)
       setExportMsg('Copied to clipboard!')
