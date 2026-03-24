@@ -66,8 +66,8 @@ function diffNodes(pattern: ElementNode, exc: ElementNode): string[] {
   const diffs: string[] = []
 
   if (p.color !== e.color) {
-    const from = p.color !== undefined ? hexToCSS(p.color) : '(없음)'
-    const to   = e.color !== undefined ? hexToCSS(e.color) : '(없음)'
+    const from = p.color !== undefined ? hexToCSS(p.color) : '(none)'
+    const to   = e.color !== undefined ? hexToCSS(e.color) : '(none)'
     diffs.push(`background: ${from} → ${to}`)
   }
 
@@ -78,7 +78,7 @@ function diffNodes(pattern: ElementNode, exc: ElementNode): string[] {
   }
 
   if (p.skin !== e.skin) {
-    diffs.push(`skin: ${p.skin ?? '(없음)'} → ${e.skin ?? '(없음)'}`)
+    diffs.push(`skin: ${p.skin ?? '(none)'} → ${e.skin ?? '(none)'}`)
   }
 
   if (Math.round(p.width) !== Math.round(e.width) || Math.round(p.height) !== Math.round(e.height)) {
@@ -91,6 +91,6 @@ function diffNodes(pattern: ElementNode, exc: ElementNode): string[] {
     diffs.push(`content: ${fromDesc} → ${toDesc}`)
   }
 
-  if (diffs.length === 0) diffs.push('(구조적 차이 있음)')
+  if (diffs.length === 0) diffs.push('(structural differences)')
   return diffs
 }

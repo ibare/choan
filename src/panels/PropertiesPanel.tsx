@@ -15,7 +15,7 @@ export default function PropertiesPanel() {
   const el = useSelectedElement()
 
   if (!el) {
-    return <div className="props-empty">선택된 요소 없음</div>
+    return <div className="props-empty">No element selected</div>
   }
 
   const isChild     = !!el.parentId

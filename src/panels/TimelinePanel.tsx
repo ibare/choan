@@ -10,6 +10,7 @@ import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../canvas/nanoid'
 import { Play, Pause, Stop, Plus, X, FilmStrip } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
+import { Tooltip } from '../components/ui/Tooltip'
 import { Input } from '../components/ui/Input'
 import { buildLayerTree } from '../animation/buildLayerTree'
 import { kfAnimator } from '../rendering/kfAnimator'
@@ -137,12 +138,14 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       {/* Header: playback controls + bundle tabs */}
       <div className="timeline-header-bar">
         <div className="playback-controls">
-          <Button className="btn-small" onClick={handlePlayPause} title={previewState === 'playing' ? 'Pause' : 'Play'}>
-            {previewState === 'playing' ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
-          </Button>
-          <Button className="btn-small" onClick={handleStop} title="Stop"><Stop size={14} weight="fill" /></Button>
-          <Button className="btn-small" onClick={handleCreateBundle} title="New Animation"><Plus size={14} /></Button>
-          <Button className="btn-small" active={ghostPreview} onClick={toggleGhostPreview} title="Ghost Preview"><FilmStrip size={14} /></Button>
+          <Tooltip content={previewState === 'playing' ? 'Pause' : 'Play'}>
+            <Button className="btn-small" onClick={handlePlayPause}>
+              {previewState === 'playing' ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
+            </Button>
+          </Tooltip>
+          <Tooltip content="Stop"><Button className="btn-small" onClick={handleStop}><Stop size={14} weight="fill" /></Button></Tooltip>
+          <Tooltip content="New Animation"><Button className="btn-small" onClick={handleCreateBundle}><Plus size={14} /></Button></Tooltip>
+          <Tooltip content="Ghost Preview"><Button className="btn-small" active={ghostPreview} onClick={toggleGhostPreview}><FilmStrip size={14} /></Button></Tooltip>
           {previewState !== 'stopped' && (
             <span className="preview-state-label">{previewState === 'playing' ? 'Playing' : 'Paused'}</span>
           )}
@@ -176,7 +179,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       <div className="timeline-body-row">
         {displayClips.length === 0 && animationBundles.length === 0 && (
           <div className="panel-empty" style={{ padding: '8px', fontSize: 11, alignSelf: 'flex-start' }}>
-            + 버튼으로 애니메이션을 만들어 보세요.
+            Create an animation with the + button.
           </div>
         )}
         <TimelineSidebar

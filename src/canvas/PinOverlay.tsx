@@ -7,6 +7,7 @@ import { useRenderSettings } from '../store/useRenderSettings'
 import { pixelToWorld } from '../coords/coordinateSystem'
 import { PushPin, ArrowsOutSimple } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
+import { Tooltip } from '../components/ui/Tooltip'
 
 interface PinOverlayProps {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -70,23 +71,24 @@ export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayPro
       {pins.map((p) => {
         const isActive = p.sizing !== 'equal'
         return (
-          <Button
-            key={p.id}
-            className="pin-button"
-            active={isActive}
-            style={{ left: p.x, top: p.y }}
-            title={p.sizing}
-            onClick={() => {
-              const store = useChoanStore.getState()
-              const next = nextMode(p.sizing)
-              store.updateElement(p.id, { layoutSizing: next, layoutRatio: undefined })
-              const el = store.elements.find((e) => e.id === p.id)
-              if (el?.parentId) store.runLayout(el.parentId)
-            }}
-          >
-            {p.sizing === 'fill' && <ArrowsOutSimple size={12} weight="bold" />}
-            {(p.sizing === 'fixed-px' || p.sizing === 'fixed-ratio') && <PushPin size={12} weight="fill" />}
-          </Button>
+          <Tooltip content={p.sizing}>
+            <Button
+              key={p.id}
+              className="pin-button"
+              active={isActive}
+              style={{ left: p.x, top: p.y }}
+              onClick={() => {
+                const store = useChoanStore.getState()
+                const next = nextMode(p.sizing)
+                store.updateElement(p.id, { layoutSizing: next, layoutRatio: undefined })
+                const el = store.elements.find((e) => e.id === p.id)
+                if (el?.parentId) store.runLayout(el.parentId)
+              }}
+            >
+              {p.sizing === 'fill' && <ArrowsOutSimple size={12} weight="bold" />}
+              {(p.sizing === 'fixed-px' || p.sizing === 'fixed-ratio') && <PushPin size={12} weight="fill" />}
+            </Button>
+          </Tooltip>
         )
       })}
     </>

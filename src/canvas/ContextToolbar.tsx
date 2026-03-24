@@ -21,6 +21,7 @@ import ColorPicker from './ColorPicker'
 import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
+import { Tooltip } from '../components/ui/Tooltip'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -132,9 +133,11 @@ function IconSvg({ name, size = 16 }: { name: string; size?: number }) {
 
 function SkinToggle({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
-    <Button className="ctx-btn" active={active} title={label} onClick={onClick}>
-      <ToggleRight size={15} />
-    </Button>
+    <Tooltip content={label}>
+      <Button className="ctx-btn" active={active} onClick={onClick}>
+        <ToggleRight size={15} />
+      </Button>
+    </Tooltip>
   )
 }
 
@@ -180,23 +183,29 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
     case 'image':
       return (
         <>
-          <Button className="ctx-btn" title="Shuffle" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
-            <ArrowsClockwise size={15} />
-          </Button>
-          <Button className="ctx-btn" title={cs.playing ? 'Pause' : 'Play'} active={!!cs.playing} onClick={() => setCS({ playing: !cs.playing })}>
-            {cs.playing ? <Pause size={15} /> : <Play size={15} />}
-          </Button>
+          <Tooltip content="Shuffle">
+            <Button className="ctx-btn" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
+              <ArrowsClockwise size={15} />
+            </Button>
+          </Tooltip>
+          <Tooltip content={cs.playing ? 'Pause' : 'Play'}>
+            <Button className="ctx-btn" active={!!cs.playing} onClick={() => setCS({ playing: !cs.playing })}>
+              {cs.playing ? <Pause size={15} /> : <Play size={15} />}
+            </Button>
+          </Tooltip>
         </>
       )
     case 'search':     return textInput('query', 'Search...')
     case 'icon':
       return (
         <RadixPopover.Root open={iconOpen} onOpenChange={setIconOpen}>
-          <RadixPopover.Trigger asChild>
-            <Button className="ctx-btn" title="Change Icon">
-              <IconSvg name={(cs.icon as string) || 'heart'} size={15} />
-            </Button>
-          </RadixPopover.Trigger>
+          <Tooltip content="Change Icon">
+            <RadixPopover.Trigger asChild>
+              <Button className="ctx-btn">
+                <IconSvg name={(cs.icon as string) || 'heart'} size={15} />
+              </Button>
+            </RadixPopover.Trigger>
+          </Tooltip>
           <RadixPopover.Portal>
             <RadixPopover.Content
               className="ctx-icon-picker"
@@ -207,15 +216,15 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
             >
               <div className="ctx-icon-grid">
                 {ICON_NAMES.map((name) => (
-                  <Button
-                    key={name}
-                    className="ctx-icon-item"
-                    active={(cs.icon || 'heart') === name}
-                    title={name}
-                    onClick={() => { setCS({ icon: name }); setIconOpen(false) }}
-                  >
-                    <IconSvg name={name} size={16} />
-                  </Button>
+                  <Tooltip key={name} content={name}>
+                    <Button
+                      className="ctx-icon-item"
+                      active={(cs.icon || 'heart') === name}
+                      onClick={() => { setCS({ icon: name }); setIconOpen(false) }}
+                    >
+                      <IconSvg name={name} size={16} />
+                    </Button>
+                  </Tooltip>
                 ))}
               </div>
               <RadixPopover.Arrow className="color-picker-arrow" />
@@ -557,15 +566,15 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
         >
           {/* Layout direction — Frame and Container */}
           {(isFrame || isContainer) && DIR_OPTIONS.map(({ value, Icon, label }) => (
-            <Button
-              key={value}
-              className="ctx-btn"
-              active={dir === value}
-              title={label}
-              onClick={() => handleLayout(value)}
-            >
-              <Icon size={15} />
-            </Button>
+            <Tooltip key={value} content={label}>
+              <Button
+                className="ctx-btn"
+                active={dir === value}
+                onClick={() => handleLayout(value)}
+              >
+                <Icon size={15} />
+              </Button>
+            </Tooltip>
           ))}
 
           {/* Container extras */}
@@ -613,13 +622,14 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
 
                 <div className="ctx-sep" />
 
-                <Button
-                  className="ctx-btn"
-                  title="Frameless"
-                  onClick={() => applyUpdate({ frameless: !isFrameless })}
-                >
-                  {isFrameless ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
-                </Button>
+                <Tooltip content="Frameless">
+                  <Button
+                    className="ctx-btn"
+                    onClick={() => applyUpdate({ frameless: !isFrameless })}
+                  >
+                    {isFrameless ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
+                  </Button>
+                </Tooltip>
 
                 <ScrubInput
                   icon={<Angle size={13} />}
@@ -633,9 +643,11 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                 <AnimatePresence mode="popLayout">
                   {!splitOpen ? (
                     <motion.div key="knife-btn" variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden" transition={SPRING}>
-                      <Button className="ctx-btn" title="Split" onClick={activateSplit}>
-                        <Knife size={15} />
-                      </Button>
+                      <Tooltip content="Split">
+                        <Button className="ctx-btn" onClick={activateSplit}>
+                          <Knife size={15} />
+                        </Button>
+                      </Tooltip>
                     </motion.div>
                   ) : (
                     <motion.div key="split-input" variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden" transition={SPRING}>
@@ -651,24 +663,27 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                       variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
                       transition={SPRING}
                     >
-                      <Button
-                        className="ctx-btn"
-                        active={linkActive}
-                        title="Sync to siblings"
-                        onClick={() => setLinkActive((v) => !v)}
-                      >
-                        <LinkSimpleHorizontal size={15} />
-                      </Button>
+                      <Tooltip content="Sync to siblings">
+                        <Button
+                          className="ctx-btn"
+                          active={linkActive}
+                          onClick={() => setLinkActive((v) => !v)}
+                        >
+                          <LinkSimpleHorizontal size={15} />
+                        </Button>
+                      </Tooltip>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
                 <RadixPopover.Root>
-                  <RadixPopover.Trigger asChild>
-                    <Button className="ctx-color-btn" title="Color">
-                      <div className="ctx-color-swatch" style={{ background: colorHex }} />
-                    </Button>
-                  </RadixPopover.Trigger>
+                  <Tooltip content="Color">
+                    <RadixPopover.Trigger asChild>
+                      <Button className="ctx-color-btn">
+                        <div className="ctx-color-swatch" style={{ background: colorHex }} />
+                      </Button>
+                    </RadixPopover.Trigger>
+                  </Tooltip>
                   <RadixPopover.Portal>
                     <RadixPopover.Content
                       className="color-picker"
@@ -700,13 +715,14 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
               >
                 {renderSkinOptions(el!.skin!, cs, setCS, iconPickerOpen, setIconPickerOpen)}
                 <div className="ctx-sep" />
-                <Button
-                  className="ctx-btn"
-                  title="Only Skin"
-                  onClick={() => applyUpdate({ skinOnly: !el!.skinOnly })}
-                >
-                  {el!.skinOnly ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
-                </Button>
+                <Tooltip content="Only Skin">
+                  <Button
+                    className="ctx-btn"
+                    onClick={() => applyUpdate({ skinOnly: !el!.skinOnly })}
+                  >
+                    {el!.skinOnly ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
+                  </Button>
+                </Tooltip>
               </motion.div>
             )}
           </AnimatePresence>

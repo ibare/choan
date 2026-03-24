@@ -3,6 +3,7 @@ import { useRenderSettings } from '../store/useRenderSettings'
 import { GearSix } from '@phosphor-icons/react'
 import { Slider } from '../components/ui/Slider'
 import { Button } from '../components/ui/Button'
+import { Tooltip } from '../components/ui/Tooltip'
 
 function Vec2Slider({ label, value, min, max, step, onChange }: {
   label: string; value: [number, number]; min: number; max: number; step: number
@@ -66,9 +67,11 @@ export default function RenderSettingsPanel() {
 
   if (!open) {
     return (
-      <Button variant="ghost" size="icon" className="rs-toggle" onClick={() => setOpen(true)} title="Render Settings">
-        <GearSix size={16} />
-      </Button>
+      <Tooltip content="Render Settings">
+        <Button variant="ghost" size="icon" className="rs-toggle" onClick={() => setOpen(true)}>
+          <GearSix size={16} />
+        </Button>
+      </Tooltip>
     )
   }
 

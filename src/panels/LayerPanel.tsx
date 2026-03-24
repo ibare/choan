@@ -1,6 +1,7 @@
 // Layer panel — tree view of elements with parent/child hierarchy.
 
 import { ArrowCounterClockwise, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
+import { Tooltip } from '../components/ui/Tooltip'
 import { useChoanStore } from '../store/useChoanStore'
 import { buildLayerTree } from '../animation/buildLayerTree'
 import { inferElementName } from '../utils/nameUtils'
@@ -25,13 +26,14 @@ export default function LayerPanel() {
     <div className="layer-panel">
       <div className="layer-panel-header">
         <span>Layers</span>
-        <button
-          className="ui-btn ui-btn--ghost ui-btn--icon"
-          title="Rename all elements"
-          onClick={handleRenameAll}
-        >
-          <ArrowCounterClockwise size={13} />
-        </button>
+        <Tooltip content="Rename all elements">
+          <button
+            className="ui-btn ui-btn--ghost ui-btn--icon"
+            onClick={handleRenameAll}
+          >
+            <ArrowCounterClockwise size={13} />
+          </button>
+        </Tooltip>
       </div>
       <div className="layer-panel-list">
         {tree.length === 0 && (

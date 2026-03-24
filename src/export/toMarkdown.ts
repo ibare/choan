@@ -50,7 +50,7 @@ export function toMarkdown(
   platform: Platform = 'web',
 ): string {
   if (elements.length === 0) {
-    return '# UI Spec\n\n_(캔버스가 비어 있습니다)_\n'
+    return '# UI Spec\n\n_(Canvas is empty)_\n'
   }
 
   const renderer = getRenderer(platform)

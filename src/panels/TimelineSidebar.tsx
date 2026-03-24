@@ -20,7 +20,7 @@ export default function TimelineSidebar({
     <div className="timeline-left-panel" onScroll={onScroll}>
       <div style={{ height: RULER_HEIGHT, flexShrink: 0 }} />
       {displayClips.length === 0 && (
-        <div className="panel-empty" style={{ padding: '8px', fontSize: 11 }}>속성 트랙을 추가하세요.</div>
+        <div className="panel-empty" style={{ padding: '8px', fontSize: 11 }}>Add a property track.</div>
       )}
       {displayClips.map((entry) => (
         <div key={entry.clip.id}>

@@ -48,7 +48,7 @@ export default function TriggersSection({ triggers, animationBundles, onUpdate }
       })}
 
       {animationBundles.length === 0 && (
-        <p className="panel-empty">타임라인에서 애니메이션을 먼저 만드세요.</p>
+        <p className="panel-empty">Create an animation in the timeline first.</p>
       )}
 
       {animationBundles.length > 0 && (

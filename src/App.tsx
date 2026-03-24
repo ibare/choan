@@ -6,7 +6,7 @@ import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
-import { TooltipProvider } from './components/ui/Tooltip'
+import { Tooltip, TooltipProvider } from './components/ui/Tooltip'
 import { Button } from './components/ui/Button'
 import { Moon, Sun } from '@phosphor-icons/react'
 
@@ -45,9 +45,9 @@ export default function App() {
     const md = toMarkdown(elements, animationBundles)
     try {
       await navigator.clipboard.writeText(md)
-      setExportMsg('클립보드에 복사됨!')
+      setExportMsg('Copied to clipboard!')
     } catch {
-      setExportMsg('복사 실패')
+      setExportMsg('Copy failed')
     }
     const blob = new Blob([md], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
@@ -67,13 +67,14 @@ export default function App() {
           <div className="toolbar-spacer" />
           <div className="action-group">
             <Button variant="primary" onClick={handleExport}>Export MD</Button>
-            <Button
-              variant="ghost" size="icon"
-              onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')}
-              title="Toggle theme"
-            >
-              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-            </Button>
+            <Tooltip content="Toggle theme">
+              <Button
+                variant="ghost" size="icon"
+                onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')}
+              >
+                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+              </Button>
+            </Tooltip>
           </div>
           {exportMsg && <span className="export-msg">{exportMsg}</span>}
         </div>

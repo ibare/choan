@@ -40,7 +40,7 @@ function renderNode(
     const layout = renderer.renderLayout(el)
     out.push(layout
       ? `**Layout:** ${layout}`
-      : '**Layout:** Free — 자식 요소는 절대 위치로 배치')
+      : '**Layout:** Free — children are absolutely positioned')
   }
 
   // Size
@@ -63,7 +63,7 @@ function renderNode(
   if (el.triggers?.length) {
     for (const t of el.triggers) {
       const name = bundles.find((b) => b.id === t.animationBundleId)?.name ?? t.animationBundleId
-      out.push(`**On ${t.event} →** \`${name}\` 애니메이션 실행`)
+      out.push(`**On ${t.event} →** Run animation \`${name}\``)
     }
   }
 
@@ -79,13 +79,13 @@ function renderNode(
     const total = children.length
     const excCount = exceptions.length
     const note = excCount > 0
-      ? `${majority.indices.length}개 공통 패턴, ${excCount}개 예외`
-      : `${total}개 모두 동일 패턴`
-    out.push(`> **${total}개 항목** — ${note}`)
+      ? `${majority.indices.length} common pattern(s), ${excCount} exception(s)`
+      : `${total} all same pattern`
+    out.push(`> **${total} item(s)** — ${note}`)
     out.push('')
 
     // Render the representative once, prefixed
-    renderNode(majority.representative, renderer, bundles, el, out, `[패턴 ×${majority.indices.length}] `)
+    renderNode(majority.representative, renderer, bundles, el, out, `[Pattern ×${majority.indices.length}] `)
 
     // Render each exception (diffs only)
     for (const exc of exceptions) {
@@ -109,8 +109,8 @@ function renderExceptionNode(
 ): void {
   const { el, depth } = node
   const skinSuffix = el.skin ? ` \`${el.skin}\`` : ''
-  out.push(h(depth, `[예외 #${ordinal}] ${el.label}${skinSuffix}  _(${typeLabel(el)})_`))
-  out.push('**변경된 속성:**')
+  out.push(h(depth, `[Exception #${ordinal}] ${el.label}${skinSuffix}  _(${typeLabel(el)})_`))
+  out.push('**Changed properties:**')
   for (const diff of diffs) {
     out.push(`- ${diff}`)
   }

@@ -35,14 +35,14 @@ export const webRenderer: PlatformRenderer = {
     switch (sizing) {
       case 'fill':
         return isRow
-          ? `flex: 1 (가로 남은 공간 채움) × ${h}px`
-          : `${w}px × flex: 1 (세로 남은 공간 채움)`
+          ? `flex: 1 (fill remaining horizontal space) × ${h}px`
+          : `${w}px × flex: 1 (fill remaining vertical space)`
       case 'fixed-px':
-        return `${w} × ${h}px (고정)`
+        return `${w} × ${h}px (fixed)`
       case 'fixed-ratio':
-        return `${w} × ${h}px (비율 고정: ${((el.layoutRatio ?? 0.5) * 100).toFixed(0)}%)`
+        return `${w} × ${h}px (fixed ratio: ${((el.layoutRatio ?? 0.5) * 100).toFixed(0)}%)`
       default: // equal
-        return `${w} × ${h}px (균등 분할)`
+        return `${w} × ${h}px (equal split)`
     }
   },
 

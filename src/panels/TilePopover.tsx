@@ -4,6 +4,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '../components/ui/Button'
+import { Tooltip } from '../components/ui/Tooltip'
 
 export interface TileItem {
   value: string
@@ -62,16 +63,16 @@ export default function TilePopover({ items, value, onChange, columns = 6, place
         <div ref={popoverRef} className="tile-popover" style={style}>
           <div className="tile-popover-grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
             {items.map((item) => (
+              <Tooltip key={item.value} content={item.label}>
               <Button
-                key={item.value}
                 className="tile-popover-item"
                 active={item.value === value}
-                title={item.label}
                 onClick={() => { onChange(item.value); setOpen(false) }}
               >
                 {item.icon && <span className="tile-popover-icon">{item.icon}</span>}
                 <span className="tile-popover-label">{item.label}</span>
               </Button>
+              </Tooltip>
             ))}
           </div>
         </div>,
