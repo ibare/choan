@@ -222,7 +222,7 @@ function paintBadge(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number
 
   if (count > 0) {
     ctx.fillStyle = '#fff'
-    ctx.font = `700 ${r * 1.1}px Inter, system-ui, sans-serif`
+    ctx.font = `700 ${r * 0.88}px Inter, system-ui, sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(count > 99 ? '99+' : String(count), w / 2, h / 2)

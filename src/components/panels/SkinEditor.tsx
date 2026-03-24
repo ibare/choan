@@ -76,9 +76,9 @@ export function SkinEditor({ skin, state: cs, onChange }: SkinEditorProps) {
     case 'badge':
       return (
         <Input
-          type="number" min={0}
-          value={String(Number(cs.count) || 0)}
-          onChange={(e) => set({ count: Number(e.target.value) })}
+          type="number" min={1}
+          value={String(Math.max(1, Number(cs.count) || 1))}
+          onChange={(e) => set({ count: Math.max(1, Number(e.target.value)) })}
         />
       )
     case 'star-rating':
