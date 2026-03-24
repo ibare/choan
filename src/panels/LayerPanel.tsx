@@ -1,8 +1,9 @@
 // Layer panel — tree view of elements with parent/child hierarchy.
 
+import { ArrowCounterClockwise, Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
 import { useChoanStore } from '../store/useChoanStore'
 import { buildLayerTree } from '../animation/buildLayerTree'
-import { Rectangle, Circle, LineSegment } from '@phosphor-icons/react'
+import { inferElementName } from '../utils/nameUtils'
 
 const TYPE_ICON: Record<string, React.ReactNode> = {
   rectangle: <Rectangle size={12} weight="fill" />,
@@ -11,12 +12,27 @@ const TYPE_ICON: Record<string, React.ReactNode> = {
 }
 
 export default function LayerPanel() {
-  const { elements, selectedIds, selectElement, toggleSelectElement } = useChoanStore()
+  const { elements, selectedIds, selectElement, toggleSelectElement, updateElement } = useChoanStore()
   const tree = buildLayerTree(elements)
+
+  const handleRenameAll = () => {
+    for (const el of elements) {
+      updateElement(el.id, { label: inferElementName(el, elements) })
+    }
+  }
 
   return (
     <div className="layer-panel">
-      <div className="layer-panel-header">Layers</div>
+      <div className="layer-panel-header">
+        <span>Layers</span>
+        <button
+          className="ui-btn ui-btn--ghost ui-btn--icon"
+          title="Rename all elements"
+          onClick={handleRenameAll}
+        >
+          <ArrowCounterClockwise size={13} />
+        </button>
+      </div>
       <div className="layer-panel-list">
         {tree.length === 0 && (
           <div className="layer-empty">No elements</div>

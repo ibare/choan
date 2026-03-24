@@ -1,4 +1,4 @@
-// Element store — owns: elements, selectedIds, elementCounters.
+// Element store — owns: elements, selectedIds.
 // Responsible for element CRUD, selection, containment hierarchy, and layout.
 // Does NOT know about animation data.
 
@@ -52,7 +52,6 @@ export type Tool = 'select' | 'rectangle' | 'circle' | 'line'
 interface ElementStore {
   elements: ChoanElement[]
   selectedIds: string[]
-  elementCounters: Record<string, number>
 
   addElement: (el: ChoanElement) => void
   updateElement: (id: string, patch: Partial<ChoanElement>) => void
@@ -67,7 +66,7 @@ interface ElementStore {
   reparentElement: (childId: string, parentId: string | null) => void
   runLayout: (containerId: string) => void
 
-  /** Load elements from file (applies layout, resets selection and counters). */
+  /** Load elements from file (applies layout, resets selection). */
   loadElements: (elements: ChoanElement[]) => void
   reset: () => void
 }
@@ -147,16 +146,9 @@ function propagateZ(elements: ChoanElement[]): ChoanElement[] {
   })
 }
 
-const LABEL_MAP: Record<string, string> = {
-  rectangle: 'Box',
-  circle: 'Circle',
-  line: 'Line',
-}
-
 const initialState = {
   elements: [] as ChoanElement[],
   selectedIds: [] as string[],
-  elementCounters: {} as Record<string, number>,
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -165,17 +157,7 @@ export const useElementStore = create<ElementStore>((set) => ({
   ...initialState,
 
   addElement: (el) =>
-    set((s) => {
-      const base = LABEL_MAP[el.type] ?? el.type
-      if (el.label === base || el.label === 'Box' || el.label === 'Circle' || el.label === 'Line') {
-        const next = (s.elementCounters[el.type] ?? 0) + 1
-        return {
-          elements: [...s.elements, { ...el, label: `${base} ${next}` }],
-          elementCounters: { ...s.elementCounters, [el.type]: next },
-        }
-      }
-      return { elements: [...s.elements, el] }
-    }),
+    set((s) => ({ elements: [...s.elements, el] })),
 
   updateElement: (id, patch) =>
     set((s) => ({
@@ -234,15 +216,7 @@ export const useElementStore = create<ElementStore>((set) => ({
     for (const c of updated.filter((e) => e.role === 'container')) {
       updated = applyLayout(updated, c.id)
     }
-    const counters: Record<string, number> = {}
-    for (const el of updated) {
-      const match = el.label.match(/^(?:Box|Circle|Line)\s+(\d+)$/)
-      if (match) {
-        const n = parseInt(match[1], 10)
-        counters[el.type] = Math.max(counters[el.type] ?? 0, n)
-      }
-    }
-    set({ elements: updated, selectedIds: [], elementCounters: counters })
+    set({ elements: updated, selectedIds: [] })
   },
 
   reset: () => set(initialState),

@@ -61,7 +61,6 @@ export function useChoanStore() {
     // Element store
     elements: el.elements,
     selectedIds: el.selectedIds,
-    elementCounters: el.elementCounters,
     addElement: el.addElement,
     updateElement: el.updateElement,
     selectElement: el.selectElement,
