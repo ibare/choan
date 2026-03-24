@@ -445,7 +445,7 @@ body {
   transition: all var(--transition-fast);
 }
 .side-tool:hover { background: var(--surface-2); color: var(--text-1); }
-.side-tool.active { background: var(--accent); color: #fff; }
+.side-tool.ui-btn--active { background: var(--accent); color: #fff; }
 
 .toolbar-separator {
   width: 100%; height: 1px;
@@ -604,7 +604,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   color: var(--text-1); transition: background var(--transition-fast);
 }
 .tile-popover-item:hover { background: var(--surface-2); }
-.tile-popover-item.active { background: var(--accent); color: #fff; }
+.tile-popover-item.ui-btn--active { background: var(--accent); color: #fff; }
 
 .tile-popover-icon { display: flex; align-items: center; justify-content: center; }
 .tile-popover-icon svg { width: 20px; height: 20px; }
@@ -743,7 +743,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   cursor: pointer; transition: all var(--transition-fast); font-family: var(--font);
 }
 .timeline-tab-btn:hover { border-color: var(--accent); color: var(--accent); }
-.timeline-tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.timeline-tab-btn.ui-btn--active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 .timeline-body-row { display: flex; flex: 1; overflow: hidden; }
 
@@ -795,7 +795,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   transition: background var(--transition-fast);
 }
 .easing-option:hover { background: var(--surface-2); }
-.easing-option.active { background: var(--accent); color: #fff; }
+.easing-option.ui-btn--active { background: var(--accent); color: #fff; }
 
 /* ── KF Editor (Radix Dialog content) ───────────────────── */
 .kf-editor-input { width: 120px; }
@@ -878,7 +878,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .ctx-btn:hover { background: var(--surface-3); color: var(--text-1); }
-.ctx-btn.active { background: var(--accent); color: #fff; }
+.ctx-btn.ui-btn--active { background: var(--accent); color: #fff; }
 
 .ctx-sep {
   width: 1px;
@@ -986,7 +986,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .ctx-icon-item:hover { background: var(--surface-3); color: var(--text-1); }
-.ctx-icon-item.active { background: var(--accent); color: #fff; }
+.ctx-icon-item.ui-btn--active { background: var(--accent); color: #fff; }
 
 /* Color swatch trigger */
 .ctx-color-btn {
