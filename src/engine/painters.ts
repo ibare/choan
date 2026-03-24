@@ -211,7 +211,7 @@ function paintProgress(ctx: OffscreenCanvasRenderingContext2D, w: number, h: num
 // ── Badge ──
 
 function paintBadge(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, state: Record<string, unknown>, stroke: StrokeStyle) {
-  const count = Number(state.count) || 0
+  const count = Math.max(1, Number(state.count) || 1)
   const r = Math.min(w, h) * 0.38
 
   ctx.beginPath()
@@ -220,13 +220,11 @@ function paintBadge(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number
   ctx.fill()
   outlined(ctx, stroke)
 
-  if (count > 0) {
-    ctx.fillStyle = '#fff'
-    ctx.font = `700 ${r * 0.88}px Inter, system-ui, sans-serif`
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(count > 99 ? '99+' : String(count), w / 2, h / 2)
-  }
+  ctx.fillStyle = '#fff'
+  ctx.font = `700 ${r * 0.88}px Inter, system-ui, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(count > 99 ? '99+' : String(count), w / 2, h / 2)
 }
 
 // ── Star Rating ──
