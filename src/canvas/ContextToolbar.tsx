@@ -1,7 +1,7 @@
 // Floating context toolbar — appears above selected element.
 // Shows element-type-relevant quick controls to reduce trips to the right inspector.
 
-import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { SplitMode } from '../interaction/useKeyboardHandlers'
 import { splitElement } from '../interaction/splitElement'
@@ -15,7 +15,7 @@ import {
   SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
   Rectangle, RectangleDashed, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
   ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB, Play, Pause,
-  Knife, RowsPlusBottom,
+  Knife, RowsPlusBottom, LinkSimpleHorizontal,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
@@ -343,6 +343,8 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const [splitOpen, setSplitOpen] = useState(false)
   const [splitCount, setSplitCount] = useState(2)
   const [splitDir, setSplitDir] = useState<'horizontal' | 'vertical'>('horizontal')
+  const [linkActive, setLinkActive] = useState(false)
+  const [altPressed, setAltPressed] = useState(false)
   const splitOpenRef  = useRef(false)
   const splitCountRef = useRef(2)
   const splitDirRef   = useRef<'horizontal' | 'vertical'>('horizontal')
@@ -353,6 +355,51 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const el = selectedIds.length === 1
     ? elements.find((e) => e.id === selectedIds[0]) ?? null
     : null
+
+  // Reset link toggle when selected element changes
+  const prevSelectedRef = useRef(el?.id)
+  if (el?.id !== prevSelectedRef.current) {
+    prevSelectedRef.current = el?.id
+    if (linkActive) setLinkActive(false)
+  }
+
+  // Sibling sync — Alt key tracking
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => { if (e.key === 'Alt') setAltPressed(true) }
+    const onUp   = (e: KeyboardEvent) => { if (e.key === 'Alt') setAltPressed(false) }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp) }
+  }, [])
+
+  // Sibling sync — siblings of the selected element (same parent)
+  const siblings = el?.parentId
+    ? elements.filter((e) => e.parentId === el.parentId && e.id !== el.id)
+    : []
+  const hasSiblings = siblings.length > 0
+  const shouldSync  = hasSiblings && (linkActive || altPressed)
+
+  /** Apply a patch to the selected element + siblings if sync is active */
+  const applyUpdate = useCallback((patch: Partial<import('../store/useElementStore').ChoanElement>) => {
+    if (!el) return
+    updateElement(el.id, patch)
+    if (shouldSync) {
+      for (const sib of siblings) updateElement(sib.id, patch)
+    }
+  }, [el, shouldSync, siblings, updateElement])
+
+  /** Apply a patch that also requires runLayout (gap, padding, columns, direction) */
+  const applyLayoutUpdate = useCallback((patch: Partial<import('../store/useElementStore').ChoanElement>) => {
+    if (!el) return
+    updateElement(el.id, patch)
+    queueMicrotask(() => runLayout(el.id))
+    if (shouldSync) {
+      for (const sib of siblings) {
+        updateElement(sib.id, patch)
+        queueMicrotask(() => runLayout(sib.id))
+      }
+    }
+  }, [el, shouldSync, siblings, updateElement, runLayout])
 
   // RAF — smooth position tracking (follows element during drag + zoom)
   useEffect(() => {
@@ -446,12 +493,17 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const setCS = (patch: Record<string, unknown>) => {
     if (!el) return
     updateElement(el.id, { componentState: { ...cs, ...patch } })
+    if (shouldSync) {
+      for (const sib of siblings) {
+        const sibCS = (sib.componentState ?? {}) as Record<string, unknown>
+        updateElement(sib.id, { componentState: { ...sibCS, ...patch } })
+      }
+    }
   }
 
   const handleLayout = (d: LayoutDir) => {
     if (!el) return
-    updateElement(el.id, { layoutDirection: d })
-    queueMicrotask(() => runLayout(el.id))
+    applyLayoutUpdate({ layoutDirection: d })
   }
 
   const resetSplitState = () => {
@@ -538,7 +590,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                           value={el!.layoutColumns ?? 2}
                           min={1}
                           max={12}
-                          onChange={(v) => { updateElement(el!.id, { layoutColumns: v }); queueMicrotask(() => runLayout(el!.id)) }}
+                          onChange={(v) => applyLayoutUpdate({ layoutColumns: v })}
                         />
                       )}
                       <ScrubInput
@@ -546,14 +598,14 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                         value={el!.layoutGap ?? 8}
                         min={0}
                         max={100}
-                        onChange={(v) => { updateElement(el!.id, { layoutGap: v }); queueMicrotask(() => runLayout(el!.id)) }}
+                        onChange={(v) => applyLayoutUpdate({ layoutGap: v })}
                       />
                       <ScrubInput
                         icon={<FrameCorners size={13} />}
                         value={el!.layoutPadding ?? 8}
                         min={0}
                         max={100}
-                        onChange={(v) => { updateElement(el!.id, { layoutPadding: v }); queueMicrotask(() => runLayout(el!.id)) }}
+                        onChange={(v) => applyLayoutUpdate({ layoutPadding: v })}
                       />
                     </motion.div>
                   )}
@@ -564,7 +616,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                 <Button
                   className="ctx-btn"
                   title="Frameless"
-                  onClick={() => updateElement(el!.id, { frameless: !isFrameless })}
+                  onClick={() => applyUpdate({ frameless: !isFrameless })}
                 >
                   {isFrameless ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
                 </Button>
@@ -574,7 +626,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                   value={radiusPx}
                   min={0}
                   max={Math.round(maxRadius)}
-                  onChange={(v) => updateElement(el!.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
+                  onChange={(v) => applyUpdate({ radius: maxRadius > 0 ? v / maxRadius : 0 })}
                 />
 
                 {/* Knife → split input */}
@@ -588,6 +640,25 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                   ) : (
                     <motion.div key="split-input" variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden" transition={SPRING}>
                       <SplitInput count={splitCount} dir={splitDir} onCountChange={onSplitCountChange} onDirToggle={onSplitDirToggle} onConfirm={confirmSplit} onCancel={cancelSplit} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Sibling sync toggle — only when siblings exist */}
+                <AnimatePresence mode="popLayout">
+                  {hasSiblings && (
+                    <motion.div key="link-btn" layout
+                      variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
+                      transition={SPRING}
+                    >
+                      <Button
+                        className="ctx-btn"
+                        active={linkActive}
+                        title="Sync to siblings"
+                        onClick={() => setLinkActive((v) => !v)}
+                      >
+                        <LinkSimpleHorizontal size={15} />
+                      </Button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -609,7 +680,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                     >
                       <ColorPicker
                         color={el!.color ?? 0xe0e0e0}
-                        onChange={(c) => updateElement(el!.id, { color: c })}
+                        onChange={(c) => applyUpdate({ color: c })}
                       />
                       <RadixPopover.Arrow className="color-picker-arrow" />
                     </RadixPopover.Content>
@@ -632,7 +703,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                 <Button
                   className="ctx-btn"
                   title="Only Skin"
-                  onClick={() => updateElement(el!.id, { skinOnly: !el!.skinOnly })}
+                  onClick={() => applyUpdate({ skinOnly: !el!.skinOnly })}
                 >
                   {el!.skinOnly ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
                 </Button>
