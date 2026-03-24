@@ -217,6 +217,8 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
                 {ICON_NAMES.map((name) => (
                   <Tooltip key={name} content={name}>
                     <Button
+                      variant="ghost"
+                      size="icon"
                       className="ctx-icon-item"
                       active={(cs.icon || 'heart') === name}
                       onClick={() => { setCS({ icon: name }); setIconOpen(false) }}

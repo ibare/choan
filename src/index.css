@@ -1042,17 +1042,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   gap: 2px;
 }
 .ctx-icon-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
   border-radius: var(--radius-1);
-  background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .ctx-icon-item:hover { background: var(--surface-3); color: var(--text-1); }
 .ctx-icon-item.ui-btn--active { background: var(--accent); color: #fff; }
