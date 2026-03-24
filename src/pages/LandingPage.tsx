@@ -19,7 +19,7 @@ export default function LandingPage() {
           or ambiguous screenshots.
         </p>
         <div className="hero__actions">
-          <Link to="/app" className="btn-primary">Open App</Link>
+          <Link to="/app" className="btn-primary">Get started for free</Link>
           <Link to="/features" className="btn-ghost">Learn More</Link>
         </div>
       </section>

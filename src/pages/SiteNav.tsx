@@ -8,7 +8,7 @@ export default function SiteNav() {
       <Link to="/" className="site-nav__logo">Choan</Link>
       <div className="site-nav__links">
         <Link to="/features" className={`site-nav__link${pathname === '/features' ? ' active' : ''}`}>Features</Link>
-        <Link to="/app" className="site-nav__cta">Open App</Link>
+        <Link to="/app" className="site-nav__cta">Do Sketch</Link>
       </div>
     </nav>
   )

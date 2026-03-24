@@ -118,7 +118,7 @@ export default function FeaturesPage() {
 
       <section className="features-cta">
         <h2>Ready to try?</h2>
-        <Link to="/app" className="btn-primary">Open App</Link>
+        <Link to="/app" className="btn-primary">Get started for free</Link>
       </section>
 
       <footer className="site-footer">
