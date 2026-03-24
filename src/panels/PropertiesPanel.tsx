@@ -4,7 +4,6 @@ import type { AnimatableProperty } from '../animation/types'
 import { useSelectedElement } from '../hooks/useSelectedElement'
 import { Section } from '../components/ui/Section'
 import { PropRow } from '../components/ui/PropRow'
-import { Button } from '../components/ui/Button'
 import ElementSection from './ElementSection'
 import SkinSection from './SkinSection'
 import ContainerLayoutSection from './ContainerLayoutSection'
@@ -12,7 +11,7 @@ import GeometrySection from './GeometrySection'
 import TriggersSection from './TriggersSection'
 
 export default function PropertiesPanel() {
-  const { updateElement, removeElement, runLayout, elements, animationBundles } = useChoanStore()
+  const { updateElement, runLayout, elements, animationBundles } = useChoanStore()
   const el = useSelectedElement()
 
   if (!el) {
@@ -74,12 +73,6 @@ export default function PropertiesPanel() {
         animationBundles={animationBundles}
         onUpdate={(triggers) => updateElement(el.id, { triggers })}
       />
-
-      <Section>
-        <Button variant="danger" style={{ width: '100%' }} onClick={() => removeElement(el.id)}>
-          Delete
-        </Button>
-      </Section>
 
     </div>
   )

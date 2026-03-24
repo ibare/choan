@@ -2,6 +2,7 @@
 // Shows element-type-relevant quick controls to reduce trips to the right inspector.
 
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import * as RadixPopover from '@radix-ui/react-popover'
 import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
@@ -222,6 +223,28 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
   }
 }
 
+// Placement transforms — must be composed with Framer Motion via transformTemplate
+// to avoid inline-style overriding the CSS class transform.
+const PLACEMENT_TRANSFORM = {
+  top:    'translateX(-50%) translateY(calc(-100% - 10px))',
+  right:  'translateY(-50%) translateX(10px)',
+  bottom: 'translateX(-50%) translateY(10px)',
+} as const
+
+const SPRING = { type: 'spring', stiffness: 400, damping: 28, mass: 0.8 } as const
+
+const TOOLBAR_VARIANTS = {
+  hidden: { opacity: 0, scale: 0.88 },
+  visible: { opacity: 1, scale: 1 },
+}
+
+const GROUP_VARIANTS = {
+  hidden: { opacity: 0, scale: 0.82 },
+  visible: { opacity: 1, scale: 1 },
+}
+
+const FLEX_ROW = { display: 'flex', alignItems: 'center', gap: 1 } as const
+
 export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingRef, isResizingRef, isDrawingRef, controlsRef }: Props) {
   const [pos, setPos] = useState<{ x: number; y: number; placement: 'top' | 'right' | 'bottom' } | null>(null)
   const [iconPickerOpen, setIconPickerOpen] = useState(false)
@@ -296,140 +319,168 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
     return () => cancelAnimationFrame(rafRef.current)
   }, [canvasSizeRef, rendererRef])
 
-  if (!el || !pos) return null
+  const isFrame     = !!el?.frame
+  const isSkin      = !!el?.skin
+  const isContainer = el?.role === 'container' && !el?.skin
+  const isVisible   = !!el && !!pos && (isFrame || isSkin || isContainer)
 
-  const isFrame     = !!el.frame
-  const isSkin      = !!el.skin
-  const isContainer = el.role === 'container' && !el.skin
-  if (!isFrame && !isSkin && !isContainer) return null
-
-  const dir         = el.layoutDirection ?? 'free'
-  const maxRadius   = Math.min(el.width, el.height) / 2
-  const radiusPx    = Math.round((el.radius ?? 0) * maxRadius)
-  const colorHex    = colorToHex(el.color ?? 0xe0e0e0)
-  const isFrameless = el.frameless ?? false
-  const cs = (el.componentState ?? {}) as Record<string, unknown>
-  const setCS = (patch: Record<string, unknown>) =>
+  const dir         = el?.layoutDirection ?? 'free'
+  const maxRadius   = el ? Math.min(el.width, el.height) / 2 : 0
+  const radiusPx    = Math.round((el?.radius ?? 0) * maxRadius)
+  const colorHex    = colorToHex(el?.color ?? 0xe0e0e0)
+  const isFrameless = el?.frameless ?? false
+  const cs = (el?.componentState ?? {}) as Record<string, unknown>
+  const setCS = (patch: Record<string, unknown>) => {
+    if (!el) return
     updateElement(el.id, { componentState: { ...cs, ...patch } })
-
+  }
 
   const handleLayout = (d: LayoutDir) => {
+    if (!el) return
     updateElement(el.id, { layoutDirection: d })
     queueMicrotask(() => runLayout(el.id))
   }
 
   return (
-    <div
-      className={`context-toolbar context-toolbar--${pos.placement}`}
-      data-theme="dark"
-      style={{ left: pos.x, top: pos.y }}
-    >
-      {/* Layout direction — Frame and Container */}
-      {(isFrame || isContainer) && DIR_OPTIONS.map(({ value, Icon, label }) => (
-        <Button
-          key={value}
-          className="ctx-btn"
-          active={dir === value}
-          title={label}
-          onClick={() => handleLayout(value)}
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          key="context-toolbar"
+          className={`context-toolbar context-toolbar--${pos!.placement}`}
+          data-theme="dark"
+          style={{ left: pos!.x, top: pos!.y }}
+          layout="size"
+          variants={TOOLBAR_VARIANTS}
+          initial="hidden"
+          animate="visible"
+          exit="hidden"
+          transition={SPRING}
+          transformTemplate={(_, generated) => `${PLACEMENT_TRANSFORM[pos!.placement]} ${generated}`}
         >
-          <Icon size={15} />
-        </Button>
-      ))}
+          {/* Layout direction — Frame and Container */}
+          {(isFrame || isContainer) && DIR_OPTIONS.map(({ value, Icon, label }) => (
+            <Button
+              key={value}
+              className="ctx-btn"
+              active={dir === value}
+              title={label}
+              onClick={() => handleLayout(value)}
+            >
+              <Icon size={15} />
+            </Button>
+          ))}
 
-      {/* Container extras */}
-      {isContainer && (
-        <>
-          {/* Layout-dependent options: Gap, Padding, Columns */}
-          {(dir === 'row' || dir === 'column' || dir === 'grid') && (
-            <>
-              <div className="ctx-sep" />
-              {dir === 'grid' && (
-                <ScrubInput
-                  icon={<Columns size={13} />}
-                  value={el.layoutColumns ?? 2}
-                  min={1}
-                  max={12}
-                  onChange={(v) => { updateElement(el.id, { layoutColumns: v }); queueMicrotask(() => runLayout(el.id)) }}
-                />
-              )}
-              <ScrubInput
-                icon={<ArrowsOutLineHorizontal size={13} />}
-                value={el.layoutGap ?? 8}
-                min={0}
-                max={100}
-                onChange={(v) => { updateElement(el.id, { layoutGap: v }); queueMicrotask(() => runLayout(el.id)) }}
-              />
-              <ScrubInput
-                icon={<FrameCorners size={13} />}
-                value={el.layoutPadding ?? 8}
-                min={0}
-                max={100}
-                onChange={(v) => { updateElement(el.id, { layoutPadding: v }); queueMicrotask(() => runLayout(el.id)) }}
-              />
-            </>
-          )}
-
-          <div className="ctx-sep" />
-
-          <Button
-            className="ctx-btn"
-            title="Frameless"
-            onClick={() => updateElement(el.id, { frameless: !isFrameless })}
-          >
-            {isFrameless ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
-          </Button>
-
-          <ScrubInput
-            icon={<Angle size={13} />}
-            value={radiusPx}
-            min={0}
-            max={Math.round(maxRadius)}
-            onChange={(v) => updateElement(el.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
-          />
-
-          <RadixPopover.Root>
-            <RadixPopover.Trigger asChild>
-              <Button className="ctx-color-btn" title="Color">
-                <div className="ctx-color-swatch" style={{ background: colorHex }} />
-              </Button>
-            </RadixPopover.Trigger>
-            <RadixPopover.Portal>
-              <RadixPopover.Content
-                className="color-picker"
-                data-theme="dark"
-                side="right"
-                sideOffset={8}
-                align="start"
-                collisionPadding={8}
+          {/* Container extras */}
+          <AnimatePresence>
+            {isContainer && (
+              <motion.div key="container-section" layout style={FLEX_ROW}
+                variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
+                transition={SPRING}
               >
-                <ColorPicker
-                  color={el.color ?? 0xe0e0e0}
-                  onChange={(c) => updateElement(el.id, { color: c })}
+
+                {/* Layout-dependent options: Gap, Padding, Columns */}
+                <AnimatePresence>
+                  {(dir === 'row' || dir === 'column' || dir === 'grid') && (
+                    <motion.div key="layout-extras" layout style={FLEX_ROW}
+                      variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
+                      transition={SPRING}
+                    >
+                      <div className="ctx-sep" />
+                      {dir === 'grid' && (
+                        <ScrubInput
+                          icon={<Columns size={13} />}
+                          value={el!.layoutColumns ?? 2}
+                          min={1}
+                          max={12}
+                          onChange={(v) => { updateElement(el!.id, { layoutColumns: v }); queueMicrotask(() => runLayout(el!.id)) }}
+                        />
+                      )}
+                      <ScrubInput
+                        icon={<ArrowsOutLineHorizontal size={13} />}
+                        value={el!.layoutGap ?? 8}
+                        min={0}
+                        max={100}
+                        onChange={(v) => { updateElement(el!.id, { layoutGap: v }); queueMicrotask(() => runLayout(el!.id)) }}
+                      />
+                      <ScrubInput
+                        icon={<FrameCorners size={13} />}
+                        value={el!.layoutPadding ?? 8}
+                        min={0}
+                        max={100}
+                        onChange={(v) => { updateElement(el!.id, { layoutPadding: v }); queueMicrotask(() => runLayout(el!.id)) }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="ctx-sep" />
+
+                <Button
+                  className="ctx-btn"
+                  title="Frameless"
+                  onClick={() => updateElement(el!.id, { frameless: !isFrameless })}
+                >
+                  {isFrameless ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
+                </Button>
+
+                <ScrubInput
+                  icon={<Angle size={13} />}
+                  value={radiusPx}
+                  min={0}
+                  max={Math.round(maxRadius)}
+                  onChange={(v) => updateElement(el!.id, { radius: maxRadius > 0 ? v / maxRadius : 0 })}
                 />
-                <RadixPopover.Arrow className="color-picker-arrow" />
-              </RadixPopover.Content>
-            </RadixPopover.Portal>
-          </RadixPopover.Root>
-        </>
+
+                <RadixPopover.Root>
+                  <RadixPopover.Trigger asChild>
+                    <Button className="ctx-color-btn" title="Color">
+                      <div className="ctx-color-swatch" style={{ background: colorHex }} />
+                    </Button>
+                  </RadixPopover.Trigger>
+                  <RadixPopover.Portal>
+                    <RadixPopover.Content
+                      className="color-picker"
+                      data-theme="dark"
+                      side="right"
+                      sideOffset={8}
+                      align="start"
+                      collisionPadding={8}
+                    >
+                      <ColorPicker
+                        color={el!.color ?? 0xe0e0e0}
+                        onChange={(c) => updateElement(el!.id, { color: c })}
+                      />
+                      <RadixPopover.Arrow className="color-picker-arrow" />
+                    </RadixPopover.Content>
+                  </RadixPopover.Portal>
+                </RadixPopover.Root>
+
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Skin: type-specific options + Only Skin toggle */}
+          <AnimatePresence>
+            {isSkin && (
+              <motion.div key="skin-section" layout style={FLEX_ROW}
+                variants={GROUP_VARIANTS} initial="hidden" animate="visible" exit="hidden"
+                transition={SPRING}
+              >
+                {renderSkinOptions(el!.skin!, cs, setCS, iconPickerOpen, setIconPickerOpen)}
+                <div className="ctx-sep" />
+                <Button
+                  className="ctx-btn"
+                  title="Only Skin"
+                  onClick={() => updateElement(el!.id, { skinOnly: !el!.skinOnly })}
+                >
+                  {el!.skinOnly ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+        </motion.div>
       )}
-
-      {/* Skin: type-specific options + Only Skin toggle */}
-      {isSkin && (
-        <>
-          {renderSkinOptions(el.skin!, cs, setCS, iconPickerOpen, setIconPickerOpen)}
-
-          <div className="ctx-sep" />
-
-          <Button
-            className="ctx-btn"
-            title="Only Skin"
-            onClick={() => updateElement(el.id, { skinOnly: !el.skinOnly })}
-          >
-            {el.skinOnly ? <RectangleDashed size={15} /> : <Rectangle size={15} />}
-          </Button>
-        </>
-      )}
-    </div>
+    </AnimatePresence>
   )
 }

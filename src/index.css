@@ -854,6 +854,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .kf-editor-input { width: 120px; }
 
 /* ── Context Toolbar ─────────────────────────────────────── */
+
 .context-toolbar {
   position: absolute;
   display: inline-flex;
@@ -880,10 +881,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   transform: rotate(45deg);
 }
 
-/* Placement: top (above element, caret points down) */
-.context-toolbar--top {
-  transform: translateX(-50%) translateY(calc(-100% - 10px));
-}
+/* Placement carets — transforms handled by Framer Motion transformTemplate */
 .context-toolbar--top::after {
   bottom: -5px;
   left: 50%;
@@ -891,22 +889,12 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
-
-/* Placement: right (right of element, caret points left) */
-.context-toolbar--right {
-  transform: translateY(-50%) translateX(10px);
-}
 .context-toolbar--right::after {
   left: -5px;
   top: 50%;
   margin-top: -4px;
   border-left: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-}
-
-/* Placement: bottom (below element, caret points up) */
-.context-toolbar--bottom {
-  transform: translateX(-50%) translateY(10px);
 }
 .context-toolbar--bottom::after {
   top: -5px;
