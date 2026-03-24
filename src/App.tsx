@@ -6,8 +6,6 @@ import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
-import { serialize, deserialize } from './export/toYaml'
-import type { DeserializedFile } from './export/toYaml'
 import { TooltipProvider } from './components/ui/Tooltip'
 import { Button } from './components/ui/Button'
 import { Moon, Sun } from '@phosphor-icons/react'
@@ -17,13 +15,11 @@ export default function App() {
     elements, animationBundles,
     tool, pendingSkin, pendingFrame,
     setTool, setPendingSkin, setPendingFrame,
-    loadFile, reset,
   } = useChoanStore()
 
   const [projectName, setProjectName]   = useState('My UI')
   const [exportMsg, setExportMsg]       = useState('')
   const [theme, setTheme]               = useState<'light' | 'dark'>('dark')
-  const fileInputRef                    = useRef<HTMLInputElement>(null)
   const [timelineHeight, setTimelineHeight] = useState(180)
   const isDraggingRef   = useRef(false)
   const dragStartYRef   = useRef(0)
@@ -64,35 +60,6 @@ export default function App() {
     setTimeout(() => setExportMsg(''), 3000)
   }
 
-  const handleSave = () => {
-    const content = serialize(projectName, elements, animationBundles)
-    const blob = new Blob([content], { type: 'text/yaml' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${projectName}.choan`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleOpen = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const result: DeserializedFile = deserialize(ev.target?.result as string)
-        setProjectName(result.name)
-        loadFile({ elements: result.elements, animationBundles: result.animationBundles })
-      } catch (err) {
-        alert('파일을 불러올 수 없습니다.')
-        console.error(err)
-      }
-    }
-    reader.readAsText(file)
-    e.target.value = ''
-  }
-
   return (
     <TooltipProvider>
       <div className="app" data-theme={theme}>
@@ -105,10 +72,7 @@ export default function App() {
           />
           <div className="toolbar-spacer" />
           <div className="action-group">
-            <Button onClick={() => fileInputRef.current?.click()}>Open</Button>
-            <Button onClick={handleSave}>Save</Button>
             <Button variant="primary" onClick={handleExport}>Export MD</Button>
-            <Button variant="ghost" onClick={() => { if (confirm('초기화할까요?')) reset() }}>Reset</Button>
             <Button
               variant="ghost" size="icon"
               onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')}
@@ -149,13 +113,6 @@ export default function App() {
           </div>
         </div>
 
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".choan"
-          style={{ display: 'none' }}
-          onChange={handleOpen}
-        />
       </div>
     </TooltipProvider>
   )
