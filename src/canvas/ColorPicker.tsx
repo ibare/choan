@@ -2,6 +2,7 @@
 // Opens as Radix Popover content from the context toolbar.
 
 import { useEffect, useRef } from 'react'
+import { setHoveredHistoryColor } from './colorHistoryHover'
 
 // ── HSL conversion utilities ─────────────────────────────────
 
@@ -252,6 +253,8 @@ export default function ColorPicker({ color, onChange, history = [] }: ColorPick
                     className={`color-picker-shade${i === N + centerIdx ? ' active' : ''}`}
                     style={{ flex: `0 0 calc(100% / ${3 * N})` }}
                     onClick={() => onChange(c)}
+                    onMouseEnter={() => setHoveredHistoryColor(c)}
+                    onMouseLeave={() => setHoveredHistoryColor(null)}
                   >
                     <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
                   </button>
@@ -268,6 +271,8 @@ export default function ColorPicker({ color, onChange, history = [] }: ColorPick
                 key={i}
                 className={`color-picker-shade${c === color ? ' active' : ''}`}
                 onClick={() => onChange(c)}
+                onMouseEnter={() => setHoveredHistoryColor(c)}
+                onMouseLeave={() => setHoveredHistoryColor(null)}
               >
                 <div className="color-picker-shade__swatch" style={{ background: colorToHex(c) }} />
               </button>

@@ -233,6 +233,15 @@ void main() {
 
     // Toon shading
     vec3 color = toonShade(p, normal, rd, baseColor);
+
+    // SDF rim glow — hover highlight for color history
+    float glow = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].z : 0.0;
+    if (glow > 0.0) {
+      float rim = 1.0 - max(dot(normal, -rd), 0.0);
+      rim = pow(rim, 2.5);
+      color += baseColor * rim * glow * 2.0;
+    }
+
     outColor = vec4(color, opacity);
     outNormalId = vec4(normal, hit.y);
   }

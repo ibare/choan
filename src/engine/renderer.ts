@@ -26,7 +26,7 @@ export interface SDFRenderer {
   colorWheel: ColorWheelTexture
   bvhData: BVHData | null
   resize(width: number, height: number): void
-  updateScene(elements: ChoanElement[], extrudeDepth?: number): void
+  updateScene(elements: ChoanElement[], extrudeDepth?: number, hoveredColor?: number | null): void
   render(settings: RenderSettings): void
   dispose(): void
 }
@@ -142,7 +142,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   // BVH data exposed for CPU hit testing
   let currentBVH: BVHData | null = null
 
-  function updateScene(elements: ChoanElement[], extrudeDepth?: number) {
+  function updateScene(elements: ChoanElement[], extrudeDepth?: number, hoveredColor?: number | null) {
     // Separate regular and skinOnly elements, preserving original indices
     const regularWithIdx: { el: ChoanElement; origIdx: number }[] = []
     const skinOnlyElements: ChoanElement[] = []
@@ -193,7 +193,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     }
 
     sceneUBO.update(
-      gl, reordered, cssWidth, cssHeight, extrudeDepth, texRects, numRegular,
+      gl, reordered, cssWidth, cssHeight, extrudeDepth, texRects, numRegular, hoveredColor,
     )
   }
 

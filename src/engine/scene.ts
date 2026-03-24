@@ -30,6 +30,10 @@ const EFFECT_DURATION = 300 // ms
 const prevColors = new Map<string, number>()
 const colorChangeTimes = new Map<string, number>()
 
+// Hover highlight — smooth lerp
+let hoverIntensity = 0
+const HOVER_LERP_SPEED = 0.18
+
 export interface SceneUBO {
   buffer: WebGLBuffer
   data: Float32Array
@@ -41,6 +45,7 @@ export interface SceneUBO {
     extrudeDepth?: number,
     texRects?: Map<string, [number, number, number, number]>,
     numRegular?: number,
+    hoveredColor?: number | null,
   ): void
   bind(gl: WebGL2RenderingContext, program: WebGLProgram): void
   dispose(gl: WebGL2RenderingContext): void
@@ -62,10 +67,16 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     extrudeDepthOverride?: number,
     texRects?: Map<string, [number, number, number, number]>,
     numRegular?: number,
+    hoveredColor?: number | null,
   ) {
     const ed = extrudeDepthOverride ?? EXTRUDE_DEPTH
     const count = Math.min(elements.length, MAX_OBJECTS)
     const now = performance.now()
+
+    // Smooth hover intensity transition
+    const hoverTarget = hoveredColor != null ? 1 : 0
+    hoverIntensity += (hoverTarget - hoverIntensity) * HOVER_LERP_SPEED
+    if (hoverIntensity < 0.001) hoverIntensity = 0
 
     // Clear all data
     data.fill(0)
@@ -100,11 +111,17 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       const g = ((color >> 8) & 0xff) / 255
       const b = (color & 0xff) / 255
 
+      // Hover highlight: Z offset based on color match
+      const isMatch = hoveredColor != null && color === hoveredColor
+      const zOffset = hoverIntensity > 0
+        ? (isMatch ? 3 * ed * hoverIntensity : -1 * ed * hoverIntensity)
+        : 0
+
       // uPosType[i]
       const pi = POS_OFFSET + i * 4
       data[pi + 0] = wx
       data[pi + 1] = wy
-      data[pi + 2] = el.z * ed
+      data[pi + 2] = el.z * ed + zOffset
       data[pi + 3] = shapeType
 
       // uSizeRadius[i]
@@ -119,7 +136,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       data[ci + 0] = r
       data[ci + 1] = g
       data[ci + 2] = b
-      data[ci + 3] = el.opacity ?? 1
+      const baseOpacity = el.opacity ?? 1
+      const hoverOpacity = hoverIntensity > 0 && !isMatch
+        ? baseOpacity * (1 - 0.75 * hoverIntensity)  // dim non-matching
+        : baseOpacity
+      data[ci + 3] = hoverOpacity
 
       // Color-change effect: detect change, compute intensity
       const prevColor = prevColors.get(el.id)
@@ -132,10 +153,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       const elapsed = now - changeTime
       const t = Math.max(0, 1 - elapsed / EFFECT_DURATION)
 
-      // uEffect[i]: x = pulse, y = flash, z = (reserved), w = skinOnly
+      // uEffect[i]: x = pulse, y = flash, z = glow, w = skinOnly
       const ei = EFFECT_OFFSET + i * 4
       data[ei + 0] = t * t          // pulse: quadratic ease-out
       data[ei + 1] = t * t * t      // flash: faster cubic decay
+      data[ei + 2] = isMatch ? hoverIntensity : 0  // glow: rim lighting intensity
       data[ei + 3] = (el.skinOnly || el.frameless) ? 1.0 : 0.0
 
       // uTexRect[i]: atlas UV rect (0 if no texture)

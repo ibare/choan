@@ -17,6 +17,7 @@ import { drawOverlay } from './overlayCommands'
 import { kfAnimator } from './kfAnimator'
 import { createLayoutAnimator } from '../layout/animator'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
+import { hoveredHistoryColor } from '../canvas/colorHistoryHover'
 
 export function useAnimateLoop({
   rendererRef,
@@ -169,7 +170,7 @@ export function useAnimateLoop({
         paintComponent(getSkinKey(el), actx, region.w, region.h, { ...el.componentState, _elColor: el.color }, strokeStyle, now)
       }
 
-      renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth)
+      renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth, hoveredHistoryColor)
       renderer.render(rs)
 
       drawOverlay(
