@@ -389,9 +389,10 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
               <RadixPopover.Content
                 className="color-picker"
                 data-theme="dark"
-                side="top"
-                align="center"
+                side="right"
                 sideOffset={8}
+                align="start"
+                collisionPadding={8}
               >
                 <ColorPicker
                   color={el.color ?? 0xe0e0e0}
