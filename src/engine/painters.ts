@@ -12,6 +12,7 @@ type PaintFn = (
   w: number, h: number,
   state: Record<string, unknown>,
   stroke: StrokeStyle,
+  time?: number,
 ) => void
 
 // ── Helpers ──
@@ -467,12 +468,12 @@ function seededRandom(seed: number) {
   }
 }
 
-function paintImage(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, state: Record<string, unknown>, stroke: StrokeStyle) {
+function paintImage(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, state: Record<string, unknown>, stroke: StrokeStyle, time = 0) {
   const seed = Number(state.seed) || 42
   const rng = seededRandom(seed)
   const genres = [genLandscape, genCity, genOcean, genAbstract, genSpace]
   const genre = genres[Math.abs(seed) % genres.length]
-  genre(ctx, w, h, rng)
+  genre(ctx, w, h, rng, time)
   ctx.beginPath()
   ctx.rect(0, 0, w, h)
   outlined(ctx, stroke)
@@ -486,7 +487,7 @@ function makeNoise(rng: RNG, res = 8): (x: number, y: number) => number {
   const g = Array.from({ length: res + 1 }, () => Array.from({ length: res + 1 }, rng))
   const smooth = (t: number) => t * t * (3 - 2 * t)
   return (nx: number, ny: number): number => {
-    const xi = Math.floor(nx) % res, yi = Math.floor(ny) % res
+    const xi = ((Math.floor(nx) % res) + res) % res, yi = ((Math.floor(ny) % res) + res) % res
     const xf = nx - Math.floor(nx), yf = ny - Math.floor(ny)
     const sx = smooth(xf), sy = smooth(yf)
     return (
@@ -509,7 +510,7 @@ function fbm(noise: (x: number, y: number) => number, x: number, y: number, oct 
 }
 
 // ── Genre: Landscape ──
-function genLandscape(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+function genLandscape(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, time = 0) {
   const noise = makeNoise(rng, 8)
 
   const moods = [
@@ -571,11 +572,11 @@ function genLandscape(ctx: OffscreenCanvasRenderingContext2D, w: number, h: numb
   hazeG.addColorStop(1, 'rgba(255,255,255,0)')
   ctx.fillStyle = hazeG; ctx.fillRect(0, h * 0.52, w, h * 0.2)
 
-  drawClouds(ctx, w, h, rng, m.sky[2] < 30)
+  drawClouds(ctx, w, h, rng, m.sky[2] < 30, time)
 }
 
 // ── Genre: City Skyline ──
-function genCity(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+function genCity(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, time = 0) {
   const isNight = rng() > 0.5
   const skyHue = isNight ? 235 + rng() * 15 : 205 + rng() * 40
   const skyL = isNight ? 10 + rng() * 8 : 55 + rng() * 20
@@ -595,7 +596,7 @@ function genCity(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, r
       ctx.fill()
     }
   } else {
-    drawClouds(ctx, w, h, rng, false)
+    drawClouds(ctx, w, h, rng, false, time)
   }
 
   // 3 depth layers of buildings (far → near)
@@ -623,9 +624,16 @@ function genCity(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, r
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             if (rng() < 0.22) continue
-            ctx.fillStyle = isNight
-              ? `rgba(255,${200 + Math.floor(rng() * 55)},${100 + Math.floor(rng() * 120)},${0.4 + rng() * 0.6})`
-              : `rgba(200,220,245,${0.25 + rng() * 0.3})`
+            if (isNight) {
+              const wg = 200 + Math.floor(rng() * 55)
+              const wb = 100 + Math.floor(rng() * 120)
+              const baseA = 0.4 + rng() * 0.6
+              const flickerPhase = r * 13.7 + c * 7.3
+              const wa = time > 0 ? baseA * (0.6 + 0.4 * Math.abs(Math.sin(time * 0.0025 + flickerPhase))) : baseA
+              ctx.fillStyle = `rgba(255,${wg},${wb},${wa})`
+            } else {
+              ctx.fillStyle = `rgba(200,220,245,${0.25 + rng() * 0.3})`
+            }
             ctx.fillRect(x + c * cw + cw * 0.2, by + r * rh2 + rh2 * 0.2, cw * 0.6, rh2 * 0.55)
           }
         }
@@ -650,7 +658,7 @@ function genCity(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, r
 }
 
 // ── Genre: Ocean ──
-function genOcean(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+function genOcean(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, time = 0) {
   const noise = makeNoise(rng, 8)
   const horizon = h * (0.28 + rng() * 0.18)
   const isGolden = rng() > 0.6
@@ -702,18 +710,18 @@ function genOcean(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, 
 
     ctx.beginPath(); ctx.moveTo(0, wY)
     for (let x = 0; x <= w; x += 3) {
-      const n = fbm(noise, (x / w + waveOff + wi * 0.4) * scale, wi * 0.12, 3)
+      const n = fbm(noise, (x / w + waveOff + wi * 0.4 + time * 0.00012) * scale, wi * 0.12, 3)
       ctx.lineTo(x, wY + (n - 0.5) * amp * 2)
     }
     ctx.strokeStyle = `rgba(255,255,255,${0.05 + t * 0.14})`
     ctx.lineWidth = 0.5 + t * 1.8; ctx.stroke()
   }
 
-  drawClouds(ctx, w, horizon, rng, false)
+  drawClouds(ctx, w, horizon, rng, false, time)
 }
 
 // ── Genre: Abstract ──
-function genAbstract(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+function genAbstract(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, time = 0) {
   const noise = makeNoise(rng, 6)
   const baseHue = rng() * 360
   const palette: [number, number, number][] = [
@@ -729,7 +737,9 @@ function genAbstract(ctx: OffscreenCanvasRenderingContext2D, w: number, h: numbe
 
   // Soft gradient blobs (Voronoi-like cells)
   for (let i = 0; i < 3 + Math.floor(rng() * 4); i++) {
-    const bx = rng() * w, by = rng() * h
+    const bxBase = rng() * w, byBase = rng() * h
+    const bx = bxBase + Math.sin(i * 1.3 + time * 0.0008) * w * 0.06
+    const by = byBase + Math.cos(i * 2.1 + time * 0.0006) * h * 0.06
     const br = Math.min(w, h) * (0.22 + rng() * 0.38)
     const [bh, bs, bl] = palette[i % palette.length]
     const bG = ctx.createRadialGradient(bx, by, 0, bx, by, br)
@@ -779,7 +789,7 @@ function genAbstract(ctx: OffscreenCanvasRenderingContext2D, w: number, h: numbe
 }
 
 // ── Genre: Space ──
-function genSpace(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG) {
+function genSpace(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, time = 0) {
   // Deep space background
   const bgHue = 230 + rng() * 50
   const bgG = ctx.createLinearGradient(0, 0, w * 0.5, h)
@@ -807,10 +817,20 @@ function genSpace(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, 
   for (let i = 0; i < 120 + Math.floor(rng() * 100); i++) {
     const sx = rng() * w, sy = rng() * h, sr = 0.2 + rng() * 1.8
     ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2)
-    ctx.fillStyle = sr > 1.2
-      ? hsl(rng() > 0.6 ? 220 + rng() * 40 : 38 + rng() * 20, sr > 1.5 ? 30 : 10, 85 + rng() * 12)
-      : `rgba(255,255,255,${0.3 + rng() * 0.7})`
+    if (sr > 1.2) {
+      const isBlue = rng() > 0.6
+      const baseHue = isBlue ? 220 + rng() * 40 : 38 + rng() * 20
+      const baseLightness = 85 + rng() * 12
+      const twinkle = time > 0 ? 0.45 + 0.55 * Math.abs(Math.sin(time * 0.0018 + i * 2.4)) : 1
+      ctx.globalAlpha = twinkle
+      ctx.fillStyle = hsl(baseHue, sr > 1.5 ? 30 : 10, baseLightness)
+    } else {
+      const baseA = 0.3 + rng() * 0.7
+      const a = time > 0 ? baseA * (0.08 + 0.92 * Math.abs(Math.sin(time * 0.0022 + i * 2.1))) : baseA
+      ctx.fillStyle = `rgba(255,255,255,${a})`
+    }
     ctx.fill()
+    ctx.globalAlpha = 1
     // Diffraction spikes on bright stars
     if (sr > 1.5) {
       ctx.strokeStyle = 'rgba(255,255,255,0.28)'
@@ -832,16 +852,92 @@ function genSpace(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, 
   pG.addColorStop(1, hsl(pHue + 25, 25, 18 + rng() * 10))
   ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fillStyle = pG; ctx.fill()
 
-  // Surface bands
+  // Jupiter-like turbulent banded surface
   ctx.save()
   ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.clip()
-  const bandCount = 2 + Math.floor(rng() * 3)
-  for (let i = 0; i < bandCount; i++) {
-    const bY = py - pr + (i + 0.5) * pr * 2 / bandCount + (rng() - 0.5) * pr * 0.3
-    const bH = pr * (0.1 + rng() * 0.2)
-    ctx.fillStyle = `hsla(${pHue + (rng() - 0.5) * 30},${35 + rng() * 20}%,${40 + rng() * 20}%,${0.2 + rng() * 0.3})`
-    ctx.fillRect(px - pr, bY - bH / 2, pr * 2, bH)
+
+  // Hash-based surface noise — no rng() calls consumed
+  const jSeed = pHue + px * 0.01 + py * 0.007
+  const jHash = (u: number, v: number) => {
+    const n = Math.sin(u * 127.1 + v * 311.7 + jSeed) * 43758.5453
+    return n - Math.floor(n)
   }
+  const jNoise = (u: number, v: number) => {
+    const xi = Math.floor(u), yi = Math.floor(v)
+    const xf = u - xi, yf = v - yi
+    const sm = (t: number) => t * t * (3 - 2 * t)
+    const sx = sm(xf), sy = sm(yf)
+    return jHash(xi, yi)*(1-sx)*(1-sy) + jHash(xi+1, yi)*sx*(1-sy) + jHash(xi, yi+1)*(1-sx)*sy + jHash(xi+1, yi+1)*sx*sy
+  }
+  const jFbm = (u: number, v: number) => {
+    let val = 0, amp = 0.5, freq = 1, tot = 0
+    for (let o = 0; o < 4; o++) { val += jNoise(u*freq, v*freq)*amp; tot += amp; amp *= 0.5; freq *= 2 }
+    return val / tot
+  }
+
+  const scroll = time * 0.00006
+
+  // Color palette: pole / dark belt / bright zone / equatorial belt (alternating)
+  const pole: [number,number,number]  = [pHue+15, 22, 18]
+  const belt: [number,number,number]  = [pHue+22, 42, 30]
+  const zone: [number,number,number]  = [pHue+4,  16, 66]
+  const eBelt: [number,number,number] = [pHue+30, 50, 26]
+
+  const bandEdges = [-1.0, -0.74, -0.52, -0.28, -0.06, 0.14, 0.36, 0.58, 0.78, 1.0]
+  const bandCols: [number,number,number][] = [pole, belt, zone, eBelt, zone, eBelt, zone, belt, pole]
+
+  for (let b = 0; b < bandCols.length; b++) {
+    const [ch, cs, cl] = bandCols[b]
+    ctx.beginPath()
+    let first = true
+    for (let dx = -pr; dx <= pr + 1; dx += 2) {
+      const t = dx / pr
+      const warp = (jFbm((t + scroll) * 2.8, b * 1.1) - 0.5) * 0.09
+      const ey = py + (bandEdges[b] + warp) * pr
+      if (first) { ctx.moveTo(px + dx, ey); first = false }
+      else ctx.lineTo(px + dx, ey)
+    }
+    for (let dx = pr; dx >= -pr - 1; dx -= 2) {
+      const t = dx / pr
+      const warp = (jFbm((t + scroll) * 2.8, (b+1) * 1.1) - 0.5) * 0.09
+      const ey = py + (bandEdges[b+1] + warp) * pr
+      ctx.lineTo(px + dx, ey)
+    }
+    ctx.closePath()
+    ctx.fillStyle = hsl(ch, cs, cl)
+    ctx.fill()
+  }
+
+  // Oval storms: 2 fixed rng draws each (x, y, size) = 6 rng calls total
+  const storms = [
+    { sx: rng(), sy: rng(), sz: rng(), yBand: -0.17, speed: 18, hOff: 35, big: true  },
+    { sx: rng(), sy: rng(), sz: rng(), yBand:  0.28, speed: 28, hOff: 18, big: false },
+  ]
+  for (const s of storms) {
+    const baseX = (s.sx * pr * 2 + scroll * pr * s.speed) % (pr * 2)
+    const stormX = px - pr + baseX
+    const stormY = py + (s.yBand + (s.sy - 0.5) * 0.05) * pr
+    const rx = pr * (s.big ? 0.20 + s.sz * 0.08 : 0.09 + s.sz * 0.04)
+    const ry = rx * (s.big ? 0.52 : 0.60)
+    ctx.save()
+    ctx.translate(stormX, stormY)
+    ctx.scale(1, ry / rx)
+    const sG = ctx.createRadialGradient(0, 0, 0, 0, 0, rx)
+    sG.addColorStop(0,    `hsla(${pHue+s.hOff}, 68%, ${s.big ? 42 : 58}%, 0.92)`)
+    sG.addColorStop(0.55, `hsla(${pHue+s.hOff-10}, 52%, ${s.big ? 32 : 46}%, 0.65)`)
+    sG.addColorStop(1,    'rgba(0,0,0,0)')
+    ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2)
+    ctx.fillStyle = sG; ctx.fill()
+    ctx.restore()
+  }
+
+  // Limb darkening — makes the planet look spherical
+  const limbG = ctx.createRadialGradient(px, py, pr * 0.55, px, py, pr)
+  limbG.addColorStop(0, 'rgba(0,0,0,0)')
+  limbG.addColorStop(1, 'rgba(0,0,0,0.55)')
+  ctx.fillStyle = limbG
+  ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill()
+
   ctx.restore()
 
   // Atmosphere rim
@@ -863,13 +959,42 @@ function genSpace(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, 
     }
     ctx.restore()
   }
+
+  // Shooting stars — purely time-based, no rng
+  if (time > 0) {
+    const shootConfigs = [
+      { period: 5200, offset: 0,    startFrac: [0.05, 0.08], angle: 0.38 },
+      { period: 7800, offset: 2600, startFrac: [0.45, 0.18], angle: 0.28 },
+    ]
+    for (const sc of shootConfigs) {
+      const phase = ((time + sc.offset) % sc.period) / sc.period
+      if (phase > 0.1) continue
+      const progress = phase / 0.1
+      const fade = Math.sin(progress * Math.PI)
+      const speed = w * 0.55
+      const hx = sc.startFrac[0] * w + Math.cos(sc.angle) * speed * progress
+      const hy = sc.startFrac[1] * h + Math.sin(sc.angle) * speed * progress
+      const trailLen = w * 0.14 * fade
+      const tx = hx - Math.cos(sc.angle) * trailLen
+      const ty = hy - Math.sin(sc.angle) * trailLen
+      const grad = ctx.createLinearGradient(tx, ty, hx, hy)
+      grad.addColorStop(0, 'rgba(255,255,255,0)')
+      grad.addColorStop(1, `rgba(255,255,255,${0.9 * fade})`)
+      ctx.strokeStyle = grad
+      ctx.lineWidth = 1.8
+      ctx.lineCap = 'round'
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke()
+    }
+  }
 }
 
 // ── Shared: Clouds ──
-function drawClouds(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, isNight: boolean) {
+function drawClouds(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number, rng: RNG, isNight: boolean, time = 0) {
   const count = isNight ? Math.floor(rng() * 2) : 1 + Math.floor(rng() * 4)
   for (let i = 0; i < count; i++) {
-    const cx = w * rng(), cy = h * (0.06 + rng() * 0.28)
+    const baseCx = w * rng(), cy = h * (0.06 + rng() * 0.28)
+    const driftSpeed = 0.018 + i * 0.007
+    const cx = ((baseCx + time * driftSpeed) % (w * 1.4)) - w * 0.2
     const cw = w * (0.08 + rng() * 0.16), ch = cw * (0.28 + rng() * 0.28)
     const alpha = isNight ? 0.12 : 0.35 + rng() * 0.45
     ctx.fillStyle = `rgba(255,255,255,${alpha})`
@@ -1048,10 +1173,11 @@ export function paintComponent(
   w: number, h: number,
   state: Record<string, unknown>,
   stroke: StrokeStyle,
+  time = 0,
 ): boolean {
   const painter = painters[skin]
   if (!painter) return false
-  painter(ctx, w, h, state, stroke)
+  painter(ctx, w, h, state, stroke, time)
   ctx.restore()
   return true
 }

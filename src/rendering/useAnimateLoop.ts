@@ -159,6 +159,16 @@ export function useAnimateLoop({
         }
       }
 
+      // Repaint playing image elements each frame with current time (no full atlas rebuild)
+      const now = performance.now()
+      for (const el of skinnedEls) {
+        if (el.skin !== 'image' || !el.componentState?.playing) continue
+        const region = renderer.atlas.getRegion(el.id)
+        if (!region) continue
+        const actx = renderer.atlas.getContext(region)
+        paintComponent(getSkinKey(el), actx, region.w, region.h, { ...el.componentState, _elColor: el.color }, strokeStyle, now)
+      }
+
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth)
       renderer.render(rs)
 

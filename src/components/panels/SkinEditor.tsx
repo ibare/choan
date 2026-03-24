@@ -136,6 +136,9 @@ export function SkinEditor({ skin, state: cs, onChange }: SkinEditorProps) {
           <Button size="sm" onClick={() => set({ seed: Math.floor(Math.random() * 9999) })}>
             Shuffle
           </Button>
+          <Button size="sm" active={!!cs.playing} onClick={() => set({ playing: !cs.playing })}>
+            {cs.playing ? 'Pause' : 'Play'}
+          </Button>
         </div>
       )
     case 'icon':

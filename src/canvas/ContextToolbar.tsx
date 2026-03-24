@@ -11,7 +11,7 @@ import type { OrbitControls } from '../engine/controls'
 import {
   SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
   Rectangle, RectangleDashed, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
-  ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB,
+  ToggleRight, Percent, Hash, Star, ArrowsClockwise, TextB, Play, Pause,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
@@ -174,9 +174,14 @@ function renderSkinOptions(skin: string, cs: CS, setCS: (patch: CS) => void, ico
       return <ScrubInput icon={<Columns size={13} />} value={Number(cs.columns) || 3} min={1} max={10} onChange={(v) => setCS({ columns: v })} />
     case 'image':
       return (
-        <Button className="ctx-btn" title="Shuffle" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
-          <ArrowsClockwise size={15} />
-        </Button>
+        <>
+          <Button className="ctx-btn" title="Shuffle" onClick={() => setCS({ seed: Math.floor(Math.random() * 9999) })}>
+            <ArrowsClockwise size={15} />
+          </Button>
+          <Button className="ctx-btn" title={cs.playing ? 'Pause' : 'Play'} active={!!cs.playing} onClick={() => setCS({ playing: !cs.playing })}>
+            {cs.playing ? <Pause size={15} /> : <Play size={15} />}
+          </Button>
+        </>
       )
     case 'search':     return textInput('query', 'Search...')
     case 'icon':
