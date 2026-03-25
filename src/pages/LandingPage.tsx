@@ -23,11 +23,13 @@ export default function LandingPage() {
           <Link to="/app" className="btn-primary" onClick={() => track('landing-cta-click')}>Get started for free</Link>
           <Link to="/features" className="btn-ghost">Learn More</Link>
         </div>
-        <img
-          src={import.meta.env.BASE_URL + 'landing.png'}
-          alt="Choan editor screenshot"
-          className="hero__image"
-        />
+        <div className="hero__image-wrap">
+          <img
+            src={import.meta.env.BASE_URL + 'landing.png'}
+            alt="Choan editor screenshot"
+            className="hero__image"
+          />
+        </div>
       </section>
 
       {/* Value Props */}

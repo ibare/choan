@@ -159,12 +159,29 @@
   gap: 16px;
 }
 
+.hero__image-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 960px;
+  margin-top: 56px;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 8px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+.hero__image-wrap::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(to bottom, transparent, var(--site-bg));
+  pointer-events: none;
+}
 .hero__image {
   width: 100%;
-  max-width: 900px;
-  margin-top: 48px;
+  display: block;
   border-radius: 12px;
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 /* ── Value Props ───────────────────────────────────── */
