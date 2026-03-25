@@ -18,6 +18,10 @@ const bindings: HotkeyBinding[] = [
   { code: 'Delete',    action: 'delete',         label: 'Delete selected' },
   { code: 'Backspace', action: 'delete',         label: 'Delete selected' },
 
+  // ── Undo/Redo ──
+  { code: 'KeyZ', ctrl: true, action: 'undo',    label: 'Undo' },
+  { code: 'KeyZ', ctrl: true, shift: true, action: 'redo', label: 'Redo' },
+
   // ── Clipboard ──
   { code: 'KeyC', ctrl: true, action: 'copy',    label: 'Copy' },
   { code: 'KeyV', ctrl: true, action: 'paste',   label: 'Paste' },

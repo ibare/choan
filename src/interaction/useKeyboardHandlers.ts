@@ -7,6 +7,7 @@ import type { ChoanElement } from '../store/useChoanStore'
 import type { OrbitControls } from '../engine/controls'
 import { resolveHotkey } from './hotkeyRegistry'
 import { splitElement } from './splitElement'
+import { undo, redo, pushSnapshot } from '../store/history'
 
 export type ActionHandler = () => void
 
@@ -37,6 +38,8 @@ export function useKeyboardHandlers(
   }, [])
 
   const builtinActions = useCallback((): Record<string, ActionHandler> => ({
+    'undo': () => undo(),
+    'redo': () => redo(),
     'escape': () => {
       if (splitModeRef.current.active) {
         splitModeRef.current = { active: false, count: 2, elementId: '', direction: 'horizontal' }
@@ -49,7 +52,9 @@ export function useKeyboardHandlers(
     'delete': () => {
       if (splitModeRef.current.active) return
       const { selectedIds } = useChoanStore.getState()
+      if (selectedIds.length === 0) return
       for (const id of selectedIds) removeElement(id)
+      pushSnapshot()
     },
     'copy': () => {
       const { selectedIds, elements } = useChoanStore.getState()
@@ -109,6 +114,7 @@ export function useKeyboardHandlers(
         }
       }
       store.selectElement(rootId)
+      pushSnapshot()
     },
     'tool:select': () => { setTool('select'); setPendingSkin(null); setPendingFrame(null) },
     'tool:rectangle': () => { setTool('rectangle'); setPendingSkin(null); setPendingFrame(null) },

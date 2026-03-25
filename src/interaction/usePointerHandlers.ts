@@ -19,6 +19,7 @@ import { screenToRay } from '../engine/sdf'
 import { handleColorPickerClick, computeColorPickerHover } from './colorPickerHandlers'
 import { SKIN_BY_ID } from '../config/skins'
 import { track } from '../utils/analytics'
+import { pushSnapshot } from '../store/history'
 import { handleDragMove, finalizeDrag } from './dragHandlers'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
 import { handleDrawMove, finalizeDrawn } from './drawHandlers'
@@ -561,6 +562,11 @@ export function usePointerHandlers({
         const el = animEls.find((el) => el.id === selId)
         if (el) autoKeyframe(selId, 'radius', el.radius ?? 0, radiusStartRef.current)
       }
+    }
+
+    // Snapshot for undo after any meaningful interaction
+    if (isDrawingRef.current || isResizingRef.current || isDraggingRef.current || isRadiusDragRef.current) {
+      pushSnapshot()
     }
 
     isDrawingRef.current = false; drawElIdRef.current = null
