@@ -148,6 +148,19 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   window.addEventListener('keyup', onKeyUp)
 
   function update() {
+    // Animated reset (smooth ease-out lerp)
+    if (resetTarget) {
+      const elapsed = performance.now() - resetTarget.startTime
+      const raw = Math.min(1, elapsed / resetTarget.duration)
+      const t = 1 - (1 - raw) * (1 - raw) * (1 - raw)  // cubic ease-out
+      theta = theta + (resetTarget.theta - theta) * t
+      phi = phi + (resetTarget.phi - phi) * t
+      radius = radius + (resetTarget.radius - radius) * t
+      panX = panX + (resetTarget.panX - panX) * t
+      panY = panY + (resetTarget.panY - panY) * t
+      if (raw >= 1) resetTarget = null
+    }
+
     // Apply velocities with damping (rotation only — panning is direct)
     theta += thetaVel
     phi += phiVel
@@ -189,9 +202,13 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
 
   function getAngles() { return { theta, phi } }
   function setAngles(t: number, p: number) { theta = t; phi = p }
+
+  // Animated reset
+  let resetTarget: { theta: number; phi: number; radius: number; panX: number; panY: number; startTime: number; duration: number } | null = null
+
   function resetView() {
-    theta = 0; phi = Math.PI / 2; radius = 20; panX = 0; panY = 0
     thetaVel = 0; phiVel = 0; radiusVel = 0
+    resetTarget = { theta: 0, phi: Math.PI / 2, radius: 20, panX: 0, panY: 0, startTime: performance.now(), duration: 1000 }
   }
 
   // Initialize camera position
