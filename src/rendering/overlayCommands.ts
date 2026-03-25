@@ -41,6 +41,7 @@ export function drawOverlay(
   const p2w = (px: number, py: number): [number, number] => pixelToWorld(px, py, w, h)
 
   // Selection outlines + handles (corner discs + mid-edge capsules)
+  const isSingleSelect = selectedIds.length === 1
   for (const selId of selectedIds) {
     const el = elements.find((e) => e.id === selId)
     if (!el) continue
@@ -69,63 +70,62 @@ export function drawOverlay(
     const sBrx = sn(ov.projectToScreen(br[0], br[1], elZ).px), sBry = sn(ov.projectToScreen(br[0], br[1], elZ).py)
     const sBlx = sn(ov.projectToScreen(bl[0], bl[1], elZ).px), sBly = sn(ov.projectToScreen(bl[0], bl[1], elZ).py)
 
-    // Corner handles — screen-space squares (drawRectScreen param = total size, so 2× half-size)
-    const cornerR = Math.round(6 * dpr)  // visual half-size in physical px
-    const cornerStroke = Math.round(2 * dpr)
-    const cornerInnerR = cornerR - cornerStroke
-    for (const [sx, sy] of [[sTlx, sTly], [sTrx, sTry], [sBrx, sBry], [sBlx, sBly]]) {
-      ov.drawRectScreen(sx, sy, 2 * cornerR, 2 * cornerR, SELECTION_COLOR)
-      ov.drawRectScreen(sx, sy, 2 * cornerInnerR, 2 * cornerInnerR, [1, 1, 1, 1])
-    }
-
-    // Mid-edge capsule handles — fully screen-space for uniform stroke
-    const capL = Math.round(17 * dpr)   // half-length (physical px)
-    const capW = Math.round(5 * dpr)    // half-width = cap radius (physical px)
-    const capStroke = Math.round(2 * dpr) // stroke width (physical px)
-    const capInnerW = capW - capStroke
-    const capInnerL = capL - capStroke
-    const capBodyHL = capL - capW        // body half-length (excluding cap radius)
-    const capInnerBodyHL = capInnerL - capInnerW
-
-    const drawCapsule = (wx: number, wy: number, horizontal: boolean) => {
-      const sc = ov.projectToScreen(wx, wy, elZ)
-      const cx = Math.round(sc.px), cy = Math.round(sc.py)
-
-      // drawRectScreen size params = total pixels; drawDiscScreen radius = half (diameter = 2R)
-      // So rect sizes must be 2× to match disc diameter
-      if (horizontal) {
-        ov.drawRectScreen(cx, cy, 2 * capBodyHL, 2 * capW, SELECTION_COLOR)
-        ov.drawDiscScreen(cx - capBodyHL, cy, capW, SELECTION_COLOR)
-        ov.drawDiscScreen(cx + capBodyHL, cy, capW, SELECTION_COLOR)
-        ov.drawRectScreen(cx, cy, 2 * capInnerBodyHL, 2 * capInnerW, [1, 1, 1, 1])
-        ov.drawDiscScreen(cx - capInnerBodyHL, cy, capInnerW, [1, 1, 1, 1])
-        ov.drawDiscScreen(cx + capInnerBodyHL, cy, capInnerW, [1, 1, 1, 1])
-      } else {
-        ov.drawRectScreen(cx, cy, 2 * capW, 2 * capBodyHL, SELECTION_COLOR)
-        ov.drawDiscScreen(cx, cy - capBodyHL, capW, SELECTION_COLOR)
-        ov.drawDiscScreen(cx, cy + capBodyHL, capW, SELECTION_COLOR)
-        ov.drawRectScreen(cx, cy, 2 * capInnerW, 2 * capInnerBodyHL, [1, 1, 1, 1])
-        ov.drawDiscScreen(cx, cy - capInnerBodyHL, capInnerW, [1, 1, 1, 1])
-        ov.drawDiscScreen(cx, cy + capInnerBodyHL, capInnerW, [1, 1, 1, 1])
+    // Handles only for single selection (no resize on multi-select)
+    if (isSingleSelect) {
+      // Corner handles — screen-space squares
+      const cornerR = Math.round(6 * dpr)
+      const cornerStroke = Math.round(2 * dpr)
+      const cornerInnerR = cornerR - cornerStroke
+      for (const [sx, sy] of [[sTlx, sTly], [sTrx, sTry], [sBrx, sBry], [sBlx, sBly]]) {
+        ov.drawRectScreen(sx, sy, 2 * cornerR, 2 * cornerR, SELECTION_COLOR)
+        ov.drawRectScreen(sx, sy, 2 * cornerInnerR, 2 * cornerInnerR, [1, 1, 1, 1])
       }
-    }
 
-    // Only show mid-edge handles if the edge is long enough to fit the capsule
-    const edgeW = Math.abs(sTrx - sTlx)  // horizontal edge length in physical px
-    const edgeH = Math.abs(sBly - sTly)  // vertical edge length in physical px
-    const minEdge = capL * 2 + cornerR * 2  // capsule + corner handles must fit
+      // Mid-edge capsule handles — fully screen-space
+      const capL = Math.round(17 * dpr)
+      const capW = Math.round(5 * dpr)
+      const capStroke = Math.round(2 * dpr)
+      const capInnerW = capW - capStroke
+      const capInnerL = capL - capStroke
+      const capBodyHL = capL - capW
+      const capInnerBodyHL = capInnerL - capInnerW
 
-    if (edgeW > minEdge) {
-      const tmW = p2w(el.x + el.width / 2, el.y)
-      const bmW = p2w(el.x + el.width / 2, el.y + el.height)
-      drawCapsule(tmW[0], tmW[1], true)
-      drawCapsule(bmW[0], bmW[1], true)
-    }
-    if (edgeH > minEdge) {
-      const rmW = p2w(el.x + el.width, el.y + el.height / 2)
-      const lmW = p2w(el.x, el.y + el.height / 2)
-      drawCapsule(rmW[0], rmW[1], false)
-      drawCapsule(lmW[0], lmW[1], false)
+      const drawCapsule = (wx: number, wy: number, horizontal: boolean) => {
+        const sc = ov.projectToScreen(wx, wy, elZ)
+        const cx = Math.round(sc.px), cy = Math.round(sc.py)
+        if (horizontal) {
+          ov.drawRectScreen(cx, cy, 2 * capBodyHL, 2 * capW, SELECTION_COLOR)
+          ov.drawDiscScreen(cx - capBodyHL, cy, capW, SELECTION_COLOR)
+          ov.drawDiscScreen(cx + capBodyHL, cy, capW, SELECTION_COLOR)
+          ov.drawRectScreen(cx, cy, 2 * capInnerBodyHL, 2 * capInnerW, [1, 1, 1, 1])
+          ov.drawDiscScreen(cx - capInnerBodyHL, cy, capInnerW, [1, 1, 1, 1])
+          ov.drawDiscScreen(cx + capInnerBodyHL, cy, capInnerW, [1, 1, 1, 1])
+        } else {
+          ov.drawRectScreen(cx, cy, 2 * capW, 2 * capBodyHL, SELECTION_COLOR)
+          ov.drawDiscScreen(cx, cy - capBodyHL, capW, SELECTION_COLOR)
+          ov.drawDiscScreen(cx, cy + capBodyHL, capW, SELECTION_COLOR)
+          ov.drawRectScreen(cx, cy, 2 * capInnerW, 2 * capInnerBodyHL, [1, 1, 1, 1])
+          ov.drawDiscScreen(cx, cy - capInnerBodyHL, capInnerW, [1, 1, 1, 1])
+          ov.drawDiscScreen(cx, cy + capInnerBodyHL, capInnerW, [1, 1, 1, 1])
+        }
+      }
+
+      const edgeW = Math.abs(sTrx - sTlx)
+      const edgeH = Math.abs(sBly - sTly)
+      const minEdge = capL * 2 + Math.round(6 * dpr) * 2
+
+      if (edgeW > minEdge) {
+        const tmW = p2w(el.x + el.width / 2, el.y)
+        const bmW = p2w(el.x + el.width / 2, el.y + el.height)
+        drawCapsule(tmW[0], tmW[1], true)
+        drawCapsule(bmW[0], bmW[1], true)
+      }
+      if (edgeH > minEdge) {
+        const rmW = p2w(el.x + el.width, el.y + el.height / 2)
+        const lmW = p2w(el.x, el.y + el.height / 2)
+        drawCapsule(rmW[0], rmW[1], false)
+        drawCapsule(lmW[0], lmW[1], false)
+      }
     }
 
     // Layout resize handles + sizing indicators (row/column containers)
