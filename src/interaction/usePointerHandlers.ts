@@ -1,7 +1,7 @@
 // Pointer event handlers hook — owns all interaction refs and routes to sub-handlers.
 // Returns handlers for the canvas element + refs needed by the rAF render loop.
 
-import { useRef, useState, useCallback, type MutableRefObject } from 'react'
+import { useRef, useState, useCallback, useEffect, type MutableRefObject } from 'react'
 import type { SDFRenderer } from '../engine/renderer'
 import type { SnapLine } from '../canvas/snapUtils'
 import { useChoanStore } from '../store/useChoanStore'
@@ -71,6 +71,16 @@ export function usePointerHandlers({
     return { x: px, y: py }
   }, [])
 
+  // ── Space key state (for panning passthrough to OrbitControls) ──
+  const spaceDownRef = useRef(false)
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => { if (e.code === 'Space') spaceDownRef.current = true }
+    const up = (e: KeyboardEvent) => { if (e.code === 'Space') spaceDownRef.current = false }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
+  }, [])
+
   // ── Interaction refs ──
 
   const colorPickerOpenRef = useRef(false)
@@ -119,6 +129,8 @@ export function usePointerHandlers({
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return
+    // Space + left-click is reserved for panning (handled by OrbitControls)
+    if (spaceDownRef.current) return
 
     if (isDragSelectRef.current) {
       const originalPointerId = dragSelectPointerIdRef.current

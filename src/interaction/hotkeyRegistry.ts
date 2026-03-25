@@ -24,7 +24,7 @@ const bindings: HotkeyBinding[] = [
 
   // ── Tools ──
   { key: 'v', action: 'tool:select',            label: 'Select tool' },
-  { key: ' ', action: 'tool:select',            label: 'Select tool (Space)' },
+  // Space reserved for canvas panning (OrbitControls)
   { key: 'r', action: 'tool:rectangle',         label: 'Rectangle tool' },
 
   // ── Split ──

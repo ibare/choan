@@ -11,6 +11,7 @@ export interface OrbitControls {
   setAngles(theta: number, phi: number): void
   wheelEnabled: boolean
   readonly isInteracting: boolean
+  readonly isSpaceDown: boolean
 }
 
 export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): OrbitControls {
@@ -36,6 +37,7 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   let isPanning = false
   let lastX = 0
   let lastY = 0
+  let spaceDown = false
 
   const rotateSpeed = 0.005
   const panSpeed = 0.04
@@ -52,8 +54,8 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
       lastX = e.clientX
       lastY = e.clientY
       canvas.setPointerCapture(e.pointerId)
-    } else if (e.button === 1) {
-      // Middle-click: pan
+    } else if (e.button === 1 || (e.button === 0 && spaceDown)) {
+      // Middle-click or Space + left-click: pan
       isPanning = true
       lastX = e.clientX
       lastY = e.clientY
@@ -79,7 +81,22 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
 
   function onPointerUp(e: PointerEvent) {
     if (e.button === 2) isRotating = false
-    if (e.button === 1) isPanning = false
+    if (e.button === 1 || e.button === 0) isPanning = false
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.code === 'Space' && !e.repeat) {
+      spaceDown = true
+      canvas.style.cursor = 'grab'
+    }
+  }
+
+  function onKeyUp(e: KeyboardEvent) {
+    if (e.code === 'Space') {
+      spaceDown = false
+      if (isPanning) isPanning = false
+      canvas.style.cursor = ''
+    }
   }
 
   let wheelEnabled = true
@@ -121,6 +138,8 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('contextmenu', onContextMenu)
+  window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('keyup', onKeyUp)
 
   function update() {
     // Apply velocities with damping
@@ -162,6 +181,8 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     canvas.removeEventListener('pointerup', onPointerUp)
     canvas.removeEventListener('wheel', onWheel)
     canvas.removeEventListener('contextmenu', onContextMenu)
+    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keyup', onKeyUp)
   }
 
   function getAngles() { return { theta, phi } }
@@ -175,5 +196,6 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     get wheelEnabled() { return wheelEnabled },
     set wheelEnabled(v: boolean) { wheelEnabled = v },
     get isInteracting() { return isRotating || isPanning },
+    get isSpaceDown() { return spaceDown },
   }
 }
