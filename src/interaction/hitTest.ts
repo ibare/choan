@@ -44,6 +44,7 @@ export function hitTestCorner(
   if (!el) return -1
   const pixel = screenToPixel(clientX, clientY)
   if (!pixel) return -1
+  // Corners: 0=BL, 1=BR, 2=TR, 3=TL
   const corners = [
     { x: el.x, y: el.y + el.height },
     { x: el.x + el.width, y: el.y + el.height },
@@ -55,6 +56,18 @@ export function hitTestCorner(
     const dx = pixel.x - corners[i].x
     const dy = pixel.y - corners[i].y
     if (dx * dx + dy * dy <= scaledHitR * scaledHitR) return i
+  }
+  // Mid-edge handles: 4=top, 5=right, 6=bottom, 7=left
+  const midEdges = [
+    { x: el.x + el.width / 2, y: el.y },                  // 4: top
+    { x: el.x + el.width, y: el.y + el.height / 2 },      // 5: right
+    { x: el.x + el.width / 2, y: el.y + el.height },      // 6: bottom
+    { x: el.x, y: el.y + el.height / 2 },                  // 7: left
+  ]
+  for (let i = 0; i < midEdges.length; i++) {
+    const dx = pixel.x - midEdges[i].x
+    const dy = pixel.y - midEdges[i].y
+    if (dx * dx + dy * dy <= scaledHitR * scaledHitR) return 4 + i
   }
   return -1
 }

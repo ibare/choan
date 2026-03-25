@@ -2,12 +2,13 @@
 // Renders lines and quads on top of the SDF scene (depth test disabled)
 
 import { createProgram } from './gl'
-import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT, RECT_SCREEN_FRAG, TEX_SCREEN_VERT, TEX_SCREEN_FRAG } from './overlayShaders'
+import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT, RECT_SCREEN_FRAG, TEX_SCREEN_VERT, TEX_SCREEN_FRAG, AA_RECT_VERT, AA_RECT_FRAG } from './overlayShaders'
 
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
+  drawWorldRect(cx: number, cy: number, hw: number, hh: number, color: [number, number, number, number]): void
   drawDisc(cx: number, cy: number, radius: number, color: [number, number, number, number]): void
   drawDiscScreen(canvasPx: number, canvasPy: number, radiusPx: number, color: [number, number, number, number]): void
   drawRectScreen(canvasPx: number, canvasPy: number, widthPx: number, heightPx: number, color: [number, number, number, number]): void
@@ -24,6 +25,8 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   const discProgram = createProgram(gl, DISC_VERT, DISC_FRAG)
   const discScreenProgram = createProgram(gl, DISC_SCREEN_VERT, DISC_FRAG)
   const rectScreenProgram = createProgram(gl, DISC_SCREEN_VERT, RECT_SCREEN_FRAG)
+  const aaRectWorldProgram = createProgram(gl, AA_RECT_VERT, AA_RECT_FRAG)
+  const aaRectScreenProgram = createProgram(gl, DISC_SCREEN_VERT, AA_RECT_FRAG)
   const texScreenProgram = createProgram(gl, TEX_SCREEN_VERT, TEX_SCREEN_FRAG)
 
   // Line VAO
@@ -130,6 +133,28 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindVertexArray(null)
   }
 
+  function drawWorldRect(cx: number, cy: number, hw: number, hh: number, color: [number, number, number, number]) {
+    if (!currentViewProj) return
+    // vec4 per vertex: xy = position, zw = UV (0..1)
+    const data = new Float32Array([
+      cx - hw, cy - hh, 0, 0,
+      cx + hw, cy - hh, 1, 0,
+      cx + hw, cy + hh, 1, 1,
+      cx - hw, cy - hh, 0, 0,
+      cx + hw, cy + hh, 1, 1,
+      cx - hw, cy + hh, 0, 1,
+    ])
+    gl.useProgram(aaRectWorldProgram)
+    gl.uniformMatrix4fv(gl.getUniformLocation(aaRectWorldProgram, 'uViewProj'), false, currentViewProj)
+    gl.uniform4fv(gl.getUniformLocation(aaRectWorldProgram, 'uColor'), color)
+    gl.uniform1f(gl.getUniformLocation(aaRectWorldProgram, 'uZ'), currentZ)
+    gl.bindVertexArray(discVao)  // vec4 layout
+    gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.TRIANGLES, 0, 6)
+    gl.bindVertexArray(null)
+  }
+
   // Static billboard quad: 6 vertices, each = (cx, cy, offsetX, offsetY)
   // cx/cy are filled per-call; offsets are corner directions (-1..1)
   const discQuad = new Float32Array(6 * 4)
@@ -207,8 +232,8 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
       ndcX - ndcHW, ndcY + ndcHH, 0, 1,
     ])
 
-    gl.useProgram(rectScreenProgram)
-    gl.uniform4fv(gl.getUniformLocation(rectScreenProgram, 'uColor'), color)
+    gl.useProgram(aaRectScreenProgram)
+    gl.uniform4fv(gl.getUniformLocation(aaRectScreenProgram, 'uColor'), color)
 
     gl.bindVertexArray(discVao)
     gl.bindBuffer(gl.ARRAY_BUFFER, discVbo)
@@ -263,6 +288,8 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteProgram(discProgram)
     gl.deleteProgram(discScreenProgram)
     gl.deleteProgram(rectScreenProgram)
+    gl.deleteProgram(aaRectWorldProgram)
+    gl.deleteProgram(aaRectScreenProgram)
     gl.deleteProgram(texScreenProgram)
     gl.deleteVertexArray(lineVao)
     gl.deleteBuffer(lineVbo)
@@ -272,5 +299,5 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteBuffer(discVbo)
   }
 
-  return { drawLines, drawDashedLoop, drawQuads, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
+  return { drawLines, drawDashedLoop, drawQuads, drawWorldRect, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
 }

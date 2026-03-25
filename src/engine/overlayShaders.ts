@@ -78,7 +78,34 @@ void main() {
 }
 `
 
-// Screen-space rectangle: same vertex layout, no circular clip
+// Anti-aliased rect: world-space with UV for edge softening
+export const AA_RECT_VERT = /* glsl */ `#version 300 es
+layout(location = 0) in vec4 aData; // xy = position, zw = UV (0..1)
+uniform mat4 uViewProj;
+uniform float uZ;
+out vec2 vUV;
+void main() {
+  gl_Position = uViewProj * vec4(aData.xy, uZ, 1.0);
+  vUV = aData.zw;
+}
+`
+
+// Anti-aliased rect fragment: smoothstep at edges using fwidth()
+export const AA_RECT_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+uniform vec4 uColor;
+out vec4 fragColor;
+in vec2 vUV;
+void main() {
+  vec2 d = min(vUV, 1.0 - vUV);
+  float edgeDist = min(d.x, d.y);
+  float fw = fwidth(edgeDist);
+  float aa = smoothstep(0.0, fw * 1.5, edgeDist);
+  fragColor = vec4(uColor.rgb, uColor.a * aa);
+}
+`
+
+// Screen-space rectangle (legacy, no AA)
 export const RECT_SCREEN_FRAG = /* glsl */ `#version 300 es
 precision highp float;
 uniform vec4 uColor;

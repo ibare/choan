@@ -7,7 +7,8 @@ import { applyToSiblings } from './elementHelpers'
 import { MIN_ELEMENT_SIZE } from '../constants'
 import { FRAME_PRESETS } from '../engine/painters'
 
-/** Apply resize delta to the selected element with snap. */
+/** Apply resize delta to the selected element with snap.
+ *  @param axis — null for free corner resize, 'x' for width-only (left/right edge), 'y' for height-only (top/bottom edge) */
 export function handleResizeMove(
   pixel: { x: number; y: number },
   resizeStartPixel: { x: number; y: number },
@@ -18,19 +19,22 @@ export function handleResizeMove(
   altKey: boolean,
   update: (id: string, patch: Partial<ChoanElement>) => void,
   setSnapLines: (lines: SnapLine[]) => void,
+  axis?: 'x' | 'y' | null,
 ): void {
+  const el = elements.find((e) => e.id === selectedId)
+  if (!el) return
+
   const dx = pixel.x - resizeStartPixel.x
   const dy = pixel.y - resizeStartPixel.y
   const proposed = { x: cornerStart.x + dx, y: cornerStart.y + dy }
   const snap = computeSnapResize(anchor, proposed, elements.filter((e) => e.id !== selectedId))
   setSnapLines(snap.lines)
 
-  let newW = Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x))
-  let newH = Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y))
+  let newW = axis === 'y' ? el.width : Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.x - snap.x))
+  let newH = axis === 'x' ? el.height : Math.max(MIN_ELEMENT_SIZE, Math.abs(anchor.y - snap.y))
 
   // Frame: lock aspect ratio
-  const el = elements.find((e) => e.id === selectedId)
-  if (el?.frame) {
+  if (el.frame && !axis) {
     const preset = FRAME_PRESETS[el.frame]
     if (preset) {
       const ratio = preset.ratio
@@ -39,11 +43,13 @@ export function handleResizeMove(
     }
   }
 
-  applyToSiblings(update, elements, selectedId, {
-    x: Math.min(anchor.x, anchor.x + (snap.x > anchor.x ? 0 : -newW)),
-    y: Math.min(anchor.y, anchor.y + (snap.y > anchor.y ? 0 : -newH)),
-    width: newW, height: newH,
-  }, altKey)
+  const patch: Partial<ChoanElement> = { width: newW, height: newH }
+  if (axis !== 'y') patch.x = Math.min(anchor.x, anchor.x + (snap.x > anchor.x ? 0 : -newW))
+  else patch.x = el.x
+  if (axis !== 'x') patch.y = Math.min(anchor.y, anchor.y + (snap.y > anchor.y ? 0 : -newH))
+  else patch.y = el.y
+
+  applyToSiblings(update, elements, selectedId, patch, altKey)
 }
 
 /** Apply radius drag delta to the selected element. */

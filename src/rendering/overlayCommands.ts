@@ -40,20 +40,87 @@ export function drawOverlay(
   const zs = zoomScale
   const p2w = (px: number, py: number): [number, number] => pixelToWorld(px, py, w, h)
 
-  // Selection outlines + corner handles
+  // Selection outlines + handles (corner discs + mid-edge capsules)
   for (const selId of selectedIds) {
     const el = elements.find((e) => e.id === selId)
     if (!el) continue
     ov.setZ(el.z * rs.extrudeDepth + rs.extrudeDepth / 2)
     const tl = p2w(el.x, el.y), tr = p2w(el.x + el.width, el.y)
     const br = p2w(el.x + el.width, el.y + el.height), bl = p2w(el.x, el.y + el.height)
-    ov.drawLines(new Float32Array([...tl, ...tr, ...tr, ...br, ...br, ...bl, ...bl, ...tl]), SELECTION_COLOR)
-    const hWorld = HANDLE_SIZE_PX * (2 * FRUSTUM) / h * zs
-    const handles = new Float32Array([...tl, ...tr, ...br, ...bl])
-    ov.drawQuads(handles, hWorld, SELECTION_COLOR)
-    ov.drawQuads(handles, hWorld * 0.6, [1, 1, 1, 1])
+
+    // Shared units
+    const dpr = window.devicePixelRatio || 1
+    const elZ = el.z * rs.extrudeDepth + rs.extrudeDepth / 2
+    const uy = (2 * FRUSTUM) / h * zs              // world units per screen pixel (Y)
+    const ux = (2 * FRUSTUM * aspect) / w * zs     // world units per screen pixel (X)
+    const hlx = 1.5 * ux  // line half-width in world (X)
+    const hly = 1.5 * uy  // line half-width in world (Y)
+
+    // Thick selection outline (world-space — rotates correctly with camera)
+    ov.drawWorldRect((tl[0] + tr[0]) / 2, (tl[1] + tr[1]) / 2, Math.abs(tr[0] - tl[0]) / 2 + hlx, hly, SELECTION_COLOR)
+    ov.drawWorldRect((tr[0] + br[0]) / 2, (tr[1] + br[1]) / 2, hlx, Math.abs(tr[1] - br[1]) / 2 + hly, SELECTION_COLOR)
+    ov.drawWorldRect((br[0] + bl[0]) / 2, (br[1] + bl[1]) / 2, Math.abs(br[0] - bl[0]) / 2 + hlx, hly, SELECTION_COLOR)
+    ov.drawWorldRect((bl[0] + tl[0]) / 2, (bl[1] + tl[1]) / 2, hlx, Math.abs(bl[1] - tl[1]) / 2 + hly, SELECTION_COLOR)
+
+    // Project corners to screen (for handles only)
+    const sn = (v: number) => Math.round(v)
+    const sTlx = sn(ov.projectToScreen(tl[0], tl[1], elZ).px), sTly = sn(ov.projectToScreen(tl[0], tl[1], elZ).py)
+    const sTrx = sn(ov.projectToScreen(tr[0], tr[1], elZ).px), sTry = sn(ov.projectToScreen(tr[0], tr[1], elZ).py)
+    const sBrx = sn(ov.projectToScreen(br[0], br[1], elZ).px), sBry = sn(ov.projectToScreen(br[0], br[1], elZ).py)
+    const sBlx = sn(ov.projectToScreen(bl[0], bl[1], elZ).px), sBly = sn(ov.projectToScreen(bl[0], bl[1], elZ).py)
+
+    // Corner handles — screen-space squares (drawRectScreen param = total size, so 2× half-size)
+    const cornerR = Math.round(6 * dpr)  // visual half-size in physical px
+    const cornerStroke = Math.round(2 * dpr)
+    const cornerInnerR = cornerR - cornerStroke
+    for (const [sx, sy] of [[sTlx, sTly], [sTrx, sTry], [sBrx, sBry], [sBlx, sBly]]) {
+      ov.drawRectScreen(sx, sy, 2 * cornerR, 2 * cornerR, SELECTION_COLOR)
+      ov.drawRectScreen(sx, sy, 2 * cornerInnerR, 2 * cornerInnerR, [1, 1, 1, 1])
+    }
+
+    // Mid-edge capsule handles — fully screen-space for uniform stroke
+    const capL = Math.round(17 * dpr)   // half-length (physical px)
+    const capW = Math.round(5 * dpr)    // half-width = cap radius (physical px)
+    const capStroke = Math.round(2 * dpr) // stroke width (physical px)
+    const capInnerW = capW - capStroke
+    const capInnerL = capL - capStroke
+    const capBodyHL = capL - capW        // body half-length (excluding cap radius)
+    const capInnerBodyHL = capInnerL - capInnerW
+
+    const drawCapsule = (wx: number, wy: number, horizontal: boolean) => {
+      const sc = ov.projectToScreen(wx, wy, elZ)
+      const cx = Math.round(sc.px), cy = Math.round(sc.py)
+
+      // drawRectScreen size params = total pixels; drawDiscScreen radius = half (diameter = 2R)
+      // So rect sizes must be 2× to match disc diameter
+      if (horizontal) {
+        ov.drawRectScreen(cx, cy, 2 * capBodyHL, 2 * capW, SELECTION_COLOR)
+        ov.drawDiscScreen(cx - capBodyHL, cy, capW, SELECTION_COLOR)
+        ov.drawDiscScreen(cx + capBodyHL, cy, capW, SELECTION_COLOR)
+        ov.drawRectScreen(cx, cy, 2 * capInnerBodyHL, 2 * capInnerW, [1, 1, 1, 1])
+        ov.drawDiscScreen(cx - capInnerBodyHL, cy, capInnerW, [1, 1, 1, 1])
+        ov.drawDiscScreen(cx + capInnerBodyHL, cy, capInnerW, [1, 1, 1, 1])
+      } else {
+        ov.drawRectScreen(cx, cy, 2 * capW, 2 * capBodyHL, SELECTION_COLOR)
+        ov.drawDiscScreen(cx, cy - capBodyHL, capW, SELECTION_COLOR)
+        ov.drawDiscScreen(cx, cy + capBodyHL, capW, SELECTION_COLOR)
+        ov.drawRectScreen(cx, cy, 2 * capInnerW, 2 * capInnerBodyHL, [1, 1, 1, 1])
+        ov.drawDiscScreen(cx, cy - capInnerBodyHL, capInnerW, [1, 1, 1, 1])
+        ov.drawDiscScreen(cx, cy + capInnerBodyHL, capInnerW, [1, 1, 1, 1])
+      }
+    }
+
+    const tmW = p2w(el.x + el.width / 2, el.y)
+    const bmW = p2w(el.x + el.width / 2, el.y + el.height)
+    const rmW = p2w(el.x + el.width, el.y + el.height / 2)
+    const lmW = p2w(el.x, el.y + el.height / 2)
+    drawCapsule(tmW[0], tmW[1], true)
+    drawCapsule(bmW[0], bmW[1], true)
+    drawCapsule(rmW[0], rmW[1], false)
+    drawCapsule(lmW[0], lmW[1], false)
 
     // Layout resize handles + sizing indicators (row/column containers)
+    const hWorld = HANDLE_SIZE_PX * (2 * FRUSTUM) / h * zs
     const dir = el.layoutDirection
     if (dir === 'row' || dir === 'column') {
       const children = elements.filter((e) => e.parentId === el.id)

@@ -88,6 +88,7 @@ export function usePointerHandlers({
   const resizeCornerStartRef = useRef({ x: 0, y: 0 })
   const resizeAnchorRef = useRef({ x: 0, y: 0 })
   const resizeElIdRef = useRef<string | null>(null)
+  const resizeAxisRef = useRef<'x' | 'y' | null>(null)
 
   const isRadiusDragRef = useRef(false)
   const radiusStartRef = useRef(0)
@@ -236,16 +237,34 @@ export function usePointerHandlers({
           const parentOfEl = el.parentId ? els.find((p) => p.id === el.parentId) : null
           const isManagedChild = el.parentId && parentOfEl?.layoutDirection !== 'free' && parentOfEl?.layoutDirection !== undefined
           if (!isManagedChild) {
-            const cp = [
-              { x: el.x, y: el.y + el.height }, { x: el.x + el.width, y: el.y + el.height },
-              { x: el.x + el.width, y: el.y }, { x: el.x, y: el.y },
-            ]
             isResizingRef.current = true
             resizeElIdRef.current = el.id
             const pixel = screenToPixel(e.clientX, e.clientY)
             if (pixel) resizeStartPixelRef.current = pixel
-            resizeCornerStartRef.current = cp[corner]
-            resizeAnchorRef.current = cp[(corner + 2) % 4]
+
+            if (corner < 4) {
+              // Corner handles (0-3): free resize
+              const cp = [
+                { x: el.x, y: el.y + el.height }, { x: el.x + el.width, y: el.y + el.height },
+                { x: el.x + el.width, y: el.y }, { x: el.x, y: el.y },
+              ]
+              resizeCornerStartRef.current = cp[corner]
+              resizeAnchorRef.current = cp[(corner + 2) % 4]
+              resizeAxisRef.current = null
+            } else {
+              // Mid-edge handles (4=top, 5=right, 6=bottom, 7=left): axis-locked resize
+              const edgeMap: Record<number, { corner: { x: number; y: number }; anchor: { x: number; y: number }; axis: 'x' | 'y' }> = {
+                4: { corner: { x: el.x + el.width, y: el.y },           anchor: { x: el.x, y: el.y + el.height },             axis: 'y' },
+                5: { corner: { x: el.x + el.width, y: el.y + el.height }, anchor: { x: el.x, y: el.y },                       axis: 'x' },
+                6: { corner: { x: el.x + el.width, y: el.y + el.height }, anchor: { x: el.x, y: el.y },                       axis: 'y' },
+                7: { corner: { x: el.x, y: el.y + el.height },           anchor: { x: el.x + el.width, y: el.y },             axis: 'x' },
+              }
+              const cfg = edgeMap[corner]
+              resizeCornerStartRef.current = cfg.corner
+              resizeAnchorRef.current = cfg.anchor
+              resizeAxisRef.current = cfg.axis
+            }
+
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -435,7 +454,7 @@ export function usePointerHandlers({
 
     if (isResizingRef.current && resizeElIdRef.current) {
       const pixel = screenToPixel(e.clientX, e.clientY)
-      if (pixel) handleResizeMove(pixel, resizeStartPixelRef.current, resizeCornerStartRef.current, resizeAnchorRef.current, els, resizeElIdRef.current, e.altKey, update, setSnap)
+      if (pixel) handleResizeMove(pixel, resizeStartPixelRef.current, resizeCornerStartRef.current, resizeAnchorRef.current, els, resizeElIdRef.current, e.altKey, update, setSnap, resizeAxisRef.current)
       return
     }
 
@@ -453,8 +472,10 @@ export function usePointerHandlers({
         const el = els.find((el) => el.id === selId)
         const parent = el?.parentId ? els.find((p) => p.id === el.parentId) : null
         const isManagedChild = el?.parentId && parent?.layoutDirection !== 'free' && parent?.layoutDirection !== undefined
-        // BL(0)/TR(2) = nesw, BR(1)/TL(3) = nwse
-        setCursor(isManagedChild ? 'default' : (corner === 0 || corner === 2) ? 'nesw-resize' : 'nwse-resize')
+        // Corners: BL(0)/TR(2) = nesw, BR(1)/TL(3) = nwse
+        // Mid-edges: top(4)/bottom(6) = ns, right(5)/left(7) = ew
+        const cursorMap = ['nesw-resize', 'nwse-resize', 'nesw-resize', 'nwse-resize', 'ns-resize', 'ew-resize', 'ns-resize', 'ew-resize'] as const
+        setCursor(isManagedChild ? 'default' : cursorMap[corner])
       } else {
         setCursor('default')
       }
