@@ -1,36 +1,37 @@
 // Hotkey registry — declarative keybinding → action mapping.
 //
-// Actions are string identifiers. The keyboard handler resolves
-// them to actual functions via an action map at runtime.
+// Uses KeyboardEvent.code (physical key position) so hotkeys work
+// regardless of IME state (e.g. Korean input mode).
 
 export interface HotkeyBinding {
-  key: string            // KeyboardEvent.key (case-insensitive match)
-  ctrl?: boolean         // Ctrl or Meta (Cmd on Mac)
+  code: string            // KeyboardEvent.code (e.g. 'KeyV', 'Escape')
+  ctrl?: boolean          // Ctrl or Meta (Cmd on Mac)
   shift?: boolean
   alt?: boolean
-  action: string         // action identifier (e.g. 'delete', 'tool:select')
-  label: string          // human-readable description
+  action: string          // action identifier (e.g. 'delete', 'tool:select')
+  label: string           // human-readable description
 }
 
 const bindings: HotkeyBinding[] = [
   // ── Global ──
-  { key: 'Escape',    action: 'escape',        label: 'Cancel / close' },
-  { key: 'Delete',    action: 'delete',         label: 'Delete selected' },
-  { key: 'Backspace', action: 'delete',         label: 'Delete selected' },
+  { code: 'Escape',    action: 'escape',        label: 'Cancel / close' },
+  { code: 'Delete',    action: 'delete',         label: 'Delete selected' },
+  { code: 'Backspace', action: 'delete',         label: 'Delete selected' },
 
   // ── Clipboard ──
-  { key: 'c', ctrl: true, action: 'copy',       label: 'Copy' },
-  { key: 'v', ctrl: true, action: 'paste',      label: 'Paste' },
+  { code: 'KeyC', ctrl: true, action: 'copy',    label: 'Copy' },
+  { code: 'KeyV', ctrl: true, action: 'paste',   label: 'Paste' },
 
   // ── Tools ──
-  { key: 'v', action: 'tool:select',            label: 'Select tool' },
+  { code: 'KeyV', action: 'tool:select',         label: 'Select tool' },
   // Space reserved for canvas panning (OrbitControls)
-  { key: 'r', action: 'tool:rectangle',         label: 'Rectangle tool' },
+  { code: 'KeyR', action: 'tool:rectangle',      label: 'Rectangle tool' },
 
   // ── Split ──
-  { key: 'n', action: 'split:enter',            label: 'Split selected element' },
-  { key: 'Shift', shift: true, action: 'split:toggle-dir', label: 'Toggle split direction' },
-  { key: 'Enter', action: 'split:confirm',      label: 'Confirm split' },
+  { code: 'KeyN', action: 'split:enter',         label: 'Split selected element' },
+  { code: 'ShiftLeft', shift: true, action: 'split:toggle-dir', label: 'Toggle split direction' },
+  { code: 'ShiftRight', shift: true, action: 'split:toggle-dir', label: 'Toggle split direction' },
+  { code: 'Enter', action: 'split:confirm',      label: 'Confirm split' },
 ]
 
 /** Test whether a keyboard event matches a binding. */
@@ -42,7 +43,7 @@ export function matchEvent(e: KeyboardEvent, b: HotkeyBinding): boolean {
   if (hasCtrl !== wantCtrl) return false
   if (e.shiftKey !== wantShift) return false
   if (e.altKey !== wantAlt) return false
-  return e.key.toLowerCase() === b.key.toLowerCase()
+  return e.code === b.code
 }
 
 /** Find the first matching binding for the event. */
