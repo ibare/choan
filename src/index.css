@@ -517,6 +517,41 @@ body {
   align-items: center;
 }
 
+/* Toast (Radix) */
+.ui-toast__viewport {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  outline: none;
+}
+.ui-toast {
+  background: var(--gray-900);
+  color: var(--gray-100);
+  font-size: var(--text-sm);
+  padding: 12px 20px;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  animation: toast-in 0.25s ease-out;
+}
+.ui-toast[data-state="closed"] {
+  animation: toast-out 0.15s ease-in;
+}
+.ui-toast__msg { line-height: 1.4; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(8px); }
+}
+
 /* Tooltip (Radix) */
 .ui-tooltip {
   background: var(--gray-900);

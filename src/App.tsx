@@ -7,8 +7,8 @@ import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
-import { TooltipProvider } from './components/ui/Tooltip'
-import { Tooltip } from './components/ui/Tooltip'
+import { Tooltip, TooltipProvider } from './components/ui/Tooltip'
+import { Toast, ToastViewport, ToastProvider } from './components/ui/Toast'
 import { Button } from './components/ui/Button'
 import { DownloadSimple } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
@@ -20,7 +20,8 @@ export default function App() {
     setTool, setPendingSkin, setPendingFrame,
   } = useChoanStore()
 
-  const [exportMsg, setExportMsg]       = useState('')
+  const [toastOpen, setToastOpen]       = useState(false)
+  const [toastMsg, setToastMsg]         = useState('')
   const [timelineHeight, setTimelineHeight] = useState(180)
   const [leftPanelWidth, setLeftPanelWidth] = useState(160)
   const [rightPanelWidth, setRightPanelWidth] = useState(260)
@@ -72,11 +73,11 @@ export default function App() {
     track('export-markdown', { elementCount: elements.length })
     try {
       await navigator.clipboard.writeText(md)
-      setExportMsg('Copied! Paste it into your AI chat.')
+      setToastMsg('Copied! Paste it into your AI chat.')
     } catch {
-      setExportMsg('Copy failed')
+      setToastMsg('Copy failed')
     }
-    setTimeout(() => setExportMsg(''), 4000)
+    setToastOpen(true)
   }
 
   const handleDownload = () => {
@@ -92,6 +93,7 @@ export default function App() {
   }
 
   return (
+    <ToastProvider>
     <TooltipProvider>
       <div className="app" data-theme="dark">
         <div className="toolbar">
@@ -110,7 +112,6 @@ export default function App() {
               </Tooltip>
             </div>
           </div>
-          {exportMsg && <span className="export-msg">{exportMsg}</span>}
         </div>
 
         <div className="main">
@@ -159,7 +160,11 @@ export default function App() {
           open={skinPickerOpen}
           onClose={() => setSkinPickerOpen(false)}
         />
+
+        <Toast open={toastOpen} onOpenChange={setToastOpen}>{toastMsg}</Toast>
+        <ToastViewport />
       </div>
     </TooltipProvider>
+    </ToastProvider>
   )
 }
