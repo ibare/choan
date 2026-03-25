@@ -122,7 +122,7 @@ export default function FeaturesPage() {
       </section>
 
       <footer className="site-footer">
-        <p>© 2026 Day1Company. All rights reserved.</p>
+        <p>© 2026 DAY 1 COMPANY. All rights reserved.</p>
       </footer>
     </div>
   )
