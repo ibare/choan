@@ -533,8 +533,8 @@ body {
   margin: 0;
 }
 .ui-toast {
-  background: var(--gray-100);
-  color: var(--gray-900);
+  background: var(--gray-900);
+  color: var(--gray-100);
   font-size: var(--text-sm);
   padding: 12px 20px;
   border-radius: 10px;
