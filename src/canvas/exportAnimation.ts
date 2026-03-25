@@ -9,7 +9,7 @@ export interface ExportAnimState {
 }
 
 // Timing (ms)
-export const MERGE_DURATION = 1500
+export const MERGE_DURATION = 2500
 export const RESTORE_DURATION = 350  // fast snap-back
 
 let state: ExportAnimState = { phase: 'idle', startTime: 0 }

@@ -208,7 +208,7 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
 
   function resetView() {
     thetaVel = 0; phiVel = 0; radiusVel = 0
-    resetTarget = { theta: 0, phi: Math.PI / 2, radius: 20, panX: 0, panY: 0, startTime: performance.now(), duration: 1000 }
+    resetTarget = { theta: 0, phi: Math.PI / 2, radius: 20, panX: 0, panY: 0, startTime: performance.now(), duration: 3000 }
   }
 
   // Initialize camera position

@@ -82,6 +82,9 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     // Export animation — compute center for merge target
     const exportAnim = getExportAnim()
     const exportT = phaseProgress()
+    // Per-element stagger: each element starts its merge at a different time
+    // Total stagger spans 60% of merge duration, last 40% all elements converge together
+    const STAGGER_RATIO = 0.6
     let centerWx = 0, centerWy = 0
     if (exportAnim.phase !== 'idle' && count > 0) {
       for (let i = 0; i < count; i++) {
@@ -131,10 +134,18 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         ? (isMatch ? 3 * ed * hoverIntensity : -1 * ed * hoverIntensity)
         : 0
 
+      // Per-element staggered progress: element 0 starts first, last element starts at STAGGER_RATIO
+      const staggerDelay = count > 1 ? (i / (count - 1)) * STAGGER_RATIO : 0
+      const elProgress = exportAnim.phase === 'merging'
+        ? Math.max(0, Math.min(1, (exportT - staggerDelay) / (1 - staggerDelay)))
+        : exportAnim.phase === 'restoring'
+          ? Math.max(0, Math.min(1, (exportT - (1 - staggerDelay - (1 - STAGGER_RATIO))) / (1 - staggerDelay)))
+          : exportT
+
       // Export animation: lerp position toward center
       let finalWx = wx, finalWy = wy
       if (exportAnim.phase === 'merging') {
-        const t = exportT * exportT  // ease-in
+        const t = elProgress * elProgress  // ease-in
         finalWx = wx + (centerWx - wx) * t
         finalWy = wy + (centerWy - wy) * t
       } else if (exportAnim.phase === 'blob') {
@@ -150,7 +161,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
           + Math.cos(t * 2.5 + phase * 0.8) * 0.18
           + Math.cos(t * 0.7 + phase * 1.1) * 0.12
       } else if (exportAnim.phase === 'restoring') {
-        const t = 1 - (1 - exportT) * (1 - exportT)  // ease-out
+        const t = 1 - (1 - elProgress) * (1 - elProgress)  // ease-out
         finalWx = centerWx + (wx - centerWx) * t
         finalWy = centerWy + (wy - centerWy) * t
       }
@@ -158,12 +169,12 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       // Export animation: flatten Z to same level
       let finalZ = el.z * ed + zOffset
       if (exportAnim.phase === 'merging') {
-        finalZ = el.z * ed * (1 - exportT * exportT) + zOffset
+        finalZ = el.z * ed * (1 - elProgress * elProgress) + zOffset
       } else if (exportAnim.phase === 'blob') {
         const t = now / 1000
         finalZ = zOffset + Math.sin(t * 1.5 + i * 2.1) * 0.1 + Math.sin(t * 2.7 + i * 0.9) * 0.05
       } else if (exportAnim.phase === 'restoring') {
-        const t = 1 - (1 - exportT) * (1 - exportT)
+        const t = 1 - (1 - elProgress) * (1 - elProgress)
         finalZ = el.z * ed * t + zOffset
       }
 
@@ -178,7 +189,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       let finalHw = hw, finalHh = hh, finalRadius = radius
       const blobSize = 0.3  // target half-size for the merged blob
       if (exportAnim.phase === 'merging') {
-        const t = exportT * exportT
+        const t = elProgress * elProgress
         finalHw = hw + (blobSize - hw) * t
         finalHh = hh + (blobSize - hh) * t
         finalRadius = radius + (1.0 - radius) * t  // round off corners
@@ -190,7 +201,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         finalHh = blobSize + Math.cos(t * 1.9 + phase) * 0.10 + Math.cos(t * 3.1 + phase * 0.7) * 0.05
         finalRadius = 1.0
       } else if (exportAnim.phase === 'restoring') {
-        const t = 1 - (1 - exportT) * (1 - exportT)
+        const t = 1 - (1 - elProgress) * (1 - elProgress)
         finalHw = blobSize + (hw - blobSize) * t
         finalHh = blobSize + (hh - blobSize) * t
         finalRadius = 1.0 + (radius - 1.0) * t
@@ -199,12 +210,12 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       // Export animation: Z depth matches XY for spherical blob
       let finalDepth = ed / 2
       if (exportAnim.phase === 'merging') {
-        const t = exportT * exportT
+        const t = elProgress * elProgress
         finalDepth = ed / 2 + (blobSize - ed / 2) * t
       } else if (exportAnim.phase === 'blob') {
         finalDepth = blobSize
       } else if (exportAnim.phase === 'restoring') {
-        const t = 1 - (1 - exportT) * (1 - exportT)
+        const t = 1 - (1 - elProgress) * (1 - elProgress)
         finalDepth = blobSize + (ed / 2 - blobSize) * t
       }
 
