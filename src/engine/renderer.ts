@@ -27,6 +27,7 @@ export interface SDFRenderer {
   bvhData: BVHData | null
   resize(width: number, height: number): void
   updateScene(elements: ChoanElement[], extrudeDepth?: number, hoveredColor?: number | null): void
+  setSmoothK(k: number): void
   render(settings: RenderSettings): void
   dispose(): void
 }
@@ -73,6 +74,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   const uSideDarken = getUniformLocation(gl, geoProgram, 'uSideDarken')
   const uSideSmooth = getUniformLocation(gl, geoProgram, 'uSideSmooth')
   const uAtlasTex = getUniformLocation(gl, geoProgram, 'uAtlasTex')
+  const uSmoothK = getUniformLocation(gl, geoProgram, 'uSmoothK')
 
   // ── Pass 2: Edge detection program (FBO textures → Canvas) ──
   const edgeProgram = createProgram(gl, RAYMARCH_VERT, EDGE_FRAG)
@@ -141,6 +143,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
   // BVH data exposed for CPU hit testing
   let currentBVH: BVHData | null = null
+  let currentSmoothK = 0
 
   function updateScene(elements: ChoanElement[], extrudeDepth?: number, hoveredColor?: number | null) {
     // Separate regular and skinOnly elements, preserving original indices
@@ -235,6 +238,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform1f(uSideDarken, s.sideDarken)
     gl.uniform2f(uSideSmooth, s.sideSmooth[0], s.sideSmooth[1])
 
+    // Smooth union (export animation)
+    gl.uniform1f(uSmoothK, currentSmoothK)
+
     // Atlas texture
     atlas.upload(gl)
     gl.activeTexture(gl.TEXTURE0)
@@ -304,6 +310,6 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   return {
     canvas, gl, camera, overlay, atlas, colorWheel,
     get bvhData() { return currentBVH },
-    resize, updateScene, render, dispose,
+    resize, updateScene, setSmoothK(k: number) { currentSmoothK = k }, render, dispose,
   }
 }

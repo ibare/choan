@@ -3,6 +3,7 @@
 import type { ChoanElement } from '../store/useChoanStore'
 import { PALETTE } from '../canvas/materials'
 import { pixelToWorld, pixelWidthToWorld, pixelHeightToWorld } from '../coords/coordinateSystem'
+import { getExportAnim, phaseProgress } from '../canvas/exportAnimation'
 
 export const MAX_OBJECTS = 128
 export const EXTRUDE_DEPTH = 0.05
@@ -78,6 +79,19 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     hoverIntensity += (hoverTarget - hoverIntensity) * HOVER_LERP_SPEED
     if (hoverIntensity < 0.001) hoverIntensity = 0
 
+    // Export animation — compute center for merge target
+    const exportAnim = getExportAnim()
+    const exportT = phaseProgress()
+    let centerWx = 0, centerWy = 0
+    if (exportAnim.phase !== 'idle' && count > 0) {
+      for (let i = 0; i < count; i++) {
+        const el = elements[i]
+        const [ewx, ewy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2, canvasW, canvasH)
+        centerWx += ewx; centerWy += ewy
+      }
+      centerWx /= count; centerWy /= count
+    }
+
     // Clear all data
     data.fill(0)
 
@@ -117,10 +131,25 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         ? (isMatch ? 3 * ed * hoverIntensity : -1 * ed * hoverIntensity)
         : 0
 
+      // Export animation: lerp position toward center
+      let finalWx = wx, finalWy = wy
+      if (exportAnim.phase === 'merging') {
+        const t = exportT * exportT  // ease-in
+        finalWx = wx + (centerWx - wx) * t
+        finalWy = wy + (centerWy - wy) * t
+      } else if (exportAnim.phase === 'blob') {
+        finalWx = centerWx
+        finalWy = centerWy
+      } else if (exportAnim.phase === 'restoring') {
+        const t = 1 - (1 - exportT) * (1 - exportT)  // ease-out
+        finalWx = centerWx + (wx - centerWx) * t
+        finalWy = centerWy + (wy - centerWy) * t
+      }
+
       // uPosType[i]
       const pi = POS_OFFSET + i * 4
-      data[pi + 0] = wx
-      data[pi + 1] = wy
+      data[pi + 0] = finalWx
+      data[pi + 1] = finalWy
       data[pi + 2] = el.z * ed + zOffset
       data[pi + 3] = shapeType
 

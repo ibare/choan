@@ -48,6 +48,13 @@ layout(std140) uniform SceneData {
 };
 
 uniform sampler2D uAtlasTex;
+uniform float uSmoothK;  // smooth union blend radius (0 = hard, >0 = metaball merge)
+
+// Smooth min — metaball blending
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5*(a - b)/k, 0.0, 1.0);
+  return mix(a, b, h) - k * h * (1.0 - h);
+}
 
 // Shape types
 #define SHAPE_RECT   0.0
@@ -97,21 +104,49 @@ float singleSDFWithPulse(vec3 p, int objId) {
 
 // ─── Scene (AABB pre-test accelerated) ───────────
 
+// Blended color accumulator for smooth union
+vec3 _blendedColor;
+
 vec2 sceneSDF(vec3 p) {
   vec2 res = vec2(1e10, -1.0);
   int numRegular = int(uNumObjPad.z);
+  float k = uSmoothK;
+  _blendedColor = vec3(1.0);
 
-  for (int i = 0; i < MAX_OBJECTS; i++) {
-    if (i >= numRegular) break;
+  if (k <= 0.0) {
+    // Hard union (normal mode)
+    for (int i = 0; i < MAX_OBJECTS; i++) {
+      if (i >= numRegular) break;
+      float dx = max(abs(p.x - uPosType[i].x) - uSizeRadius[i].x, 0.0);
+      float dy = max(abs(p.y - uPosType[i].y) - uSizeRadius[i].y, 0.0);
+      if (dx * dx + dy * dy >= res.x * res.x) continue;
+      float d = singleSDF(p, i);
+      d -= uEffect[i].x * 0.015;
+      if (d < res.x) res = vec2(d, float(i));
+    }
+  } else {
+    // Smooth union (metaball merge mode)
+    vec3 colorAcc = vec3(0.0);
+    float weightAcc = 0.0;
+    float merged = 1e10;
 
-    // Cheap 2D AABB distance test — skip expensive SDF if box is already farther
-    float dx = max(abs(p.x - uPosType[i].x) - uSizeRadius[i].x, 0.0);
-    float dy = max(abs(p.y - uPosType[i].y) - uSizeRadius[i].y, 0.0);
-    if (dx * dx + dy * dy >= res.x * res.x) continue;
+    for (int i = 0; i < MAX_OBJECTS; i++) {
+      if (i >= numRegular) break;
+      float d = singleSDF(p, i);
+      d -= uEffect[i].x * 0.015;
 
-    float d = singleSDF(p, i);
-    d -= uEffect[i].x * 0.015; // pulse
-    if (d < res.x) res = vec2(d, float(i));
+      // Smooth min accumulation
+      float prevMerged = merged;
+      merged = smin(merged, d, k);
+
+      // Color blending weight: objects closer to surface contribute more
+      float w = exp(-max(d, 0.0) * 8.0 / k);
+      colorAcc += uColorAlpha[i].rgb * w;
+      weightAcc += w;
+    }
+
+    if (weightAcc > 0.0) _blendedColor = colorAcc / weightAcc;
+    res = vec2(merged, weightAcc > 0.0 ? 0.0 : -1.0);
   }
 
   return res;
@@ -207,26 +242,47 @@ void main() {
 
   if (hit.y >= 0.0) {
     vec3 p = ro + rd * hit.x;
-    vec3 normal = calcNormal(p, int(hit.y));
-    vec3 baseColor = getObjectColor(hit.y);
-    float opacity = getObjectOpacity(hit.y);
-
-    // Flash: blend toward white on color change
     int hitIdx = int(hit.y);
-    float flash = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].y : 0.0;
-    baseColor = mix(baseColor, vec3(1.0), flash * 0.5);
 
-    // Atlas texture on front face (Z+) for non-skinOnly objects
-    if (hitIdx >= 0 && hitIdx < MAX_OBJECTS) {
-      vec4 texRect = uTexRect[hitIdx];
-      if (texRect.z > 0.0) {
-        vec3 lp = p - uPosType[hitIdx].xyz;
-        vec3 hs = uSizeRadius[hitIdx].xyz;
-        if (lp.z > hs.z - 0.003) {
-          vec2 surfUV = vec2(lp.x / hs.x * 0.5 + 0.5, 1.0 - (lp.y / hs.y * 0.5 + 0.5));
-          vec2 atlasUV = texRect.xy + clamp(surfUV, 0.0, 1.0) * texRect.zw;
-          vec4 texColor = texture(uAtlasTex, atlasUV);
-          baseColor = mix(baseColor, texColor.rgb, texColor.a);
+    vec3 baseColor;
+    float opacity;
+    vec3 normal;
+
+    if (uSmoothK > 0.0) {
+      // Smooth union mode: use blended color, numerical normal over full scene
+      baseColor = _blendedColor;
+      opacity = 1.0;
+      // Numerical normal via full sceneSDF (not single object)
+      const float nh = 0.001;
+      const vec2 nk = vec2(1.0, -1.0);
+      normal = normalize(
+        nk.xyy * sceneSDF(p + nk.xyy * nh).x +
+        nk.yyx * sceneSDF(p + nk.yyx * nh).x +
+        nk.yxy * sceneSDF(p + nk.yxy * nh).x +
+        nk.xxx * sceneSDF(p + nk.xxx * nh).x
+      );
+    } else {
+      // Normal mode
+      normal = calcNormal(p, hitIdx);
+      baseColor = getObjectColor(hit.y);
+      opacity = getObjectOpacity(hit.y);
+
+      // Flash: blend toward white on color change
+      float flash = (hitIdx >= 0 && hitIdx < MAX_OBJECTS) ? uEffect[hitIdx].y : 0.0;
+      baseColor = mix(baseColor, vec3(1.0), flash * 0.5);
+
+      // Atlas texture on front face (Z+) for non-skinOnly objects
+      if (hitIdx >= 0 && hitIdx < MAX_OBJECTS) {
+        vec4 texRect = uTexRect[hitIdx];
+        if (texRect.z > 0.0) {
+          vec3 lp = p - uPosType[hitIdx].xyz;
+          vec3 hs = uSizeRadius[hitIdx].xyz;
+          if (lp.z > hs.z - 0.003) {
+            vec2 surfUV = vec2(lp.x / hs.x * 0.5 + 0.5, 1.0 - (lp.y / hs.y * 0.5 + 0.5));
+            vec2 atlasUV = texRect.xy + clamp(surfUV, 0.0, 1.0) * texRect.zw;
+            vec4 texColor = texture(uAtlasTex, atlasUV);
+            baseColor = mix(baseColor, texColor.rgb, texColor.a);
+          }
         }
       }
     }

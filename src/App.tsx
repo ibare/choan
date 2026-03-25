@@ -12,6 +12,7 @@ import { Toast, ToastViewport, ToastProvider } from './components/ui/Toast'
 import { Button } from './components/ui/Button'
 import { DownloadSimple } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
+import { startExportAnim, MERGE_DURATION, BLOB_DURATION } from './canvas/exportAnimation'
 
 export default function App() {
   const {
@@ -71,13 +72,18 @@ export default function App() {
   const handleCopyToClipboard = async () => {
     const md = toMarkdown(elements, animationBundles)
     track('export-markdown', { elementCount: elements.length })
-    try {
-      await navigator.clipboard.writeText(md)
-      setToastMsg('Copied! Paste it into your AI chat.')
-    } catch {
-      setToastMsg('Copy failed')
-    }
-    setToastOpen(true)
+
+    // Copy immediately in background
+    let copyOk = true
+    try { await navigator.clipboard.writeText(md) }
+    catch { copyOk = false }
+
+    // Start visual animation, show toast at blob phase
+    startExportAnim()
+    setTimeout(() => {
+      setToastMsg(copyOk ? 'Copied! Paste it into your AI chat.' : 'Copy failed')
+      setToastOpen(true)
+    }, MERGE_DURATION + BLOB_DURATION * 0.3)
   }
 
   const handleDownload = () => {

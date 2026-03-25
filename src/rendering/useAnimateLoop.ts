@@ -18,6 +18,7 @@ import { kfAnimator } from './kfAnimator'
 import { createLayoutAnimator } from '../layout/animator'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
 import { hoveredHistoryColor } from '../canvas/colorHistoryHover'
+import { tickExportAnim, getExportAnim, phaseProgress } from '../canvas/exportAnimation'
 
 export function useAnimateLoop({
   rendererRef,
@@ -169,6 +170,20 @@ export function useAnimateLoop({
         const actx = renderer.atlas.getContext(region)
         paintComponent(getSkinKey(el), actx, region.w, region.h, { ...el.componentState, _elColor: el.color }, strokeStyle, now)
       }
+
+      // Export animation: tick phase + compute smoothK
+      tickExportAnim()
+      const exportAnim = getExportAnim()
+      let smoothK = 0
+      if (exportAnim.phase === 'merging') {
+        smoothK = phaseProgress() * 0.5  // 0 → 0.5
+      } else if (exportAnim.phase === 'blob') {
+        // Pulsating blob: oscillate smoothK around 0.5
+        smoothK = 0.5 + Math.sin(phaseProgress() * Math.PI * 4) * 0.08
+      } else if (exportAnim.phase === 'restoring') {
+        smoothK = 0.5 * (1 - phaseProgress())  // 0.5 → 0
+      }
+      renderer.setSmoothK(smoothK)
 
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth, hoveredHistoryColor)
       renderer.render(rs)
