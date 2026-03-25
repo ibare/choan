@@ -98,10 +98,12 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   }
 
   let wheelEnabled = true
+  let wheelTimer = 0
 
   function onWheel(e: WheelEvent) {
     e.preventDefault()
     if (!wheelEnabled) return
+    wheelTimer = performance.now()
 
     // Pinch (ctrlKey on macOS trackpad) or mouse wheel (deltaX === 0) → zoom
     // Two-finger scroll (deltaX !== 0, no ctrlKey) → pan
@@ -194,7 +196,7 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     update, dispose, getAngles, setAngles,
     get wheelEnabled() { return wheelEnabled },
     set wheelEnabled(v: boolean) { wheelEnabled = v },
-    get isInteracting() { return isRotating || isPanning },
+    get isInteracting() { return isRotating || isPanning || (performance.now() - wheelTimer < 150) },
     get isSpaceDown() { return spaceDown },
   }
 }
