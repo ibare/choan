@@ -183,11 +183,23 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         finalRadius = 1.0 + (radius - 1.0) * t
       }
 
+      // Export animation: Z depth matches XY for spherical blob
+      let finalDepth = ed / 2
+      if (exportAnim.phase === 'merging') {
+        const t = exportT * exportT
+        finalDepth = ed / 2 + (blobSize - ed / 2) * t
+      } else if (exportAnim.phase === 'blob') {
+        finalDepth = blobSize
+      } else if (exportAnim.phase === 'restoring') {
+        const t = 1 - (1 - exportT) * (1 - exportT)
+        finalDepth = blobSize + (ed / 2 - blobSize) * t
+      }
+
       // uSizeRadius[i]
       const si = SIZE_OFFSET + i * 4
       data[si + 0] = finalHw
       data[si + 1] = finalHh
-      data[si + 2] = ed / 2
+      data[si + 2] = finalDepth
       data[si + 3] = finalRadius
 
       // uColorAlpha[i]
