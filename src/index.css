@@ -1103,6 +1103,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-bottom: 10vh;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
 }
