@@ -99,8 +99,10 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     data.fill(0)
 
     // uNumObjPad: x = numObjects, z = numRegular (non-skinOnly count)
+    // During export animation, all elements become regular SDF (so they can smooth-union)
+    const isExporting = exportAnim.phase !== 'idle'
     data[0] = count
-    data[2] = numRegular ?? count
+    data[2] = isExporting ? count : (numRegular ?? count)
 
     for (let i = 0; i < count; i++) {
       const el = elements[i]
@@ -253,7 +255,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       data[ei + 0] = t * t          // pulse: quadratic ease-out
       data[ei + 1] = t * t * t      // flash: faster cubic decay
       data[ei + 2] = isMatch ? hoverIntensity : 0  // glow: rim lighting intensity
-      data[ei + 3] = (el.skinOnly || el.frameless) ? 1.0 : 0.0
+      data[ei + 3] = isExporting ? 0.0 : ((el.skinOnly || el.frameless) ? 1.0 : 0.0)
 
       // uTexRect[i]: atlas UV rect (0 if no texture)
       const tr = texRects?.get(el.id)
