@@ -10,7 +10,7 @@ import { toMarkdown } from './export/toMarkdown'
 import { Tooltip, TooltipProvider } from './components/ui/Tooltip'
 import { Toast, ToastViewport, ToastProvider } from './components/ui/Toast'
 import { Button } from './components/ui/Button'
-import { DownloadSimple } from '@phosphor-icons/react'
+import { DownloadSimple, SignOut } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
 import { startExportAnim, startRestore, MERGE_DURATION } from './canvas/exportAnimation'
 
@@ -117,6 +117,11 @@ export default function App() {
                 </Button>
               </Tooltip>
             </div>
+            <Tooltip content="Exit to home">
+              <Button variant="ghost" size="icon" onClick={() => { window.location.href = import.meta.env.BASE_URL }}>
+                <SignOut size={16} />
+              </Button>
+            </Tooltip>
           </div>
         </div>
 
