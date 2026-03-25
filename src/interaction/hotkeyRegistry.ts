@@ -26,6 +26,7 @@ const bindings: HotkeyBinding[] = [
   { code: 'KeyV', action: 'tool:select',         label: 'Select tool' },
   // Space reserved for canvas panning (OrbitControls)
   { code: 'KeyR', action: 'tool:rectangle',      label: 'Rectangle tool' },
+  // S key handled at App level (Quick Skin Picker toggle)
 
   // ── Split ──
   { code: 'KeyN', action: 'split:enter',         label: 'Split selected element' },

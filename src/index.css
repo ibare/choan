@@ -88,7 +88,7 @@ body {
 .main { display: flex; flex: 1; overflow: hidden; background: var(--surface-0); }
 
 .left-panel {
-  width: 200px;
+  width: 160px;
   background: var(--surface-1);
   border-right: none;
   display: flex;
@@ -498,14 +498,17 @@ body {
 /* Misc utility */
 .ui-row-gap-2 { display: flex; gap: var(--space-2); align-items: center; }
 
-/* ── Side toolbar ─────────────────────────────────────────── */
+/* ── Side toolbar (2-column) ──────────────────────────────── */
 .side-toolbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 2px;
   padding: var(--space-1);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+.side-toolbar .toolbar-separator {
+  grid-column: 1 / -1;
 }
 
 .side-tool {
@@ -1072,6 +1075,89 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 }
 .ctx-icon-item:hover { background: var(--surface-3); color: var(--text-1); }
 .ctx-icon-item.ui-btn--active { background: var(--accent); color: #fff; }
+
+/* ── Quick Skin Picker overlay ───────────────────────────── */
+.qsp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+.qsp-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 24px 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  min-width: 360px;
+  max-width: 480px;
+}
+.qsp-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 14px;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.qsp-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.qsp-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.qsp-item:hover {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-1);
+}
+.qsp-item:active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.qsp-item__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  transition: background var(--transition-fast);
+}
+.qsp-item:hover .qsp-item__icon { background: var(--surface-3); }
+.qsp-item:active .qsp-item__icon { background: rgba(255,255,255,0.15); }
+.qsp-item__label {
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+.qsp-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 12px;
+}
 
 /* Color swatch trigger */
 .ctx-color-btn {

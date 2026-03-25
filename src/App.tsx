@@ -1,6 +1,7 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import SDFCanvas from './canvas/SDFCanvas'
 import CanvasToolbar from './canvas/CanvasToolbar'
+import QuickSkinPicker from './canvas/QuickSkinPicker'
 import LayerPanel from './panels/LayerPanel'
 import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
@@ -19,6 +20,22 @@ export default function App() {
 
   const [exportMsg, setExportMsg]       = useState('')
   const [timelineHeight, setTimelineHeight] = useState(180)
+  const [skinPickerOpen, setSkinPickerOpen] = useState(false)
+
+  // S key → toggle Quick Skin Picker
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.code === 'KeyS' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        setSkinPickerOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const isDraggingRef   = useRef(false)
   const dragStartYRef   = useRef(0)
   const dragStartHRef   = useRef(0)
@@ -83,6 +100,7 @@ export default function App() {
               onSetTool={setTool}
               onSetPendingSkin={setPendingSkin}
               onSetPendingFrame={setPendingFrame}
+              onOpenSkinPicker={() => setSkinPickerOpen(true)}
             />
             <LayerPanel />
           </div>
@@ -103,6 +121,10 @@ export default function App() {
           </div>
         </div>
 
+        <QuickSkinPicker
+          open={skinPickerOpen}
+          onClose={() => setSkinPickerOpen(false)}
+        />
       </div>
     </TooltipProvider>
   )
