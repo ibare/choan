@@ -1,8 +1,7 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link } from 'react-router-dom'
+import { GithubLogo } from '@phosphor-icons/react'
 
 export default function SiteNav() {
-  const { pathname } = useLocation()
-
   return (
     <nav className="site-nav">
       <Link to="/" className="site-nav__logo">
@@ -10,8 +9,10 @@ export default function SiteNav() {
         Choan
       </Link>
       <div className="site-nav__links">
-        <Link to="/features" className={`site-nav__link${pathname === '/features' ? ' active' : ''}`}>Features</Link>
         <Link to="/app" className="site-nav__cta">Do Sketch</Link>
+        <a href="https://github.com/ibare/choan" target="_blank" rel="noopener noreferrer" className="site-nav__link">
+          <GithubLogo size={20} />
+        </a>
       </div>
     </nav>
   )
