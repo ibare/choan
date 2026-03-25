@@ -24,11 +24,9 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   let panX = 0
   let panY = 0
 
-  // Damping state
+  // Damping state (rotation + zoom only; panning is direct)
   let thetaVel = 0
   let phiVel = 0
-  let panXVel = 0
-  let panYVel = 0
   let radiusVel = 0
   const dampingFactor = 0.1
 
@@ -40,7 +38,7 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   let spaceDown = false
 
   const rotateSpeed = 0.005
-  const panSpeed = 0.04
+  const panSpeed = 0.02
   const zoomSpeed = 0.001
 
   // Clamp phi to avoid gimbal lock
@@ -73,9 +71,9 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
       thetaVel -= dx * rotateSpeed
       phiVel -= dy * rotateSpeed
     } else if (isPanning) {
-      // Screen-space panning
-      panXVel -= dx * panSpeed * (radius / 20)
-      panYVel += dy * panSpeed * (radius / 20)
+      // Direct panning — no velocity/inertia for precision (like Figma)
+      panX -= dx * panSpeed * (radius / 20)
+      panY += dy * panSpeed * (radius / 20)
     }
   }
 
@@ -142,18 +140,14 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   window.addEventListener('keyup', onKeyUp)
 
   function update() {
-    // Apply velocities with damping
+    // Apply velocities with damping (rotation only — panning is direct)
     theta += thetaVel
     phi += phiVel
-    panX += panXVel
-    panY += panYVel
     radius += radiusVel
 
-    // Damping
+    // Damping (rotation + zoom only)
     thetaVel *= (1 - dampingFactor)
     phiVel *= (1 - dampingFactor)
-    panXVel *= (1 - dampingFactor)
-    panYVel *= (1 - dampingFactor)
     radiusVel *= (1 - dampingFactor)
 
     // Clamp
