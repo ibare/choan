@@ -24,5 +24,5 @@ export function ToastViewport() {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  return <RadixToast.Provider swipeDirection="down">{children}</RadixToast.Provider>
+  return <RadixToast.Provider swipeDirection="up">{children}</RadixToast.Provider>
 }

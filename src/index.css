@@ -520,7 +520,7 @@ body {
 /* Toast (Radix) */
 .ui-toast__viewport {
   position: fixed;
-  bottom: 24px;
+  top: 64px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 600;
@@ -528,10 +528,13 @@ body {
   flex-direction: column;
   gap: 8px;
   outline: none;
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 .ui-toast {
-  background: var(--gray-900);
-  color: var(--gray-100);
+  background: var(--gray-100);
+  color: var(--gray-900);
   font-size: var(--text-sm);
   padding: 12px 20px;
   border-radius: 10px;
@@ -544,12 +547,12 @@ body {
 .ui-toast__msg { line-height: 1.4; }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(-8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes toast-out {
   from { opacity: 1; transform: translateY(0); }
-  to   { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 0; transform: translateY(-8px); }
 }
 
 /* Tooltip (Radix) */
