@@ -15,7 +15,7 @@ const AXIS_LEN = 32
 const BALL_R = 10
 const BALL_R_BACK = 6
 const BG_R = 44
-const RING_R = 40  // wireframe ring radius
+const RING_R = 44  // wireframe ring radius (slightly larger than BG)
 
 // Axis definitions: direction in spherical (theta, phi), label, color
 const AXES = [
@@ -47,6 +47,7 @@ function drawRing(
   planeU: [number, number, number],
   planeV: [number, number, number],
   color: string, alpha: number,
+  offsetY = 0,  // vertical offset for latitude lines
 ) {
   const segments = 64
   ctx.strokeStyle = color
@@ -56,7 +57,7 @@ function drawRing(
   for (let i = 0; i <= segments; i++) {
     const a = (i / segments) * Math.PI * 2
     const px = Math.cos(a) * planeU[0] + Math.sin(a) * planeV[0]
-    const py = Math.cos(a) * planeU[1] + Math.sin(a) * planeV[1]
+    const py = Math.cos(a) * planeU[1] + Math.sin(a) * planeV[1] + offsetY
     const pz = Math.cos(a) * planeU[2] + Math.sin(a) * planeV[2]
     const p = project(px, py, pz, theta, phi)
     const sx = CENTER + p.x * RING_R
@@ -95,20 +96,32 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
       ctx.clearRect(0, 0, SIZE, SIZE)
 
       // Background circle
-      ctx.fillStyle = showRings ? 'rgba(30, 30, 40, 0.4)' : 'rgba(30, 30, 40, 0)'
+      ctx.fillStyle = showRings ? 'rgba(240, 240, 240, 0.85)' : 'rgba(30, 30, 40, 0)'
       ctx.beginPath()
       ctx.arc(CENTER, CENTER, BG_R, 0, Math.PI * 2)
       ctx.fill()
 
       // 3D wireframe rings (visible on hover/drag)
       if (showRings) {
-        const ringAlpha = dragging ? 0.5 : 0.25
-        // XY plane (red ring)
-        drawRing(ctx, theta, phi, [0, 0, 1], [1, 0, 0], [0, 1, 0], '#e74c3c', ringAlpha)
-        // XZ plane (green ring)
-        drawRing(ctx, theta, phi, [0, 1, 0], [1, 0, 0], [0, 0, 1], '#2ecc71', ringAlpha)
-        // YZ plane (blue ring)
-        drawRing(ctx, theta, phi, [1, 0, 0], [0, 1, 0], [0, 0, 1], '#3498db', ringAlpha)
+        const ringAlpha = dragging ? 0.45 : 0.2
+        const gridColor = '#888'
+
+        // Latitude lines (horizontal rings at different heights)
+        for (const lat of [-0.6, -0.3, 0.3, 0.6]) {
+          const r = Math.sqrt(1 - lat * lat)
+          drawRing(ctx, theta, phi, [0, 1, 0], [r, 0, 0], [0, 0, r], gridColor, ringAlpha * 0.5, lat)
+        }
+        // Longitude lines (vertical rings at different rotations)
+        for (const ang of [0, Math.PI / 3, Math.PI * 2 / 3]) {
+          const cu = Math.cos(ang), su = Math.sin(ang)
+          drawRing(ctx, theta, phi, [0, 0, 0], [cu, 0, su], [0, 1, 0], gridColor, ringAlpha * 0.5)
+        }
+
+        // 3 main great circles (colored)
+        const mainAlpha = dragging ? 0.6 : 0.35
+        drawRing(ctx, theta, phi, [0, 0, 1], [1, 0, 0], [0, 1, 0], '#e74c3c', mainAlpha)
+        drawRing(ctx, theta, phi, [0, 1, 0], [1, 0, 0], [0, 0, 1], '#2ecc71', mainAlpha)
+        drawRing(ctx, theta, phi, [1, 0, 0], [0, 1, 0], [0, 0, 1], '#3498db', mainAlpha)
       }
 
       // Project all 6 axis endpoints (+/-)
