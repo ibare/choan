@@ -161,8 +161,8 @@
 
 .hero__image-wrap {
   position: relative;
-  width: 100%;
-  max-width: 960px;
+  width: 80vw;
+  max-width: 1200px;
   margin-top: 56px;
   overflow: hidden;
   border-radius: 12px;
