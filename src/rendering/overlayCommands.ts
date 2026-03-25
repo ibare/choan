@@ -110,14 +110,23 @@ export function drawOverlay(
       }
     }
 
-    const tmW = p2w(el.x + el.width / 2, el.y)
-    const bmW = p2w(el.x + el.width / 2, el.y + el.height)
-    const rmW = p2w(el.x + el.width, el.y + el.height / 2)
-    const lmW = p2w(el.x, el.y + el.height / 2)
-    drawCapsule(tmW[0], tmW[1], true)
-    drawCapsule(bmW[0], bmW[1], true)
-    drawCapsule(rmW[0], rmW[1], false)
-    drawCapsule(lmW[0], lmW[1], false)
+    // Only show mid-edge handles if the edge is long enough to fit the capsule
+    const edgeW = Math.abs(sTrx - sTlx)  // horizontal edge length in physical px
+    const edgeH = Math.abs(sBly - sTly)  // vertical edge length in physical px
+    const minEdge = capL * 2 + cornerR * 2  // capsule + corner handles must fit
+
+    if (edgeW > minEdge) {
+      const tmW = p2w(el.x + el.width / 2, el.y)
+      const bmW = p2w(el.x + el.width / 2, el.y + el.height)
+      drawCapsule(tmW[0], tmW[1], true)
+      drawCapsule(bmW[0], bmW[1], true)
+    }
+    if (edgeH > minEdge) {
+      const rmW = p2w(el.x + el.width, el.y + el.height / 2)
+      const lmW = p2w(el.x, el.y + el.height / 2)
+      drawCapsule(rmW[0], rmW[1], false)
+      drawCapsule(lmW[0], lmW[1], false)
+    }
 
     // Layout resize handles + sizing indicators (row/column containers)
     const hWorld = HANDLE_SIZE_PX * (2 * FRUSTUM) / h * zs

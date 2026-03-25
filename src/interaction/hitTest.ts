@@ -58,15 +58,21 @@ export function hitTestCorner(
     if (dx * dx + dy * dy <= scaledHitR * scaledHitR) return i
   }
   // Mid-edge handles: 4=top, 5=right, 6=bottom, 7=left
-  const midEdges = [
-    { x: el.x + el.width / 2, y: el.y },                  // 4: top
-    { x: el.x + el.width, y: el.y + el.height / 2 },      // 5: right
-    { x: el.x + el.width / 2, y: el.y + el.height },      // 6: bottom
-    { x: el.x, y: el.y + el.height / 2 },                  // 7: left
+  // Only test if the edge is long enough (capsule + corners must fit)
+  const minEdgePx = 80 * zoomScale  // approximate threshold matching overlay rendering
+  const wideEnough = el.width > minEdgePx
+  const tallEnough = el.height > minEdgePx
+  const midEdges: ({ x: number; y: number } | null)[] = [
+    wideEnough ? { x: el.x + el.width / 2, y: el.y } : null,                  // 4: top
+    tallEnough ? { x: el.x + el.width, y: el.y + el.height / 2 } : null,      // 5: right
+    wideEnough ? { x: el.x + el.width / 2, y: el.y + el.height } : null,      // 6: bottom
+    tallEnough ? { x: el.x, y: el.y + el.height / 2 } : null,                  // 7: left
   ]
   for (let i = 0; i < midEdges.length; i++) {
-    const dx = pixel.x - midEdges[i].x
-    const dy = pixel.y - midEdges[i].y
+    const m = midEdges[i]
+    if (!m) continue
+    const dx = pixel.x - m.x
+    const dy = pixel.y - m.y
     if (dx * dx + dy * dy <= scaledHitR * scaledHitR) return 4 + i
   }
   return -1
