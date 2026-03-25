@@ -82,6 +82,21 @@ body {
 
 .toolbar-spacer { flex: 1; }
 .action-group { display: flex; gap: var(--space-1); }
+
+.speak-btn-group {
+  display: flex;
+  border-radius: var(--radius-2);
+  overflow: hidden;
+}
+.speak-btn__main {
+  border-radius: var(--radius-2) 0 0 var(--radius-2) !important;
+  border-right: 1px solid rgba(255,255,255,0.15) !important;
+}
+.speak-btn__save {
+  border-radius: 0 var(--radius-2) var(--radius-2) 0 !important;
+  padding: 0 8px !important;
+  min-width: 0 !important;
+}
 .export-msg { font-size: var(--text-xs); color: var(--accent); margin-left: var(--space-1); }
 
 /* ── Main layout ─────────────────────────────────────────── */

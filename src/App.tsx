@@ -8,7 +8,9 @@ import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
 import { TooltipProvider } from './components/ui/Tooltip'
+import { Tooltip } from './components/ui/Tooltip'
 import { Button } from './components/ui/Button'
+import { DownloadSimple } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
 
 export default function App() {
@@ -65,15 +67,21 @@ export default function App() {
 
   const handleDragEnd = useCallback(() => { dragRef.current = null }, [])
 
-  const handleExport = async () => {
+  const handleCopyToClipboard = async () => {
     const md = toMarkdown(elements, animationBundles)
     track('export-markdown', { elementCount: elements.length })
     try {
       await navigator.clipboard.writeText(md)
-      setExportMsg('Copied to clipboard!')
+      setExportMsg('Copied! Paste it into your AI chat.')
     } catch {
       setExportMsg('Copy failed')
     }
+    setTimeout(() => setExportMsg(''), 4000)
+  }
+
+  const handleDownload = () => {
+    const md = toMarkdown(elements, animationBundles)
+    track('export-markdown', { elementCount: elements.length })
     const blob = new Blob([md], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -81,7 +89,6 @@ export default function App() {
     a.download = 'choan.md'
     a.click()
     URL.revokeObjectURL(url)
-    setTimeout(() => setExportMsg(''), 3000)
   }
 
   return (
@@ -94,7 +101,14 @@ export default function App() {
           </span>
           <div className="toolbar-spacer" />
           <div className="action-group">
-            <Button variant="primary" onClick={handleExport}>Export MD</Button>
+            <div className="speak-btn-group">
+              <Button variant="primary" className="speak-btn__main" onClick={handleCopyToClipboard}>Speak LLM</Button>
+              <Tooltip content="Download .md">
+                <Button variant="primary" className="speak-btn__save" onClick={handleDownload}>
+                  <DownloadSimple size={15} weight="bold" />
+                </Button>
+              </Tooltip>
+            </div>
           </div>
           {exportMsg && <span className="export-msg">{exportMsg}</span>}
         </div>
