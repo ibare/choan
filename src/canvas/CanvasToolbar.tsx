@@ -44,7 +44,7 @@ export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTo
         </Button>
       </Tooltip>
 
-      <Tooltip content="Browser Frame">
+      <Tooltip content="Browser Frame (B)">
         <Button
           className="side-tool"
           active={pendingFrame === 'browser'}
@@ -54,7 +54,7 @@ export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTo
         </Button>
       </Tooltip>
 
-      <Tooltip content="Mobile Frame">
+      <Tooltip content="Mobile Frame (M)">
         <Button
           className="side-tool"
           active={pendingFrame === 'mobile'}

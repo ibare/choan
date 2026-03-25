@@ -111,7 +111,9 @@ export function useKeyboardHandlers(
       store.selectElement(rootId)
     },
     'tool:select': () => { setTool('select'); setPendingSkin(null); setPendingFrame(null) },
-    'tool:rectangle': () => setTool('rectangle'),
+    'tool:rectangle': () => { setTool('rectangle'); setPendingSkin(null); setPendingFrame(null) },
+    'frame:browser': () => { setTool('rectangle'); setPendingSkin(null); setPendingFrame('browser') },
+    'frame:mobile': () => { setTool('rectangle'); setPendingSkin(null); setPendingFrame('mobile') },
 
     // Split mode
     'split:enter': () => {
