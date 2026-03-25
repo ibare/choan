@@ -6,9 +6,8 @@ import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
-import { Tooltip, TooltipProvider } from './components/ui/Tooltip'
+import { TooltipProvider } from './components/ui/Tooltip'
 import { Button } from './components/ui/Button'
-import { Moon, Sun } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
 
 export default function App() {
@@ -19,7 +18,6 @@ export default function App() {
   } = useChoanStore()
 
   const [exportMsg, setExportMsg]       = useState('')
-  const [theme, setTheme]               = useState<'light' | 'dark'>('dark')
   const [timelineHeight, setTimelineHeight] = useState(180)
   const isDraggingRef   = useRef(false)
   const dragStartYRef   = useRef(0)
@@ -63,7 +61,7 @@ export default function App() {
 
   return (
     <TooltipProvider>
-      <div className="app" data-theme={theme}>
+      <div className="app" data-theme="dark">
         <div className="toolbar">
           <span className="app-logo">
             <img src={import.meta.env.BASE_URL + 'logo.png'} alt="" className="app-logo__img" />
@@ -72,14 +70,6 @@ export default function App() {
           <div className="toolbar-spacer" />
           <div className="action-group">
             <Button variant="primary" onClick={handleExport}>Export MD</Button>
-            <Tooltip content="Toggle theme">
-              <Button
-                variant="ghost" size="icon"
-                onClick={() => setTheme((t) => t === 'light' ? 'dark' : 'light')}
-              >
-                {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-              </Button>
-            </Tooltip>
           </div>
           {exportMsg && <span className="export-msg">{exportMsg}</span>}
         </div>
