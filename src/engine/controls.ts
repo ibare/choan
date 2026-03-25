@@ -103,9 +103,9 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     e.preventDefault()
     if (!wheelEnabled) return
 
-    // Pinch (ctrlKey on macOS trackpad) → zoom
-    // Two-finger scroll (no ctrlKey) → pan
-    if (e.ctrlKey) {
+    // Pinch (ctrlKey on macOS trackpad) or mouse wheel (deltaX === 0) → zoom
+    // Two-finger scroll (deltaX !== 0, no ctrlKey) → pan
+    if (e.ctrlKey || e.deltaX === 0) {
       // Cursor-centered zoom
       const rect = canvas.getBoundingClientRect()
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1
