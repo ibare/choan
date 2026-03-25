@@ -122,7 +122,7 @@ export default function FeaturesPage() {
       </section>
 
       <footer className="site-footer">
-        <p>Built with WebGL2 SDF Ray Marching</p>
+        <p>© 2026 Day1Company. All rights reserved.</p>
       </footer>
     </div>
   )
