@@ -138,8 +138,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         finalWx = wx + (centerWx - wx) * t
         finalWy = wy + (centerWy - wy) * t
       } else if (exportAnim.phase === 'blob') {
-        finalWx = centerWx
-        finalWy = centerWy
+        // Wobbly idle: per-element phase offset for organic motion
+        const t = now / 1000
+        const phase = i * 1.3  // stagger per element
+        finalWx = centerWx + Math.sin(t * 1.8 + phase) * 0.12 + Math.sin(t * 0.7 + phase * 0.5) * 0.06
+        finalWy = centerWy + Math.cos(t * 1.3 + phase) * 0.10 + Math.cos(t * 0.9 + phase * 0.7) * 0.05
       } else if (exportAnim.phase === 'restoring') {
         const t = 1 - (1 - exportT) * (1 - exportT)  // ease-out
         finalWx = centerWx + (wx - centerWx) * t
@@ -151,7 +154,8 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       if (exportAnim.phase === 'merging') {
         finalZ = el.z * ed * (1 - exportT * exportT) + zOffset
       } else if (exportAnim.phase === 'blob') {
-        finalZ = zOffset
+        const t = now / 1000
+        finalZ = zOffset + Math.sin(t * 1.5 + i * 0.8) * 0.03
       } else if (exportAnim.phase === 'restoring') {
         const t = 1 - (1 - exportT) * (1 - exportT)
         finalZ = el.z * ed * t + zOffset
@@ -173,8 +177,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         finalHh = hh + (blobSize - hh) * t
         finalRadius = radius + (1.0 - radius) * t  // round off corners
       } else if (exportAnim.phase === 'blob') {
-        finalHw = blobSize
-        finalHh = blobSize
+        // Breathing size pulsation
+        const t = now / 1000
+        const phase = i * 1.3
+        finalHw = blobSize + Math.sin(t * 2.5 + phase) * 0.04
+        finalHh = blobSize + Math.cos(t * 2.0 + phase) * 0.04
         finalRadius = 1.0
       } else if (exportAnim.phase === 'restoring') {
         const t = 1 - (1 - exportT) * (1 - exportT)

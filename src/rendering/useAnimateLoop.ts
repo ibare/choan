@@ -178,8 +178,9 @@ export function useAnimateLoop({
       if (exportAnim.phase === 'merging') {
         smoothK = phaseProgress() * 3.0  // 0 → 3.0
       } else if (exportAnim.phase === 'blob') {
-        // Pulsating blob: oscillate smoothK around 3.0
-        smoothK = 3.0 + Math.sin(phaseProgress() * Math.PI * 4) * 0.4
+        // Wobbly blob: layered sine oscillation
+        const t = performance.now() / 1000
+        smoothK = 3.0 + Math.sin(t * 2.2) * 0.3 + Math.sin(t * 3.7) * 0.15
       } else if (exportAnim.phase === 'restoring') {
         smoothK = 3.0 * (1 - phaseProgress())  // 3.0 → 0
       }
