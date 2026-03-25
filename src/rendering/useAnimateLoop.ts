@@ -176,12 +176,12 @@ export function useAnimateLoop({
       const exportAnim = getExportAnim()
       let smoothK = 0
       if (exportAnim.phase === 'merging') {
-        smoothK = phaseProgress() * 0.5  // 0 → 0.5
+        smoothK = phaseProgress() * 3.0  // 0 → 3.0
       } else if (exportAnim.phase === 'blob') {
-        // Pulsating blob: oscillate smoothK around 0.5
-        smoothK = 0.5 + Math.sin(phaseProgress() * Math.PI * 4) * 0.08
+        // Pulsating blob: oscillate smoothK around 3.0
+        smoothK = 3.0 + Math.sin(phaseProgress() * Math.PI * 4) * 0.4
       } else if (exportAnim.phase === 'restoring') {
-        smoothK = 0.5 * (1 - phaseProgress())  // 0.5 → 0
+        smoothK = 3.0 * (1 - phaseProgress())  // 3.0 → 0
       }
       renderer.setSmoothK(smoothK)
 

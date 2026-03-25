@@ -249,11 +249,12 @@ void main() {
     vec3 normal;
 
     if (uSmoothK > 0.0) {
-      // Smooth union mode: use blended color, numerical normal over full scene
+      // Smooth union mode: save blended color BEFORE normal computation
+      // (sceneSDF calls during normal calc overwrite _blendedColor)
       baseColor = _blendedColor;
       opacity = 1.0;
       // Numerical normal via full sceneSDF (not single object)
-      const float nh = 0.001;
+      const float nh = 0.002;
       const vec2 nk = vec2(1.0, -1.0);
       normal = normalize(
         nk.xyy * sceneSDF(p + nk.xyy * nh).x +
