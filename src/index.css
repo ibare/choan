@@ -29,12 +29,19 @@ body {
 }
 
 .app-logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--text-lg);
   font-weight: 800;
   letter-spacing: -0.5px;
-  color: var(--accent);
+  color: #ffffff;
   user-select: none;
   margin-right: var(--space-1);
+}
+.app-logo__img {
+  width: 20px;
+  height: 20px;
 }
 
 .project-name {

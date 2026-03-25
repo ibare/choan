@@ -65,7 +65,10 @@ export default function App() {
     <TooltipProvider>
       <div className="app" data-theme={theme}>
         <div className="toolbar">
-          <span className="app-logo">Choan</span>
+          <span className="app-logo">
+            <img src={import.meta.env.BASE_URL + 'logo.png'} alt="" className="app-logo__img" />
+            Sketch UI · LLM Ready
+          </span>
           <div className="toolbar-spacer" />
           <div className="action-group">
             <Button variant="primary" onClick={handleExport}>Export MD</Button>

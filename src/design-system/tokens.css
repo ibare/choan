@@ -95,7 +95,7 @@
   /* Layout */
   --toolbar-h:  48px;
   --panel-w:    260px;
-  --font:       'Inter', system-ui, sans-serif;
+  --font:       'Space Grotesk', system-ui, sans-serif;
 }
 
 /* ── Semantic Tokens: Light (explicit override) ────────── */
