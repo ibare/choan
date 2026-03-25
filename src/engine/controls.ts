@@ -9,6 +9,7 @@ export interface OrbitControls {
   dispose(): void
   getAngles(): { theta: number; phi: number }
   setAngles(theta: number, phi: number): void
+  resetView(): void
   wheelEnabled: boolean
   readonly isInteracting: boolean
   readonly isSpaceDown: boolean
@@ -188,12 +189,16 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
 
   function getAngles() { return { theta, phi } }
   function setAngles(t: number, p: number) { theta = t; phi = p }
+  function resetView() {
+    theta = 0; phi = Math.PI / 2; radius = 20; panX = 0; panY = 0
+    thetaVel = 0; phiVel = 0; radiusVel = 0
+  }
 
   // Initialize camera position
   update()
 
   return {
-    update, dispose, getAngles, setAngles,
+    update, dispose, getAngles, setAngles, resetView,
     get wheelEnabled() { return wheelEnabled },
     set wheelEnabled(v: boolean) { wheelEnabled = v },
     get isInteracting() { return isRotating || isPanning || (performance.now() - wheelTimer < 150) },

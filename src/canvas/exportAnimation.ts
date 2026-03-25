@@ -13,10 +13,15 @@ export const MERGE_DURATION = 1500
 export const RESTORE_DURATION = 350  // fast snap-back
 
 let state: ExportAnimState = { phase: 'idle', startTime: 0 }
+let onStartCallback: (() => void) | null = null
 
 export function getExportAnim(): ExportAnimState { return state }
 
+/** Register a callback that runs when the animation starts (e.g., reset camera) */
+export function onExportAnimStart(cb: () => void) { onStartCallback = cb }
+
 export function startExportAnim() {
+  onStartCallback?.()
   state = { phase: 'merging', startTime: performance.now() }
 }
 

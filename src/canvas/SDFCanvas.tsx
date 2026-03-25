@@ -14,6 +14,7 @@ import FrameIndicator from './FrameIndicator'
 import NavigationGizmo from './NavigationGizmo'
 import SplitLabels from './SplitLabels'
 import ContextToolbar from './ContextToolbar'
+import { onExportAnimStart } from './exportAnimation'
 // PinOverlay removed — sizing indicators rendered via WebGL overlay
 
 export default function SDFCanvas() {
@@ -95,6 +96,7 @@ export default function SDFCanvas() {
     rendererRef.current = renderer
     canvasSizeRef.current = { w: mount.clientWidth, h: mount.clientHeight }
     controlsRef.current = createOrbitControls(renderer.canvas, renderer.camera)
+    onExportAnimStart(() => controlsRef.current?.resetView())
     const ro = new ResizeObserver(() => {
       canvasSizeRef.current = { w: mount.clientWidth, h: mount.clientHeight }
       renderer.resize(mount.clientWidth, mount.clientHeight)
