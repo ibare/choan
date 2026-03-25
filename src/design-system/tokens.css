@@ -68,6 +68,7 @@
 /* ── Semantic Tokens: Light (default) ──────────────────── */
 :root {
   --bg:             var(--gray-50);
+  --surface-0:      var(--gray-100);
   --surface-1:      var(--gray-0);
   --surface-2:      var(--gray-100);
   --surface-3:      var(--gray-150);
@@ -101,6 +102,7 @@
 /* ── Semantic Tokens: Light (explicit override) ────────── */
 [data-theme="light"] {
   --bg:             var(--gray-50);
+  --surface-0:      var(--gray-100);
   --surface-1:      var(--gray-0);
   --surface-2:      var(--gray-100);
   --surface-3:      var(--gray-150);
@@ -132,6 +134,7 @@
 /* ── Semantic Tokens: Dark ─────────────────────────────── */
 [data-theme="dark"] {
   --bg:             var(--gray-900);
+  --surface-0:      var(--gray-950);
   --surface-1:      var(--gray-850);
   --surface-2:      var(--gray-800);
   --surface-3:      var(--gray-750);

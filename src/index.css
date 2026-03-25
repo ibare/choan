@@ -85,24 +85,30 @@ body {
 .export-msg { font-size: var(--text-xs); color: var(--accent); margin-left: var(--space-1); }
 
 /* ── Main layout ─────────────────────────────────────────── */
-.main { display: flex; flex: 1; overflow: hidden; }
+.main { display: flex; flex: 1; overflow: hidden; background: var(--surface-0); }
 
 .left-panel {
   width: 200px;
   background: var(--surface-1);
-  border-right: 1px solid var(--border);
+  border-right: none;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   overflow: hidden;
 }
 
-.main-center { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
-.canvas-area { flex: 1; position: relative; overflow: hidden; }
+.main-center { display: flex; flex-direction: column; flex: 1; overflow: hidden; padding: 6px 0; gap: 6px; }
+.canvas-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
 
 .resize-handle-h {
-  height: 5px; flex-shrink: 0; cursor: ns-resize;
-  background: var(--border); position: relative;
+  height: 6px; flex-shrink: 0; cursor: ns-resize;
+  background: transparent; position: relative;
   transition: background var(--transition-fast);
 }
 .resize-handle-h:hover, .resize-handle-h:active { background: var(--accent); }
@@ -110,7 +116,7 @@ body {
 .right-panel {
   width: var(--panel-w);
   background: var(--surface-1);
-  border-left: 1px solid var(--border);
+  border-left: none;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -779,7 +785,9 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 /* ── Timeline Panel ──────────────────────────────────────── */
 .timeline-panel {
   height: 180px; min-height: 80px;
-  background: var(--surface-1); border-top: 1px solid var(--border);
+  background: var(--surface-1); border-top: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.06);
   display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
   font-size: var(--text-xs); position: relative;
 }
