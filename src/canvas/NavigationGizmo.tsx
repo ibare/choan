@@ -13,7 +13,7 @@ const SIZE = 100
 const CENTER = SIZE / 2
 const AXIS_LEN = 32
 const BALL_R = 10
-const BALL_R_BACK = 6
+const BALL_R_BACK = 4
 const BG_R = 44
 const RING_R = 44  // wireframe ring radius (slightly larger than BG)
 
