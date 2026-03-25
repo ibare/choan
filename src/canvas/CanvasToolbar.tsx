@@ -44,8 +44,6 @@ export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTo
         </Button>
       </Tooltip>
 
-      <div className="toolbar-separator" />
-
       <Tooltip content="Browser Frame">
         <Button
           className="side-tool"
@@ -65,8 +63,6 @@ export default function CanvasToolbar({ tool, pendingSkin, pendingFrame, onSetTo
           <DeviceMobile size={18} />
         </Button>
       </Tooltip>
-
-      <div className="toolbar-separator" />
 
       <Tooltip content="Skin Components (S)">
         <Button
