@@ -89,6 +89,8 @@ body {
 
 .left-panel {
   width: 160px;
+  min-width: 80px;
+  max-width: 320px;
   background: var(--surface-1);
   border-right: none;
   display: flex;
@@ -104,6 +106,24 @@ body {
   overflow: hidden;
   border-radius: 12px;
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.resize-handle-v {
+  width: 12px; flex-shrink: 0; cursor: ew-resize;
+  background: transparent; position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.resize-handle-v::after {
+  content: '';
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--gray-700);
+  transition: background var(--transition-fast), height var(--transition-fast);
+}
+.resize-handle-v:hover::after, .resize-handle-v:active::after {
+  background: var(--accent);
+  height: 48px;
 }
 
 .resize-handle-h {
@@ -126,6 +146,8 @@ body {
 
 .right-panel {
   width: var(--panel-w);
+  min-width: 180px;
+  max-width: 400px;
   background: var(--surface-1);
   border-left: none;
   overflow-y: auto;
@@ -498,17 +520,14 @@ body {
 /* Misc utility */
 .ui-row-gap-2 { display: flex; gap: var(--space-2); align-items: center; }
 
-/* ── Side toolbar (2-column) ──────────────────────────────── */
+/* ── Side toolbar (flex-wrap, fills available width) ──────── */
 .side-toolbar {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 2px;
   padding: var(--space-1);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-}
-.side-toolbar .toolbar-separator {
-  grid-column: 1 / -1;
 }
 
 .side-tool {

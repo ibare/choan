@@ -20,6 +20,8 @@ export default function App() {
 
   const [exportMsg, setExportMsg]       = useState('')
   const [timelineHeight, setTimelineHeight] = useState(180)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(160)
+  const [rightPanelWidth, setRightPanelWidth] = useState(260)
   const [skinPickerOpen, setSkinPickerOpen] = useState(false)
 
   // S key → toggle Quick Skin Picker
@@ -36,26 +38,32 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const isDraggingRef   = useRef(false)
-  const dragStartYRef   = useRef(0)
-  const dragStartHRef   = useRef(0)
+  // Generic drag resize helper
+  const dragRef = useRef<{ axis: 'x-left' | 'x-right' | 'y'; startPos: number; startSize: number } | null>(null)
 
-  const handleResizeStart = useCallback((e: React.PointerEvent) => {
-    isDraggingRef.current = true
-    dragStartYRef.current = e.clientY
-    dragStartHRef.current = timelineHeight
+  const handleDragStart = useCallback((axis: 'x-left' | 'x-right' | 'y') => (e: React.PointerEvent) => {
+    const startPos = axis === 'y' ? e.clientY : e.clientX
+    const startSize = axis === 'y' ? timelineHeight : axis === 'x-left' ? leftPanelWidth : rightPanelWidth
+    dragRef.current = { axis, startPos, startSize }
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-  }, [timelineHeight])
+  }, [timelineHeight, leftPanelWidth, rightPanelWidth])
 
-  const handleResizeMove = useCallback((e: React.PointerEvent) => {
-    if (!isDraggingRef.current) return
-    const dy = dragStartYRef.current - e.clientY
-    setTimelineHeight(Math.max(80, Math.min(600, dragStartHRef.current + dy)))
+  const handleDragMove = useCallback((e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d) return
+    if (d.axis === 'y') {
+      const dy = d.startPos - e.clientY
+      setTimelineHeight(Math.max(80, Math.min(600, d.startSize + dy)))
+    } else if (d.axis === 'x-left') {
+      const dx = e.clientX - d.startPos
+      setLeftPanelWidth(Math.max(80, Math.min(320, d.startSize + dx)))
+    } else {
+      const dx = d.startPos - e.clientX
+      setRightPanelWidth(Math.max(180, Math.min(400, d.startSize + dx)))
+    }
   }, [])
 
-  const handleResizeEnd = useCallback(() => {
-    isDraggingRef.current = false
-  }, [])
+  const handleDragEnd = useCallback(() => { dragRef.current = null }, [])
 
   const handleExport = async () => {
     const md = toMarkdown(elements, animationBundles)
@@ -92,7 +100,7 @@ export default function App() {
         </div>
 
         <div className="main">
-          <div className="left-panel">
+          <div className="left-panel" style={{ width: leftPanelWidth }}>
             <CanvasToolbar
               tool={tool}
               pendingSkin={pendingSkin}
@@ -104,19 +112,31 @@ export default function App() {
             />
             <LayerPanel />
           </div>
+          <div
+            className="resize-handle-v"
+            onPointerDown={handleDragStart('x-left')}
+            onPointerMove={handleDragMove}
+            onPointerUp={handleDragEnd}
+          />
           <div className="main-center">
             <div className="canvas-area" data-theme="light">
               <SDFCanvas />
             </div>
             <div
               className="resize-handle-h"
-              onPointerDown={handleResizeStart}
-              onPointerMove={handleResizeMove}
-              onPointerUp={handleResizeEnd}
+              onPointerDown={handleDragStart('y')}
+              onPointerMove={handleDragMove}
+              onPointerUp={handleDragEnd}
             />
             <TimelinePanel visible height={timelineHeight} />
           </div>
-          <div className="right-panel">
+          <div
+            className="resize-handle-v"
+            onPointerDown={handleDragStart('x-right')}
+            onPointerMove={handleDragMove}
+            onPointerUp={handleDragEnd}
+          />
+          <div className="right-panel" style={{ width: rightPanelWidth }}>
             <PropertiesPanel />
           </div>
         </div>
