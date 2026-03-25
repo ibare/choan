@@ -107,11 +107,22 @@ body {
 }
 
 .resize-handle-h {
-  height: 6px; flex-shrink: 0; cursor: ns-resize;
+  height: 12px; flex-shrink: 0; cursor: ns-resize;
   background: transparent; position: relative;
-  transition: background var(--transition-fast);
+  display: flex; align-items: center; justify-content: center;
 }
-.resize-handle-h:hover, .resize-handle-h:active { background: var(--accent); }
+.resize-handle-h::after {
+  content: '';
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--gray-700);
+  transition: background var(--transition-fast), width var(--transition-fast);
+}
+.resize-handle-h:hover::after, .resize-handle-h:active::after {
+  background: var(--accent);
+  width: 48px;
+}
 
 .right-panel {
   width: var(--panel-w);
