@@ -146,19 +146,49 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         finalWy = centerWy + (wy - centerWy) * t
       }
 
+      // Export animation: flatten Z to same level
+      let finalZ = el.z * ed + zOffset
+      if (exportAnim.phase === 'merging') {
+        finalZ = el.z * ed * (1 - exportT * exportT) + zOffset
+      } else if (exportAnim.phase === 'blob') {
+        finalZ = zOffset
+      } else if (exportAnim.phase === 'restoring') {
+        const t = 1 - (1 - exportT) * (1 - exportT)
+        finalZ = el.z * ed * t + zOffset
+      }
+
       // uPosType[i]
       const pi = POS_OFFSET + i * 4
       data[pi + 0] = finalWx
       data[pi + 1] = finalWy
-      data[pi + 2] = el.z * ed + zOffset
+      data[pi + 2] = finalZ
       data[pi + 3] = shapeType
+
+      // Export animation: shrink elements toward a uniform small size
+      let finalHw = hw, finalHh = hh, finalRadius = radius
+      const blobSize = 0.3  // target half-size for the merged blob
+      if (exportAnim.phase === 'merging') {
+        const t = exportT * exportT
+        finalHw = hw + (blobSize - hw) * t
+        finalHh = hh + (blobSize - hh) * t
+        finalRadius = radius + (1.0 - radius) * t  // round off corners
+      } else if (exportAnim.phase === 'blob') {
+        finalHw = blobSize
+        finalHh = blobSize
+        finalRadius = 1.0
+      } else if (exportAnim.phase === 'restoring') {
+        const t = 1 - (1 - exportT) * (1 - exportT)
+        finalHw = blobSize + (hw - blobSize) * t
+        finalHh = blobSize + (hh - blobSize) * t
+        finalRadius = 1.0 + (radius - 1.0) * t
+      }
 
       // uSizeRadius[i]
       const si = SIZE_OFFSET + i * 4
-      data[si + 0] = hw
-      data[si + 1] = hh
+      data[si + 0] = finalHw
+      data[si + 1] = finalHh
       data[si + 2] = ed / 2
-      data[si + 3] = radius
+      data[si + 3] = finalRadius
 
       // uColorAlpha[i]
       const ci = COLOR_OFFSET + i * 4
