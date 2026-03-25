@@ -1,7 +1,8 @@
-// Blender-style Navigation Gizmo — 3D axis indicator with click-to-snap views.
+// Navigation Gizmo — 3D axis indicator with click-to-snap views and drag-to-rotate.
 // Renders on a small HTML canvas overlay in the top-right of the viewport.
+// Shows 3D wireframe rings on hover/drag to hint that rotation is possible.
 
-import { useEffect, useRef, type MutableRefObject } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import type { OrbitControls } from '../engine/controls'
 
 interface NavigationGizmoProps {
@@ -14,36 +15,65 @@ const AXIS_LEN = 32
 const BALL_R = 10
 const BALL_R_BACK = 6
 const BG_R = 44
+const RING_R = 40  // wireframe ring radius
 
 // Axis definitions: direction in spherical (theta, phi), label, color
 const AXES = [
-  { label: 'X', color: '#e74c3c', theta: Math.PI / 2, phi: Math.PI / 2 },   // +X: right
-  { label: 'Y', color: '#2ecc71', theta: 0, phi: 0 },                        // +Y: up
-  { label: 'Z', color: '#3498db', theta: 0, phi: Math.PI / 2 },              // +Z: front
+  { label: 'X', color: '#e74c3c', theta: Math.PI / 2, phi: Math.PI / 2 },
+  { label: 'Y', color: '#2ecc71', theta: 0, phi: 0 },
+  { label: 'Z', color: '#3498db', theta: 0, phi: Math.PI / 2 },
 ]
 
-// Project a 3D unit vector to 2D gizmo space using the current camera angles
+const ROTATE_SPEED = 0.008
+
+// Project a 3D unit vector to 2D gizmo space
 function project(ax: number, ay: number, az: number, theta: number, phi: number): { x: number; y: number; z: number } {
   const st = Math.sin(theta), ct = Math.cos(theta)
   const sp = Math.sin(phi), cp = Math.cos(phi)
-
-  // Camera basis vectors (same math as OrbitControls)
-  // View matrix: rotate by -theta around Y, then tilt by -(phi - PI/2) around X
   const rx = ct, rz = -st
   const ux = -cp * st, uy = sp, uz = -cp * ct
   const fx = sp * st, fy = cp, fz = sp * ct
-
-  // Project onto screen (right, up) — discard forward
   const sx = ax * rx + ay * 0 + az * rz
   const sy = ax * ux + ay * uy + az * uz
   const depth = ax * fx + ay * fy + az * fz
-
   return { x: sx, y: -sy, z: depth }
+}
+
+// Draw a 3D wireframe ring (circle on a given plane) projected to 2D
+function drawRing(
+  ctx: CanvasRenderingContext2D,
+  theta: number, phi: number,
+  _planeNormal: [number, number, number],
+  planeU: [number, number, number],
+  planeV: [number, number, number],
+  color: string, alpha: number,
+) {
+  const segments = 64
+  ctx.strokeStyle = color
+  ctx.globalAlpha = alpha
+  ctx.lineWidth = 1.2
+  ctx.beginPath()
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2
+    const px = Math.cos(a) * planeU[0] + Math.sin(a) * planeV[0]
+    const py = Math.cos(a) * planeU[1] + Math.sin(a) * planeV[1]
+    const pz = Math.cos(a) * planeU[2] + Math.sin(a) * planeV[2]
+    const p = project(px, py, pz, theta, phi)
+    const sx = CENTER + p.x * RING_R
+    const sy = CENTER + p.y * RING_R
+    if (i === 0) ctx.moveTo(sx, sy)
+    else ctx.lineTo(sx, sy)
+  }
+  ctx.stroke()
+  ctx.globalAlpha = 1
 }
 
 export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const frameRef = useRef(0)
+  const [hovered, setHovered] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const dragRef = useRef({ active: false, lastX: 0, lastY: 0, moved: false })
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -60,39 +90,46 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
       if (!controls) return
 
       const { theta, phi } = controls.getAngles()
+      const showRings = hovered || dragging
+
       ctx.clearRect(0, 0, SIZE, SIZE)
 
       // Background circle
-      ctx.fillStyle = 'rgba(30, 30, 40, 0)'
+      ctx.fillStyle = showRings ? 'rgba(30, 30, 40, 0.4)' : 'rgba(30, 30, 40, 0)'
       ctx.beginPath()
       ctx.arc(CENTER, CENTER, BG_R, 0, Math.PI * 2)
       ctx.fill()
 
+      // 3D wireframe rings (visible on hover/drag)
+      if (showRings) {
+        const ringAlpha = dragging ? 0.5 : 0.25
+        // XY plane (red ring)
+        drawRing(ctx, theta, phi, [0, 0, 1], [1, 0, 0], [0, 1, 0], '#e74c3c', ringAlpha)
+        // XZ plane (green ring)
+        drawRing(ctx, theta, phi, [0, 1, 0], [1, 0, 0], [0, 0, 1], '#2ecc71', ringAlpha)
+        // YZ plane (blue ring)
+        drawRing(ctx, theta, phi, [1, 0, 0], [0, 1, 0], [0, 0, 1], '#3498db', ringAlpha)
+      }
+
       // Project all 6 axis endpoints (+/-)
       const items: Array<{ x: number; y: number; z: number; label: string; color: string; back: boolean }> = []
       for (const axis of AXES) {
-        // Unit direction vector for this axis
         const dx = axis.label === 'X' ? 1 : 0
         const dy = axis.label === 'Y' ? 1 : 0
         const dz = axis.label === 'Z' ? 1 : 0
-
         const pos = project(dx, dy, dz, theta, phi)
         const neg = project(-dx, -dy, -dz, theta, phi)
-
         items.push({ x: pos.x, y: pos.y, z: pos.z, label: axis.label, color: axis.color, back: false })
         items.push({ x: neg.x, y: neg.y, z: neg.z, label: '', color: axis.color, back: true })
       }
 
-      // Sort by depth (back to front)
       items.sort((a, b) => a.z - b.z)
 
-      // Draw
       for (const item of items) {
         const sx = CENTER + item.x * AXIS_LEN
         const sy = CENTER + item.y * AXIS_LEN
         const r = item.back ? BALL_R_BACK : BALL_R
 
-        // Axis line from center
         ctx.strokeStyle = item.back ? 'rgba(255,255,255,0.15)' : item.color
         ctx.lineWidth = item.back ? 1 : 2
         ctx.beginPath()
@@ -100,16 +137,14 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
         ctx.lineTo(sx, sy)
         ctx.stroke()
 
-        // Ball
         ctx.fillStyle = item.back ? 'rgba(80,80,90,0.7)' : item.color
         ctx.beginPath()
         ctx.arc(sx, sy, r, 0, Math.PI * 2)
         ctx.fill()
 
-        // Label
         if (item.label) {
           ctx.fillStyle = '#fff'
-          ctx.font = 'bold 9px Inter, system-ui, sans-serif'
+          ctx.font = `bold 9px 'Space Grotesk', system-ui, sans-serif`
           ctx.textAlign = 'center'
           ctx.textBaseline = 'middle'
           ctx.fillText(item.label, sx, sy)
@@ -125,9 +160,41 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
 
     draw()
     return () => cancelAnimationFrame(frameRef.current)
-  }, [controlsRef])
+  }, [controlsRef, hovered, dragging])
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
+    dragRef.current = { active: true, lastX: e.clientX, lastY: e.clientY, moved: false }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    setDragging(true)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    if (!d.active) return
+    const dx = e.clientX - d.lastX
+    const dy = e.clientY - d.lastY
+    d.lastX = e.clientX
+    d.lastY = e.clientY
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) d.moved = true
+
+    const controls = controlsRef.current
+    if (!controls) return
+    const { theta, phi } = controls.getAngles()
+    const newTheta = theta - dx * ROTATE_SPEED
+    const newPhi = Math.max(0.01, Math.min(Math.PI - 0.01, phi - dy * ROTATE_SPEED))
+    controls.setAngles(newTheta, newPhi)
+  }
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    const d = dragRef.current
+    d.active = false
+    setDragging(false)
+
+    // If no drag movement, treat as click (axis snap)
+    if (!d.moved) handleClick(e)
+  }
+
+  const handleClick = (e: React.PointerEvent) => {
     const controls = controlsRef.current
     if (!controls) return
     const canvas = canvasRef.current!
@@ -137,13 +204,11 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
 
     const { theta, phi } = controls.getAngles()
 
-    // Check which axis ball was clicked
     for (const axis of AXES) {
       const dx = axis.label === 'X' ? 1 : 0
       const dy = axis.label === 'Y' ? 1 : 0
       const dz = axis.label === 'Z' ? 1 : 0
 
-      // Positive
       const pos = project(dx, dy, dz, theta, phi)
       const psx = pos.x * AXIS_LEN, psy = pos.y * AXIS_LEN
       if ((mx - psx) ** 2 + (my - psy) ** 2 < BALL_R * BALL_R * 2) {
@@ -151,11 +216,9 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
         return
       }
 
-      // Negative
       const neg = project(-dx, -dy, -dz, theta, phi)
       const nsx = neg.x * AXIS_LEN, nsy = neg.y * AXIS_LEN
       if ((mx - nsx) ** 2 + (my - nsy) ** 2 < BALL_R_BACK * BALL_R_BACK * 2) {
-        // Opposite view
         controls.setAngles(axis.theta + Math.PI, Math.PI - axis.phi)
         return
       }
@@ -168,8 +231,16 @@ export default function NavigationGizmo({ controlsRef }: NavigationGizmoProps) {
       className="navigation-gizmo"
       width={SIZE}
       height={SIZE}
-      style={{ width: SIZE, height: SIZE }}
-      onClick={handleClick}
+      style={{
+        width: SIZE,
+        height: SIZE,
+        cursor: dragging ? 'grabbing' : hovered ? 'grab' : 'default',
+      }}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => { setHovered(false); if (!dragRef.current.active) setDragging(false) }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
     />
   )
 }
