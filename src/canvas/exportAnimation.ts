@@ -10,8 +10,7 @@ export interface ExportAnimState {
 
 // Timing (ms)
 export const MERGE_DURATION = 1500
-export const BLOB_DURATION = 1200
-export const RESTORE_DURATION = 600
+export const RESTORE_DURATION = 350  // fast snap-back
 
 let state: ExportAnimState = { phase: 'idle', startTime: 0 }
 
@@ -21,17 +20,22 @@ export function startExportAnim() {
   state = { phase: 'merging', startTime: performance.now() }
 }
 
+/** Called when toast closes — triggers the snap-back */
+export function startRestore() {
+  state = { phase: 'restoring', startTime: performance.now() }
+}
+
 export function tickExportAnim(): ExportAnimPhase {
   if (state.phase === 'idle') return 'idle'
   const elapsed = performance.now() - state.startTime
 
   if (state.phase === 'merging' && elapsed >= MERGE_DURATION) {
+    // Hold in blob state — wait for startRestore() call
     state = { phase: 'blob', startTime: performance.now() }
-  } else if (state.phase === 'blob' && elapsed >= BLOB_DURATION) {
-    state = { phase: 'restoring', startTime: performance.now() }
   } else if (state.phase === 'restoring' && elapsed >= RESTORE_DURATION) {
     state = { phase: 'idle', startTime: 0 }
   }
+  // blob phase: no auto-transition, waits for startRestore()
 
   return state.phase
 }
@@ -39,9 +43,8 @@ export function tickExportAnim(): ExportAnimPhase {
 /** 0→1 progress within the current phase */
 export function phaseProgress(): number {
   if (state.phase === 'idle') return 0
+  if (state.phase === 'blob') return 1  // hold at full
   const elapsed = performance.now() - state.startTime
-  const dur = state.phase === 'merging' ? MERGE_DURATION
-    : state.phase === 'blob' ? BLOB_DURATION
-    : RESTORE_DURATION
+  const dur = state.phase === 'merging' ? MERGE_DURATION : RESTORE_DURATION
   return Math.min(1, elapsed / dur)
 }

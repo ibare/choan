@@ -12,7 +12,7 @@ import { Toast, ToastViewport, ToastProvider } from './components/ui/Toast'
 import { Button } from './components/ui/Button'
 import { DownloadSimple } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
-import { startExportAnim, MERGE_DURATION, BLOB_DURATION } from './canvas/exportAnimation'
+import { startExportAnim, startRestore, MERGE_DURATION } from './canvas/exportAnimation'
 
 export default function App() {
   const {
@@ -78,12 +78,12 @@ export default function App() {
     try { await navigator.clipboard.writeText(md) }
     catch { copyOk = false }
 
-    // Start visual animation, show toast at blob phase
+    // Start visual animation, show toast when merge completes
     startExportAnim()
     setTimeout(() => {
       setToastMsg(copyOk ? 'Copied! Paste it into your AI chat.' : 'Copy failed')
       setToastOpen(true)
-    }, MERGE_DURATION + BLOB_DURATION * 0.3)
+    }, MERGE_DURATION + 300)
   }
 
   const handleDownload = () => {
@@ -167,7 +167,7 @@ export default function App() {
           onClose={() => setSkinPickerOpen(false)}
         />
 
-        <Toast open={toastOpen} onOpenChange={setToastOpen}>{toastMsg}</Toast>
+        <Toast open={toastOpen} onOpenChange={(open) => { setToastOpen(open); if (!open) startRestore() }}>{toastMsg}</Toast>
         <ToastViewport />
       </div>
     </TooltipProvider>

@@ -18,7 +18,7 @@ import { kfAnimator } from './kfAnimator'
 import { createLayoutAnimator } from '../layout/animator'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
 import { hoveredHistoryColor } from '../canvas/colorHistoryHover'
-import { tickExportAnim, getExportAnim, phaseProgress } from '../canvas/exportAnimation'
+import { tickExportAnim, getExportAnim, phaseProgress } from  '../canvas/exportAnimation'
 
 export function useAnimateLoop({
   rendererRef,
