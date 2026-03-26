@@ -1,8 +1,9 @@
-// Undo/Redo — snapshot-based history stack for elements + animationBundles.
-// Snapshots are JSON strings of { elements, animationBundles }.
+// Undo/Redo — snapshot-based history stack for full scene state.
+// Snapshots are JSON strings of { scenes, activeSceneId }.
 
 import { useElementStore } from './useElementStore'
 import { useAnimationStore } from './useAnimationStore'
+import { useSceneStore } from './useSceneStore'
 
 const MAX_SNAPSHOTS = 50
 const DEBOUNCE_MS = 500
@@ -13,17 +14,24 @@ let isRestoring = false  // prevent re-snapshotting during undo/redo
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
 function takeSnapshot(): string {
-  const elements = useElementStore.getState().elements
-  const animationBundles = useAnimationStore.getState().animationBundles
-  return JSON.stringify({ elements, animationBundles })
+  // Sync active scene before snapshotting
+  useSceneStore.getState().syncActiveSceneData()
+  const { scenes, activeSceneId } = useSceneStore.getState()
+  return JSON.stringify({ scenes, activeSceneId })
 }
 
 function restoreSnapshot(json: string) {
   isRestoring = true
   try {
     const data = JSON.parse(json)
-    useElementStore.getState().loadElements(data.elements)
-    useAnimationStore.getState().loadAnimation(undefined, data.animationBundles)
+    if (Array.isArray(data.scenes)) {
+      // V2 snapshot (scene-aware)
+      useSceneStore.getState().loadScenes(data.scenes, data.activeSceneId)
+    } else {
+      // Legacy V1 snapshot (pre-scene, for backward compat within session)
+      useElementStore.getState().loadElements(data.elements)
+      useAnimationStore.getState().loadAnimation(undefined, data.animationBundles)
+    }
   } catch (err) {
     console.error('Failed to restore snapshot:', err)
   } finally {
@@ -74,4 +82,5 @@ export function initHistory() {
   pushSnapshot()
   useElementStore.subscribe(schedulePush)
   useAnimationStore.subscribe(schedulePush)
+  useSceneStore.subscribe(schedulePush)
 }

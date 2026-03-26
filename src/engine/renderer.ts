@@ -28,7 +28,22 @@ export interface SDFRenderer {
   resize(width: number, height: number): void
   updateScene(elements: ChoanElement[], extrudeDepth?: number, hoveredColor?: number | null): void
   setSmoothK(k: number): void
+  /** Full render: pipeline + blit + overlay. Backward-compatible entry point. */
   render(settings: RenderSettings): void
+  /** Pass 1 (geometry) + Pass 2 (edge) → resolveFB. Does NOT blit to canvas. */
+  renderPipeline(settings: RenderSettings): void
+  /** Blit resolveFB → canvas + overlay beginFrame. */
+  blitAndOverlay(): void
+  /** Apply pending canvas resize (call at frame start). */
+  applyPendingResize(): void
+  /** Get the resolve texture for scene transition snapshot. */
+  getResolveTex(): WebGLTexture
+  /** Get the resolve FBO for reading. */
+  getResolveFB(): WebGLFramebuffer
+  /** Get supersampled dimensions. */
+  getSuperSampledSize(): [number, number]
+  /** Get the shared fullscreen quad VAO (for scene transitions). */
+  getQuad(): WebGLVertexArrayObject
   dispose(): void
 }
 
@@ -200,12 +215,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     )
   }
 
-  function render(s: RenderSettings) {
-    // Apply any pending canvas resize here — BEFORE drawing — so that setting
-    // canvas.width (which clears the drawing buffer) is immediately followed by
-    // a full render.  Doing this in ResizeObserver would clear the buffer after
-    // the previous frame was rendered but before the browser paints, causing a
-    // visible black flash on every resize event.
+  function applyPendingResize() {
     if (pendingCanvasW > 0 && pendingCanvasH > 0) {
       if (canvas.width !== pendingCanvasW || canvas.height !== pendingCanvasH) {
         canvas.width = pendingCanvasW
@@ -214,7 +224,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
       pendingCanvasW = 0
       pendingCanvasH = 0
     }
+  }
 
+  /** Pass 1 (geometry → GBuffer) + Pass 2 (edge detection → resolveFB). */
+  function renderPipeline(s: RenderSettings) {
     const ray = getCameraRayParams(camera)
 
     // ── Pass 1: Geometry → GBuffer (2x) ──
@@ -272,7 +285,10 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform2f(uIdEdgeThreshold, s.idEdgeThreshold[0], s.idEdgeThreshold[1])
 
     drawFullscreenQuad(gl, quad)
+  }
 
+  /** Blit resolveFB → canvas + start overlay pass. */
+  function blitAndOverlay() {
     // ── Downsample: resolve FBO (2x) → canvas (1x) ──
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, resolveFB)
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
@@ -290,6 +306,13 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
       camera.fov, camera.aspect, camera.near, camera.far,
     )
     overlay.beginFrame(vp)
+  }
+
+  /** Full render: pipeline + blit + overlay. Backward-compatible entry point. */
+  function render(s: RenderSettings) {
+    applyPendingResize()
+    renderPipeline(s)
+    blitAndOverlay()
   }
 
   function dispose() {
@@ -310,6 +333,12 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
   return {
     canvas, gl, camera, overlay, atlas, colorWheel,
     get bvhData() { return currentBVH },
-    resize, updateScene, setSmoothK(k: number) { currentSmoothK = k }, render, dispose,
+    resize, updateScene, setSmoothK(k: number) { currentSmoothK = k },
+    render, renderPipeline, blitAndOverlay, applyPendingResize,
+    getResolveTex() { return resolveTex },
+    getResolveFB() { return resolveFB },
+    getSuperSampledSize(): [number, number] { return [ssW, ssH] },
+    getQuad() { return quad },
+    dispose,
   }
 }

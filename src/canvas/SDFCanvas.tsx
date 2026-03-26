@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
+import { createSceneManager, type SceneManager } from '../engine/sceneManager'
 import { worldToPixel as worldToPixelCS, pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { useChoanStore, type ChoanElement } from '../store/useChoanStore'
 import { computeDistances, type DistanceMeasure } from '../utils/snapUtils'
@@ -21,6 +22,7 @@ export default function SDFCanvas() {
   const mountRef = useRef<HTMLDivElement>(null)
   const rendererRef = useRef<SDFRenderer | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
+  const sceneManagerRef = useRef<SceneManager | null>(null)
   const canvasSizeRef = useRef({ w: 1, h: 1 })
   const zoomScaleRef = useRef(1)
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
@@ -43,7 +45,7 @@ export default function SDFCanvas() {
   useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef, controlsRef)
 
   useAnimateLoop({
-    rendererRef, controlsRef, canvasSizeRef, zoomScaleRef, distMeasuresRef,
+    rendererRef, controlsRef, sceneManagerRef, canvasSizeRef, zoomScaleRef, distMeasuresRef,
     isDraggingRef, dragGroupIdsRef, isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef, snapLinesRef, colorPickerOpenRef, colorPickerHoverRef,
     animatedElementsRef,
@@ -96,6 +98,7 @@ export default function SDFCanvas() {
     rendererRef.current = renderer
     canvasSizeRef.current = { w: mount.clientWidth, h: mount.clientHeight }
     controlsRef.current = createOrbitControls(renderer.canvas, renderer.camera)
+    sceneManagerRef.current = createSceneManager(renderer.gl, renderer.getQuad())
     onExportAnimStart(() => controlsRef.current?.resetView())
     const ro = new ResizeObserver(() => {
       canvasSizeRef.current = { w: mount.clientWidth, h: mount.clientHeight }
@@ -104,10 +107,12 @@ export default function SDFCanvas() {
     ro.observe(mount)
     return () => {
       ro.disconnect()
+      sceneManagerRef.current?.dispose()
       controlsRef.current?.dispose()
       renderer.dispose()
       rendererRef.current = null
       controlsRef.current = null
+      sceneManagerRef.current = null
     }
   }, [])
 

@@ -11,6 +11,8 @@ import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { useElementStore, type ChoanElement } from './useElementStore'
 import { useAnimationStore } from './useAnimationStore'
 import { useUIStore } from './useUIStore'
+import { useSceneStore, injectSceneCallbacks } from './useSceneStore'
+import type { Scene, SceneTransition } from './sceneTypes'
 
 // Re-export all types so existing import paths keep working.
 export type {
@@ -49,6 +51,48 @@ function reset() {
   useElementStore.getState().reset()
   useAnimationStore.getState().reset()
   useUIStore.getState().reset()
+  useSceneStore.getState().reset()
+}
+
+// ── Scene cross-store operations ──
+
+/** Load a scene's element and animation data into the sub-stores. */
+function loadSceneIntoStores(scene: Scene): void {
+  useElementStore.getState().loadElements(scene.elements)
+  useAnimationStore.getState().loadAnimation(undefined, scene.animationBundles)
+}
+
+/** Save the active scene's current element/animation state back into scenes array. */
+function syncActiveToScenes(activeId: string, scenes: Scene[]): void {
+  const elements = useElementStore.getState().elements
+  const bundles = useAnimationStore.getState().animationBundles
+  useSceneStore.setState({
+    scenes: scenes.map((s) =>
+      s.id === activeId
+        ? { ...s, elements: [...elements], animationBundles: [...bundles] }
+        : s,
+    ),
+  })
+}
+
+// Inject cross-store callbacks into useSceneStore so it can trigger
+// scene switching without directly importing element/animation stores.
+injectSceneCallbacks(loadSceneIntoStores, syncActiveToScenes)
+
+function switchScene(id: string) {
+  useSceneStore.getState().setActiveScene(id)
+}
+
+function addScene(): string {
+  return useSceneStore.getState().addScene()
+}
+
+function removeScene(id: string) {
+  useSceneStore.getState().removeScene(id)
+}
+
+function setSceneTransition(sceneId: string, transition: SceneTransition | undefined) {
+  useSceneStore.getState().setTransitionOut(sceneId, transition)
 }
 
 // ── Adapter hook ─────────────────────────────────────────────────────────────
@@ -57,6 +101,7 @@ export function useChoanStore() {
   const el = useElementStore()
   const anim = useAnimationStore()
   const ui = useUIStore()
+  const scene = useSceneStore()
 
   return {
     // Element store
@@ -92,11 +137,23 @@ export function useChoanStore() {
     setPendingSkin: ui.setPendingSkin,
     setPendingFrame: ui.setPendingFrame,
 
+    // Scene store
+    scenes: scene.scenes,
+    activeSceneId: scene.activeSceneId,
+    transitionState: scene.transitionState,
+    renameScene: scene.renameScene,
+    updateSceneDuration: scene.updateSceneDuration,
+    duplicateScene: scene.duplicateScene,
+
     // Cross-store operations (stable module-level functions)
     removeElement,
     removeAnimationBundle,
     loadFile,
     reset,
+    switchScene,
+    addScene,
+    removeScene,
+    setSceneTransition,
   }
 }
 
@@ -107,8 +164,13 @@ useChoanStore.getState = () => ({
   ...useElementStore.getState(),
   ...useAnimationStore.getState(),
   ...useUIStore.getState(),
+  ...useSceneStore.getState(),
   removeElement,
   removeAnimationBundle,
   loadFile,
   reset,
+  switchScene,
+  addScene,
+  removeScene,
+  setSceneTransition,
 })

@@ -99,3 +99,56 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
     resize, bind, unbind, dispose,
   }
 }
+
+// ── Simple FBO — single RGBA8 texture, for scene transition snapshots ──
+
+export interface SimpleFBO {
+  framebuffer: WebGLFramebuffer
+  texture: WebGLTexture
+  width: number
+  height: number
+  resize(gl: WebGL2RenderingContext, w: number, h: number): void
+  dispose(gl: WebGL2RenderingContext): void
+}
+
+export function createSimpleFBO(gl: WebGL2RenderingContext, w: number, h: number): SimpleFBO {
+  const framebuffer = gl.createFramebuffer()!
+  let texture = createTexture(gl, w, h, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE)
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+  if (status !== gl.FRAMEBUFFER_COMPLETE) {
+    throw new Error(`SimpleFBO framebuffer incomplete: 0x${status.toString(16)}`)
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+  let curW = w, curH = h
+
+  function resize(gl: WebGL2RenderingContext, nw: number, nh: number) {
+    if (nw === curW && nh === curH) return
+    gl.deleteTexture(texture)
+    texture = createTexture(gl, nw, nh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+    curW = nw
+    curH = nh
+  }
+
+  function dispose(gl: WebGL2RenderingContext) {
+    gl.deleteTexture(texture)
+    gl.deleteFramebuffer(framebuffer)
+  }
+
+  return {
+    get framebuffer() { return framebuffer },
+    get texture() { return texture },
+    get width() { return curW },
+    get height() { return curH },
+    resize, dispose,
+  }
+}

@@ -6,10 +6,12 @@
 import { useEffect, type MutableRefObject } from 'react'
 import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
+import type { SceneManager } from '../engine/sceneManager'
 import type { SnapLine, DistanceMeasure } from '../utils/snapUtils'
 import { useChoanStore, type ChoanElement } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { useRenderSettings } from '../store/useRenderSettings'
+import { useSceneStore } from '../store/useSceneStore'
 import { evaluateAnimation } from '../animation/animationEvaluator'
 import { addGhostElements } from './ghostPreview'
 import { applyMultiSelectTint } from './multiSelectTint'
@@ -23,6 +25,7 @@ import { tickExportAnim, getExportAnim, phaseProgress } from '../animation/expor
 export function useAnimateLoop({
   rendererRef,
   controlsRef,
+  sceneManagerRef,
   canvasSizeRef,
   zoomScaleRef,
   distMeasuresRef,
@@ -40,6 +43,7 @@ export function useAnimateLoop({
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
+  sceneManagerRef: MutableRefObject<SceneManager | null>
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
   zoomScaleRef: MutableRefObject<number>
   distMeasuresRef: MutableRefObject<(DistanceMeasure | null)[]>
@@ -187,7 +191,36 @@ export function useAnimateLoop({
       renderer.setSmoothK(smoothK)
 
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth, hoveredHistoryColor)
-      renderer.render(rs)
+
+      // ── Scene transition rendering ──
+      const transitionState = useSceneStore.getState().transitionState
+      const sceneMgr = sceneManagerRef.current
+
+      if (transitionState && sceneMgr) {
+        const elapsed = performance.now() - transitionState.startTime
+        const duration = transitionState.transition.duration
+        const progress = Math.min(1, elapsed / duration)
+
+        renderer.applyPendingResize()
+        renderer.renderPipeline(rs)
+
+        // Composite snapshot (from) + live resolveTex (to) via transition shader
+        sceneMgr.renderTransition(
+          renderer.getResolveTex(),
+          progress,
+          renderer.canvas.width,
+          renderer.canvas.height,
+        )
+
+        // Overlay on top of transition
+        renderer.blitAndOverlay()
+
+        if (progress >= 1) {
+          useSceneStore.getState().endTransition()
+        }
+      } else {
+        renderer.render(rs)
+      }
 
       drawOverlay(
         renderer.overlay,

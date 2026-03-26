@@ -408,3 +408,23 @@ void main() {
   fragColor = vec4(finalColor, 1.0);
 }
 `
+
+// ── Scene transition shader — blends two scene textures ──
+
+export const TRANSITION_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+
+in vec2 vUV;
+out vec4 fragColor;
+
+uniform sampler2D uFromTex;
+uniform sampler2D uToTex;
+uniform float uProgress;  // 0 = fully "from", 1 = fully "to"
+
+void main() {
+  vec4 fromColor = texture(uFromTex, vUV);
+  vec4 toColor = texture(uToTex, vUV);
+  // Fade transition
+  fragColor = mix(fromColor, toColor, uProgress);
+}
+`
