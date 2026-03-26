@@ -5,6 +5,7 @@ import QuickSkinPicker from './canvas/QuickSkinPicker'
 import LayerPanel from './panels/LayerPanel'
 import PropertiesPanel from './panels/PropertiesPanel'
 import TimelinePanel from './panels/TimelinePanel'
+import SceneTabBar from './panels/SceneTabBar'
 import { useChoanStore } from './store/useChoanStore'
 import { toMarkdown } from './export/toMarkdown'
 import { Tooltip, TooltipProvider } from './components/ui/Tooltip'
@@ -21,6 +22,7 @@ export default function App() {
     elements, animationBundles,
     tool, pendingSkin, pendingFrame,
     setTool, setPendingSkin, setPendingFrame,
+    switchScene, addScene, removeScene,
   } = useChoanStore()
 
   const [toastOpen, setToastOpen]       = useState(false)
@@ -154,6 +156,11 @@ export default function App() {
             onPointerUp={handleDragEnd}
           />
           <div className="main-center">
+            <SceneTabBar
+              onSwitchScene={switchScene}
+              onAddScene={addScene}
+              onRemoveScene={removeScene}
+            />
             <div className="canvas-area" data-theme="light">
               <SDFCanvas />
             </div>
