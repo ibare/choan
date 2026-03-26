@@ -143,7 +143,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="site-footer">
-        <p>© 2026 DAY 1 COMPANY. All rights reserved.</p>
+        <p>© 2026 <a href="https://day1company.co.kr/home" target="_blank" rel="noopener noreferrer" className="footer-link">DAY 1 COMPANY</a>. All rights reserved.</p>
       </footer>
     </div>
   )

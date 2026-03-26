@@ -356,6 +356,15 @@
   color: var(--site-text-3);
   font-size: 12px;
 }
+.footer-link {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.footer-link:hover {
+  color: var(--site-text-1);
+  text-decoration: underline;
+}
 
 /* ── App loading ───────────────────────────────────── */
 
