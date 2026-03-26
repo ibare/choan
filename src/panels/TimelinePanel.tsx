@@ -20,6 +20,12 @@ import { useAnimationStore } from '../store/useAnimationStore'
 import { CAMERA_PRESETS, createCameraPreset, type CameraPreset } from '../animation/cameraPresets'
 import VideoExportDialog, { type VideoExportSettings } from './VideoExportDialog'
 import { createVideoExporter } from '../engine/videoExporter'
+import { rendererSingleton } from '../rendering/rendererRef'
+import { useRenderSettings } from '../store/useRenderSettings'
+import { evaluateAnimation } from '../animation/animationEvaluator'
+import { createLayoutAnimator } from '../layout/animator'
+import { evaluateCameraAnimation } from '../animation/cameraEvaluator'
+import { applyMultiSelectTint } from '../rendering/multiSelectTint'
 import TimelineCanvas from './TimelineCanvas'
 import TimelineSidebar from './TimelineSidebar'
 import { type DisplayClipEntry, PX_PER_MS, RULER_HEIGHT, TRACK_HEIGHT, LAYER_HEADER_HEIGHT } from './timelineTypes'
@@ -169,28 +175,59 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
 
   // ── Video export ──
   const handleExport = (settings: VideoExportSettings) => {
-    const canvas = document.querySelector<HTMLCanvasElement>('.canvas-area canvas')
-    if (!canvas) return
+    const renderer = rendererSingleton.renderer
+    if (!renderer) return
 
     setExporting(true)
     setExportProgress(0)
 
+    // Create a dedicated layout animator for export (no spring physics needed)
+    const exportAnimator = createLayoutAnimator()
+    const rs = useRenderSettings.getState()
+
     const exporter = createVideoExporter(
-      canvas,
-      (w, h) => {
-        // Dispatch a resize — the renderer's resize is called by ResizeObserver
-        // For export, we directly set canvas dimensions
-        canvas.width = w
-        canvas.height = h
-      },
+      renderer.canvas,
+      (w, h) => renderer.resize(w, h),
       (timeMs) => {
-        // Set playhead and let the render loop handle it
-        usePreviewStore.getState().setPlayheadTime(timeMs)
+        // Evaluate animation at this time
+        const state = useChoanStore.getState()
+        const bundle = activeBundleId
+          ? state.animationBundles.find((b) => b.id === activeBundleId)
+          : null
+
+        const animated = evaluateAnimation({
+          elements: state.elements,
+          previewState: 'stopped',
+          editingBundleId: activeBundleId,
+          playheadTime: timeMs,
+          animationBundles: state.animationBundles,
+          kfAnimator,
+          layoutAnimator: exportAnimator,
+          springParams: { stiffness: rs.springStiffness, damping: rs.springDamping, squashIntensity: 0 },
+          manipulatedIds: new Set(),
+        })
+
+        // Apply camera keyframes
+        if (bundle?.cameraClip && bundle.cameraClip.tracks.length > 0) {
+          const camState = evaluateCameraAnimation(bundle.cameraClip, timeMs, renderer.camera)
+          if (camState) {
+            renderer.camera.position[0] = camState.position[0]
+            renderer.camera.position[1] = camState.position[1]
+            renderer.camera.position[2] = camState.position[2]
+            renderer.camera.target[0] = camState.target[0]
+            renderer.camera.target[1] = camState.target[1]
+            renderer.camera.target[2] = camState.target[2]
+            renderer.camera.fov = camState.fov
+          }
+        }
+
+        // Update scene and render
+        renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
+        renderer.render(rs)
       },
     )
     exporter.onProgress = (p) => setExportProgress(p)
     exporter.start({ ...settings, duration: maxDuration }).then((blob) => {
-      // Download the WebM file
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

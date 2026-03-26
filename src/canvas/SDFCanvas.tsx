@@ -8,6 +8,7 @@ import { computeDistances, type DistanceMeasure } from '../utils/snapUtils'
 import { usePointerHandlers } from '../interaction/usePointerHandlers'
 import { useKeyboardHandlers } from '../interaction/useKeyboardHandlers'
 import { useAnimateLoop } from '../rendering/useAnimateLoop'
+import { rendererSingleton } from '../rendering/rendererRef'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
 import DragSelectBox from './DragSelectBox'
 import DistanceLabels from './DistanceLabels'
@@ -99,6 +100,8 @@ export default function SDFCanvas() {
     canvasSizeRef.current = { w: mount.clientWidth, h: mount.clientHeight }
     controlsRef.current = createOrbitControls(renderer.canvas, renderer.camera)
     sceneManagerRef.current = createSceneManager(renderer.gl, renderer.getQuad())
+    rendererSingleton.renderer = renderer
+    rendererSingleton.controls = controlsRef.current
     onExportAnimStart(() => controlsRef.current?.resetView())
     const ro = new ResizeObserver(() => {
       canvasSizeRef.current = { w: mount.clientWidth, h: mount.clientHeight }
@@ -110,6 +113,8 @@ export default function SDFCanvas() {
       sceneManagerRef.current?.dispose()
       controlsRef.current?.dispose()
       renderer.dispose()
+      rendererSingleton.renderer = null
+      rendererSingleton.controls = null
       rendererRef.current = null
       controlsRef.current = null
       sceneManagerRef.current = null
