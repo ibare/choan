@@ -63,6 +63,11 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     ? selectedBundleId
     : animationBundles[0]?.id ?? null
 
+  // Keep editingBundleId in sync with active bundle so playhead is always visible
+  if (activeBundleId && editingBundleId !== activeBundleId) {
+    setEditingBundle(activeBundleId)
+  }
+
   const displayClips: DisplayClipEntry[] = []
   let activeBundle: AnimationBundle | undefined
   if (activeBundleId) {

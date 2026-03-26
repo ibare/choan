@@ -1,5 +1,5 @@
 // Video exporter — captures WebGL canvas frames as WebM video.
-// Uses MediaRecorder + canvas.captureStream() with manual frame control.
+// Uses MediaRecorder + canvas.captureStream() with frame-by-frame rendering.
 //
 // Does NOT import React or Zustand (engine layer).
 
@@ -30,19 +30,16 @@ export function createVideoExporter(
     cancelled = false
     currentProgress = 0
 
-    // Save original dimensions
     const origW = canvas.clientWidth
     const origH = canvas.clientHeight
 
     // Resize to export resolution
     resizeFn(opts.width, opts.height)
-
-    // Force canvas pixel dimensions to match export resolution
     canvas.width = opts.width
     canvas.height = opts.height
 
-    // Set up capture stream with manual frame requests
-    const stream = canvas.captureStream(0)
+    // Use fps-based capture — the stream auto-captures at the specified rate
+    const stream = canvas.captureStream(opts.fps)
     const mediaRecorder = new MediaRecorder(stream, {
       mimeType: getSupportedMimeType(),
       videoBitsPerSecond: 8_000_000,
@@ -64,7 +61,8 @@ export function createVideoExporter(
       mediaRecorder.onerror = () => reject(new Error('MediaRecorder error'))
     })
 
-    mediaRecorder.start()
+    // Collect data every 100ms for reliable chunking
+    mediaRecorder.start(100)
 
     const totalFrames = Math.ceil(opts.duration / 1000 * opts.fps)
     const frameDuration = 1000 / opts.fps
@@ -76,23 +74,19 @@ export function createVideoExporter(
       currentProgress = frame / totalFrames
       onProgress?.(currentProgress)
 
-      // Render one frame at this time
+      // Render one frame at this animation time
       renderFrameFn(time)
 
-      // Request frame capture from the stream
-      const videoTrack = stream.getVideoTracks()[0]
-      if (videoTrack && 'requestFrame' in videoTrack) {
-        (videoTrack as MediaStreamTrack & { requestFrame(): void }).requestFrame()
-      }
-
-      // Yield to browser to process the frame
-      await new Promise((r) => setTimeout(r, 0))
+      // Wait for the frame interval so the stream captures each rendered frame
+      await new Promise((r) => setTimeout(r, frameDuration))
     }
 
     currentProgress = 1
     onProgress?.(1)
 
     mediaRecorder.stop()
+    // Stop all tracks to finalize the stream
+    stream.getTracks().forEach((t) => t.stop())
 
     // Restore original size
     resizeFn(origW, origH)

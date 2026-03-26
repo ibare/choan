@@ -7,6 +7,7 @@ export function createGL(canvas: HTMLCanvasElement): WebGL2RenderingContext {
     depth: false,
     stencil: false,
     premultipliedAlpha: false,
+    preserveDrawingBuffer: true,
   })
   if (!gl) throw new Error('WebGL2 not supported')
   return gl
