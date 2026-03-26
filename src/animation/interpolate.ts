@@ -1,6 +1,6 @@
 // Property value interpolation
 
-import type { AnimatableProperty, Keyframe } from './types'
+import type { AnimatableProperty, CameraAnimatableProperty, Keyframe } from './types'
 import { resolveEasing } from './easing'
 
 // Numeric lerp
@@ -28,7 +28,7 @@ function lerpColor(from: number, to: number, t: number): number {
 
 // Interpolate a single property value
 export function interpolateValue(
-  property: AnimatableProperty,
+  property: AnimatableProperty | CameraAnimatableProperty,
   from: number,
   to: number,
   t: number,
@@ -40,6 +40,7 @@ export function interpolateValue(
   // Clamp by property constraints
   if (property === 'radius') return Math.max(0, Math.min(1, v))
   if (property === 'width' || property === 'height') return Math.max(1, v)
+  if (property === 'cam.fov') return Math.max(10, Math.min(120, v))
   return v
 }
 
@@ -50,7 +51,7 @@ export function evaluateTrack(
   keyframes: Keyframe[],
   time: number,
   fallbackEasing: string | ((t: number) => number),
-  property: AnimatableProperty,
+  property: AnimatableProperty | CameraAnimatableProperty,
 ): number {
   if (keyframes.length === 0) return 0
   if (keyframes.length === 1) return keyframes[0].value

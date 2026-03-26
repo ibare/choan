@@ -3,7 +3,7 @@
 // Does NOT touch element data directly.
 
 import { create } from 'zustand'
-import type { AnimationClip, AnimationBundle } from '../animation/types'
+import type { AnimationClip, AnimationBundle, CameraClip } from '../animation/types'
 
 interface AnimationStore {
   animationClips: AnimationClip[]
@@ -23,6 +23,10 @@ interface AnimationStore {
 
   /** Remove all clips referencing a deleted element across all bundles. */
   cleanupForElement: (elementId: string) => void
+
+  // Camera clip CRUD
+  setCameraClipInBundle: (bundleId: string, clip: CameraClip) => void
+  removeCameraClipFromBundle: (bundleId: string) => void
 
   loadAnimation: (clips: AnimationClip[] | undefined, bundles: AnimationBundle[] | undefined) => void
   reset: () => void
@@ -91,6 +95,20 @@ export const useAnimationStore = create<AnimationStore>((set) => ({
         ...b,
         clips: b.clips.filter((c) => c.elementId !== elementId),
       })),
+    })),
+
+  setCameraClipInBundle: (bundleId, clip) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.map((b) =>
+        b.id === bundleId ? { ...b, cameraClip: clip } : b,
+      ),
+    })),
+
+  removeCameraClipFromBundle: (bundleId) =>
+    set((s) => ({
+      animationBundles: s.animationBundles.map((b) =>
+        b.id === bundleId ? { ...b, cameraClip: undefined } : b,
+      ),
     })),
 
   loadAnimation: (clips, bundles) =>

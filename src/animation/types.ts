@@ -29,4 +29,24 @@ export interface AnimationBundle {
   id: string              // nanoid
   name: string            // user-visible name (e.g. "메뉴 열기")
   clips: AnimationClip[]  // one clip per participating element
+  cameraClip?: CameraClip // optional camera animation for this bundle
+}
+
+// ── Camera animation ──
+
+export type CameraAnimatableProperty =
+  | 'cam.pos.x' | 'cam.pos.y' | 'cam.pos.z'
+  | 'cam.target.x' | 'cam.target.y' | 'cam.target.z'
+  | 'cam.fov'
+
+export interface CameraKeyframeTrack {
+  property: CameraAnimatableProperty
+  keyframes: Keyframe[]
+}
+
+export interface CameraClip {
+  id: string
+  duration: number        // ms
+  easing: EasingType
+  tracks: CameraKeyframeTrack[]
 }

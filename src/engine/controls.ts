@@ -11,6 +11,8 @@ export interface OrbitControls {
   setAngles(theta: number, phi: number): void
   resetView(): void
   wheelEnabled: boolean
+  /** When true, update() is a no-op and pointer events are ignored (camera driven by keyframes). */
+  disabled: boolean
   readonly isInteracting: boolean
   readonly isSpaceDown: boolean
 }
@@ -147,7 +149,10 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
 
+  let controlsDisabled = false
+
   function update() {
+    if (controlsDisabled) return
     // Animated reset (smooth ease-out lerp)
     if (resetTarget) {
       const elapsed = performance.now() - resetTarget.startTime
@@ -218,6 +223,8 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     update, dispose, getAngles, setAngles, resetView,
     get wheelEnabled() { return wheelEnabled },
     set wheelEnabled(v: boolean) { wheelEnabled = v },
+    get disabled() { return controlsDisabled },
+    set disabled(v: boolean) { controlsDisabled = v },
     get isInteracting() { return isRotating || isPanning || (performance.now() - wheelTimer < 150) },
     get isSpaceDown() { return spaceDown },
   }
