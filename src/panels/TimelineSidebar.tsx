@@ -1,7 +1,7 @@
 // DOM left sidebar — layer labels, property dropdowns, remove buttons.
 
-import type { AnimatableProperty } from '../animation/types'
-import { X } from '@phosphor-icons/react'
+import type { AnimatableProperty, CameraAnimatableProperty } from '../animation/types'
+import { X, VideoCamera } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { type DisplayClipEntry, formatValue, TRACK_HEIGHT, LAYER_HEADER_HEIGHT, RULER_HEIGHT, INDENT_PX } from './timelineTypes'
 
@@ -25,6 +25,7 @@ export default function TimelineSidebar({
       {displayClips.map((entry) => (
         <div key={entry.clip.id}>
           <div className="tl-left-layer" style={{ height: LAYER_HEADER_HEIGHT, paddingLeft: entry.depth * INDENT_PX }}>
+            {entry.isCamera && <VideoCamera size={12} style={{ marginRight: 4, opacity: 0.6 }} />}
             <span className="tl-left-label">{entry.label}</span>
             {entry.bundleId && (
               <div className="tl-left-actions">
@@ -36,9 +37,9 @@ export default function TimelineSidebar({
             <div key={ti} className="tl-left-track" style={{ height: TRACK_HEIGHT, paddingLeft: entry.depth * INDENT_PX }}>
               <span className="tl-left-prop">{track.property}</span>
               <span className="tl-left-range">
-                {formatValue(track.property as AnimatableProperty, track.keyframes[0]?.value)}
+                {formatValue(track.property as AnimatableProperty | CameraAnimatableProperty, track.keyframes[0]?.value)}
                 →
-                {formatValue(track.property as AnimatableProperty, track.keyframes[track.keyframes.length - 1]?.value)}
+                {formatValue(track.property as AnimatableProperty | CameraAnimatableProperty, track.keyframes[track.keyframes.length - 1]?.value)}
               </span>
               {entry.bundleId && (
                 <Button className="btn-icon tl-track-del" size="icon" onClick={() => onRemoveTrack(entry.clip.id, ti, entry.bundleId)}><X size={10} /></Button>

@@ -8,13 +8,18 @@ import { usePreviewStore } from '../store/usePreviewStore'
 import type { DisplayLayer, RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../utils/nanoid'
-import { Play, Pause, Stop, Plus, X, FilmStrip } from '@phosphor-icons/react'
+import { Play, Pause, Stop, Plus, X, FilmStrip, VideoCamera, Export } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
+import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
 import { track } from '../utils/analytics'
 import { Input } from '../components/ui/Input'
 import { buildLayerTree } from '../animation/buildLayerTree'
 import { kfAnimator } from '../rendering/kfAnimator'
+import { useAnimationStore } from '../store/useAnimationStore'
+import { CAMERA_PRESETS, createCameraPreset, type CameraPreset } from '../animation/cameraPresets'
+import VideoExportDialog, { type VideoExportSettings } from './VideoExportDialog'
+import { createVideoExporter } from '../engine/videoExporter'
 import TimelineCanvas from './TimelineCanvas'
 import TimelineSidebar from './TimelineSidebar'
 import { type DisplayClipEntry, PX_PER_MS, RULER_HEIGHT, TRACK_HEIGHT, LAYER_HEADER_HEIGHT } from './timelineTypes'
@@ -39,6 +44,9 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   const [bundleNameDraft, setBundleNameDraft] = useState('')
   const [scrollX, setScrollX] = useState(0)
   const [scrollY, setScrollY] = useState(0)
+  const [exportDialogOpen, setExportDialogOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [exportProgress, setExportProgress] = useState(0)
 
   const canvasWrapRef = useRef<HTMLDivElement | null>(null)
 
@@ -50,22 +58,43 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     : animationBundles[0]?.id ?? null
 
   const displayClips: DisplayClipEntry[] = []
+  let activeBundle: AnimationBundle | undefined
   if (activeBundleId) {
-    const bundle = animationBundles.find((b) => b.id === activeBundleId)
-    if (bundle) {
+    activeBundle = animationBundles.find((b) => b.id === activeBundleId)
+    if (activeBundle) {
+      // Camera clip at the top
+      if (activeBundle.cameraClip && activeBundle.cameraClip.tracks.length > 0) {
+        displayClips.push({
+          clip: {
+            id: activeBundle.cameraClip.id,
+            elementId: '__camera__',
+            duration: activeBundle.cameraClip.duration,
+            easing: activeBundle.cameraClip.easing,
+            tracks: [],  // camera tracks displayed via cameraTracks field
+          },
+          label: 'Camera',
+          depth: 0,
+          bundleId: activeBundle.id,
+          isCamera: true,
+          cameraTracks: activeBundle.cameraClip.tracks,
+        })
+      }
       for (const { el, depth } of buildLayerTree(elements)) {
-        const clip = bundle.clips.find((c) => c.elementId === el.id)
-        if (clip) displayClips.push({ clip, label: el.label, depth, bundleId: bundle.id })
+        const clip = activeBundle.clips.find((c) => c.elementId === el.id)
+        if (clip) displayClips.push({ clip, label: el.label, depth, bundleId: activeBundle.id })
       }
     }
   }
 
   const maxDuration = Math.max(300, ...displayClips.map((c) => c.clip.duration))
-  const displayLayers: DisplayLayer[] = displayClips.map((entry) => ({
-    clipId: entry.clip.id,
-    label: entry.label,
-    tracks: entry.clip.tracks.map((t) => ({ property: t.property, keyframes: [...t.keyframes].sort((a, b) => a.time - b.time) })),
-  }))
+  const displayLayers: DisplayLayer[] = displayClips.map((entry) => {
+    const sourceTracks = entry.isCamera && entry.cameraTracks ? entry.cameraTracks : entry.clip.tracks
+    return {
+      clipId: entry.clip.id,
+      label: entry.label,
+      tracks: sourceTracks.map((t) => ({ property: t.property, keyframes: [...t.keyframes].sort((a, b) => a.time - b.time) })),
+    }
+  })
   const renderOptions: RenderOptions = {
     scrollX, scrollY, pxPerMs: PX_PER_MS,
     rulerHeight: RULER_HEIGHT, trackHeight: TRACK_HEIGHT, layerHeaderHeight: LAYER_HEADER_HEIGHT,
@@ -124,6 +153,57 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     stop()
   }
 
+  // ── Camera preset ──
+  const handleCameraPreset = (presetId: string) => {
+    if (!activeBundleId) return
+    // Get camera from renderer via the canvas — we need to find it through the DOM
+    // For now, use default camera values as fallback
+    const defaultCam = { position: [0, 0, 20] as [number, number, number], target: [0, 0, 0] as [number, number, number], up: [0, 1, 0] as [number, number, number], fov: 50, near: 0.1, far: 1000, aspect: 1 }
+    const clip = createCameraPreset(presetId as CameraPreset, maxDuration, defaultCam)
+    useAnimationStore.getState().setCameraClipInBundle(activeBundleId, clip)
+  }
+
+  const handleRemoveCameraClip = () => {
+    if (activeBundleId) useAnimationStore.getState().removeCameraClipFromBundle(activeBundleId)
+  }
+
+  // ── Video export ──
+  const handleExport = (settings: VideoExportSettings) => {
+    const canvas = document.querySelector<HTMLCanvasElement>('.canvas-area canvas')
+    if (!canvas) return
+
+    setExporting(true)
+    setExportProgress(0)
+
+    const exporter = createVideoExporter(
+      canvas,
+      (w, h) => {
+        // Dispatch a resize — the renderer's resize is called by ResizeObserver
+        // For export, we directly set canvas dimensions
+        canvas.width = w
+        canvas.height = h
+      },
+      (timeMs) => {
+        // Set playhead and let the render loop handle it
+        usePreviewStore.getState().setPlayheadTime(timeMs)
+      },
+    )
+    exporter.onProgress = (p) => setExportProgress(p)
+    exporter.start({ ...settings, duration: maxDuration }).then((blob) => {
+      // Download the WebM file
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'choan-export.webm'
+      a.click()
+      URL.revokeObjectURL(url)
+      setExporting(false)
+      setExportDialogOpen(false)
+    }).catch(() => {
+      setExporting(false)
+    })
+  }
+
   // ── Bundle name ──
   const startEditBundleName = (id: string, name: string) => { setEditingBundleName(id); setBundleNameDraft(name) }
   const commitBundleName = () => {
@@ -148,6 +228,26 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           <Tooltip content="Stop"><Button className="btn-small" onClick={handleStop}><Stop size={14} weight="fill" /></Button></Tooltip>
           <Tooltip content="New Animation"><Button className="btn-small" onClick={handleCreateBundle}><Plus size={14} /></Button></Tooltip>
           <Tooltip content="Ghost Preview"><Button className="btn-small" active={ghostPreview} onClick={toggleGhostPreview}><FilmStrip size={14} /></Button></Tooltip>
+          {activeBundleId && (
+            <>
+              <div className="timeline-separator" />
+              <Select
+                options={CAMERA_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+                value=""
+                onChange={handleCameraPreset}
+                placeholder="Camera"
+                size="sm"
+              />
+              {activeBundle?.cameraClip && (
+                <Tooltip content="Remove Camera">
+                  <Button className="btn-small" onClick={handleRemoveCameraClip}><VideoCamera size={14} /><X size={10} /></Button>
+                </Tooltip>
+              )}
+              <Tooltip content="Export Video">
+                <Button className="btn-small" onClick={() => setExportDialogOpen(true)}><Export size={14} /></Button>
+              </Tooltip>
+            </>
+          )}
           {previewState !== 'stopped' && (
             <span className="preview-state-label">{previewState === 'playing' ? 'Playing' : 'Paused'}</span>
           )}
@@ -196,12 +296,21 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           displayLayers={displayLayers}
           renderOptions={renderOptions}
           scrollX={scrollX}
-          onPlayheadChange={(time) => { setPlayheadTime(time); useChoanStore.getState().setSelectedIds([]) }}
+          onPlayheadChange={(time) => { setPlayheadTime(time) }}
           onMutateClip={mutateClip}
           onScrollX={(delta) => setScrollX((prev) => Math.max(0, prev + delta))}
           canvasWrapRef={canvasWrapRef}
         />
       </div>
+
+      <VideoExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        onExport={handleExport}
+        exporting={exporting}
+        progress={exportProgress}
+        duration={maxDuration}
+      />
     </div>
   )
 }
