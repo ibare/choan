@@ -1,8 +1,8 @@
 // Group drag — move + containment re-evaluation after drop.
 
 import type { ChoanElement } from '../store/useChoanStore'
-import type { SnapLine } from '../canvas/snapUtils'
-import { computeSnapMove } from '../canvas/snapUtils'
+import type { SnapLine } from '../utils/snapUtils'
+import { computeSnapMove } from '../utils/snapUtils'
 import { detectContainment } from '../layout/containment'
 
 /** Apply delta to all group members with snap. Updates store + snapLines. */

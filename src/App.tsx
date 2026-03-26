@@ -12,7 +12,7 @@ import { Toast, ToastViewport, ToastProvider } from './components/ui/Toast'
 import { Button } from './components/ui/Button'
 import { DownloadSimple, SignOut } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
-import { startExportAnim, startRestore, MERGE_DURATION } from './canvas/exportAnimation'
+import { startExportAnim, startRestore, MERGE_DURATION } from './animation/exportAnimation'
 import { restoreBackup, initPersistence } from './store/persistence'
 import { initHistory } from './store/history'
 

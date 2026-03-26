@@ -3,16 +3,17 @@
 
 import { useRef, useState, useCallback, useEffect, type MutableRefObject } from 'react'
 import type { SDFRenderer } from '../engine/renderer'
-import type { SnapLine } from '../canvas/snapUtils'
+import type { SnapLine } from '../utils/snapUtils'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { autoKeyframe } from '../animation/autoKeyframe'
-import { nanoid } from '../canvas/nanoid'
+import { nanoid } from '../utils/nanoid'
 import { kfAnimator } from '../rendering/kfAnimator'
 import { raycastElement, hitTestCorner, hitTestLayoutHandle, hitTestSizingIndicator } from './hitTest'
 import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
 import { worldToPixel as worldToPixelCS, pixelToWorld } from '../coords/coordinateSystem'
+import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING } from '../constants'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { getCameraRayParams } from '../engine/camera'
 import { screenToRay } from '../engine/sdf'
@@ -418,9 +419,9 @@ export function usePointerHandlers({
           layoutResizeStartRef.current = current
 
           // Calculate total inner size for ratio
-          const pad = container.layoutPadding ?? 8
+          const pad = container.layoutPadding ?? DEFAULT_LAYOUT_PADDING
           const totalInner = (isRow ? container.width : container.height) - 2 * pad
-            - (children.length - 1) * (container.layoutGap ?? 8)
+            - (children.length - 1) * (container.layoutGap ?? DEFAULT_LAYOUT_GAP)
 
           // Direct: the dragged child gets fixed-ratio
           const a = children[idx]

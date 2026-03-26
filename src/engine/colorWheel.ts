@@ -1,7 +1,7 @@
 // Color wheel renderer — draws arc-segment cells on an OffscreenCanvas
 // and uploads as a WebGL texture for screen-space display.
 
-import { COLOR_FAMILIES } from '../canvas/materials'
+import { COLOR_FAMILIES } from '../config/materials'
 
 const WHEEL_SIZE = 300    // canvas pixel size (square)
 const CENTER = WHEEL_SIZE / 2

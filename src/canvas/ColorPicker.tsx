@@ -2,7 +2,7 @@
 // Opens as Radix Popover content from the context toolbar.
 
 import { useEffect, useRef } from 'react'
-import { setHoveredHistoryColor } from './colorHistoryHover'
+import { setHoveredHistoryColor } from '../utils/colorHistoryHover'
 
 // ── HSL conversion utilities ─────────────────────────────────
 

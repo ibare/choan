@@ -5,6 +5,7 @@ import { Section } from '../components/ui/Section'
 import { PropRow } from '../components/ui/PropRow'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { Input } from '../components/ui/Input'
+import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING, DEFAULT_LAYOUT_COLUMNS } from '../constants'
 
 interface Props {
   el: ChoanElement
@@ -37,7 +38,7 @@ export default function ContainerLayoutSection({ el, childCount, onChange }: Pro
             <PropRow label="Columns">
               <Input
                 type="number" min={1} max={12}
-                value={String(el.layoutColumns ?? 2)}
+                value={String(el.layoutColumns ?? DEFAULT_LAYOUT_COLUMNS)}
                 onChange={(e) => onChange({ layoutColumns: Math.max(1, Number(e.target.value)) })}
               />
             </PropRow>
@@ -46,7 +47,7 @@ export default function ContainerLayoutSection({ el, childCount, onChange }: Pro
             <div className="ui-row-gap-2">
               <Input
                 type="number" min={0}
-                value={String(el.layoutGap ?? 8)}
+                value={String(el.layoutGap ?? DEFAULT_LAYOUT_GAP)}
                 onChange={(e) => onChange({ layoutGap: Math.max(0, Number(e.target.value)) })}
               />
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>px</span>
@@ -56,7 +57,7 @@ export default function ContainerLayoutSection({ el, childCount, onChange }: Pro
             <div className="ui-row-gap-2">
               <Input
                 type="number" min={0}
-                value={String(el.layoutPadding ?? 8)}
+                value={String(el.layoutPadding ?? DEFAULT_LAYOUT_PADDING)}
                 onChange={(e) => onChange({ layoutPadding: Math.max(0, Number(e.target.value)) })}
               />
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)' }}>px</span>

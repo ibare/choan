@@ -6,7 +6,7 @@
 import { useEffect, type MutableRefObject } from 'react'
 import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
-import type { SnapLine, DistanceMeasure } from '../canvas/snapUtils'
+import type { SnapLine, DistanceMeasure } from '../utils/snapUtils'
 import { useChoanStore, type ChoanElement } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { useRenderSettings } from '../store/useRenderSettings'
@@ -17,8 +17,8 @@ import { drawOverlay } from './overlayCommands'
 import { kfAnimator } from './kfAnimator'
 import { createLayoutAnimator } from '../layout/animator'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
-import { hoveredHistoryColor } from '../canvas/colorHistoryHover'
-import { tickExportAnim, getExportAnim, phaseProgress } from  '../canvas/exportAnimation'
+import { hoveredHistoryColor } from '../utils/colorHistoryHover'
+import { tickExportAnim, getExportAnim, phaseProgress } from '../animation/exportAnimation'
 
 export function useAnimateLoop({
   rendererRef,

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, type MutableRefObject } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
-import { nanoid } from '../canvas/nanoid'
+import { nanoid } from '../utils/nanoid'
 import type { ChoanElement } from '../store/useChoanStore'
 import type { OrbitControls } from '../engine/controls'
 import { resolveHotkey } from './hotkeyRegistry'

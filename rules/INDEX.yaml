@@ -1,0 +1,79 @@
+# rules/INDEX.yaml
+# Rule Registry — 트리거 조건에 따라 로드할 규칙 결정
+#
+# Trigger types:
+#   paths:    파일 경로 glob 패턴
+#   patterns: 코드에서 발견되는 문자열/정규식
+#   imports:  import/include/require 문에 포함된 모듈명
+#   events:   작업 유형 (create-file, rename-file 등)
+
+# ─────────────────────────────────────
+# Always loaded
+# ─────────────────────────────────────
+always:
+  - file: principles.md
+    description: 모든 코드에 적용되는 6대 핵심 원칙
+
+# ─────────────────────────────────────
+# Concerns (Cross-cutting)
+# ─────────────────────────────────────
+concerns:
+  - id: C1
+    file: concerns/C1-file-structure.md
+    description: 파일 구조 및 네이밍 규칙
+    triggers:
+      events: [create-file, rename-file, move-file]
+
+  - id: C2
+    file: concerns/C2-shared-resources.md
+    description: 공유 자원 관리 (렌더러, 좌표계, rAF)
+    triggers:
+      paths: ["**/engine/**", "**/rendering/**", "**/canvas/**"]
+      patterns: ["createSDFRenderer", "requestAnimationFrame", "getContext"]
+
+  - id: C3
+    file: concerns/C3-error-handling.md
+    description: 에러 처리 패턴
+    triggers:
+      patterns: ["try", "catch", "throw", "JSON.parse", "localStorage"]
+
+  - id: C4
+    file: concerns/C4-config-management.md
+    description: 설정 및 상수 관리
+    triggers:
+      paths: ["**/constants/**", "**/config/**"]
+      patterns: ["const.*=.*\\d{3,}", "STORAGE_KEY", "DEBOUNCE"]
+
+  - id: C5
+    file: concerns/C5-ui-components.md
+    description: UI 컴포넌트 패턴 (Radix 래퍼, CVA, 클래스 네이밍)
+    triggers:
+      paths: ["**/components/**", "**/panels/**"]
+      imports: ["@radix-ui", "class-variance-authority", "clsx"]
+
+# ─────────────────────────────────────
+# Specifics (Domain-specific)
+# ─────────────────────────────────────
+specifics:
+  - id: S-engine
+    file: specifics/S-engine.md
+    description: WebGL2/SDF 엔진 규칙
+    triggers:
+      paths: ["**/engine/**"]
+      imports: ["./sdf", "./shaders", "./gl", "./renderer"]
+      patterns: ["WebGL", "gl\\.", "createShader", "createProgram", "framebuffer"]
+
+  - id: S-store
+    file: specifics/S-store.md
+    description: Zustand 상태 관리 규칙
+    triggers:
+      paths: ["**/store/**"]
+      imports: ["zustand", "useElementStore", "useAnimationStore", "useUIStore", "useChoanStore"]
+      patterns: ["create\\(", "set\\(\\(s\\)", "getState\\(\\)"]
+
+  - id: S-export
+    file: specifics/S-export.md
+    description: 마크다운/YAML 내보내기 규칙
+    triggers:
+      paths: ["**/export/**"]
+      imports: ["js-yaml", "./toMarkdown", "./toYaml"]

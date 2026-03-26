@@ -24,6 +24,8 @@ function restoreSnapshot(json: string) {
     const data = JSON.parse(json)
     useElementStore.getState().loadElements(data.elements)
     useAnimationStore.getState().loadAnimation(undefined, data.animationBundles)
+  } catch (err) {
+    console.error('Failed to restore snapshot:', err)
   } finally {
     // Allow next frame to re-enable snapshotting
     requestAnimationFrame(() => { isRestoring = false })

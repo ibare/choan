@@ -1,8 +1,8 @@
 // Resize and radius drag — pure functions, no React hooks.
 
 import type { ChoanElement } from '../store/useChoanStore'
-import type { SnapLine } from '../canvas/snapUtils'
-import { computeSnapResize } from '../canvas/snapUtils'
+import type { SnapLine } from '../utils/snapUtils'
+import { computeSnapResize } from '../utils/snapUtils'
 import { applyToSiblings } from './elementHelpers'
 import { MIN_ELEMENT_SIZE } from '../constants'
 import { FRAME_PRESETS } from '../engine/painters'

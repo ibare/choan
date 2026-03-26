@@ -3,7 +3,7 @@ import { createSDFRenderer, type SDFRenderer } from '../engine/renderer'
 import { createOrbitControls, type OrbitControls } from '../engine/controls'
 import { worldToPixel as worldToPixelCS, pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { useChoanStore, type ChoanElement } from '../store/useChoanStore'
-import { computeDistances, type DistanceMeasure } from './snapUtils'
+import { computeDistances, type DistanceMeasure } from '../utils/snapUtils'
 import { usePointerHandlers } from '../interaction/usePointerHandlers'
 import { useKeyboardHandlers } from '../interaction/useKeyboardHandlers'
 import { useAnimateLoop } from '../rendering/useAnimateLoop'
@@ -14,7 +14,7 @@ import FrameIndicator from './FrameIndicator'
 import NavigationGizmo from './NavigationGizmo'
 import SplitLabels from './SplitLabels'
 import ContextToolbar from './ContextToolbar'
-import { onExportAnimStart } from './exportAnimation'
+import { onExportAnimStart } from '../animation/exportAnimation'
 // PinOverlay removed — sizing indicators rendered via WebGL overlay
 
 export default function SDFCanvas() {

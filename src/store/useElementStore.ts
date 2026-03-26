@@ -4,6 +4,7 @@
 
 import { create } from 'zustand'
 import { computeAutoLayout } from '../layout/autoLayout'
+import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING, DEFAULT_LAYOUT_COLUMNS } from '../constants'
 
 export type ElementRole = 'container'
 export type ElementType = 'rectangle' | 'circle' | 'line'
@@ -94,11 +95,11 @@ function applyLayout(elements: ChoanElement[], containerId: string): ChoanElemen
     const positions = computeAutoLayout({
       container: { x: container.x, y: container.y, width: container.width, height: container.height },
       direction,
-      gap: container.layoutGap ?? 8,
-      padding: container.layoutPadding ?? 8,
+      gap: container.layoutGap ?? DEFAULT_LAYOUT_GAP,
+      padding: container.layoutPadding ?? DEFAULT_LAYOUT_PADDING,
       safeInset: container.safeInset,
       childCount: children.length,
-      columns: container.layoutColumns ?? 2,
+      columns: container.layoutColumns ?? DEFAULT_LAYOUT_COLUMNS,
       sizings,
       ratios,
       fixedSizes,

@@ -1,5 +1,6 @@
 import type { ChoanElement } from '../../store/useChoanStore'
 import type { PlatformRenderer } from './base'
+import { DEFAULT_LAYOUT_COLUMNS } from '../../constants'
 import { hexToCSS } from '../core/colorUtils'
 import { describeComponentState } from '../core/describeComponentState'
 
@@ -13,7 +14,7 @@ export const webRenderer: PlatformRenderer = {
     const parts: string[] = []
     if (dir === 'row') parts.push('Row `flex-direction: row`')
     else if (dir === 'column') parts.push('Column `flex-direction: column`')
-    else if (dir === 'grid') parts.push(`Grid \`grid-template-columns: repeat(${el.layoutColumns ?? 2}, 1fr)\``)
+    else if (dir === 'grid') parts.push(`Grid \`grid-template-columns: repeat(${el.layoutColumns ?? DEFAULT_LAYOUT_COLUMNS}, 1fr)\``)
 
     if (el.layoutGap) parts.push(`gap: ${el.layoutGap}px`)
     if (el.layoutPadding) parts.push(`padding: ${el.layoutPadding}px`)

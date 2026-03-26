@@ -25,6 +25,11 @@ export const COLOR_PICKER_RING_STEP = 26    // distance between ring centers
 export const COLOR_PICKER_DISC_RADIUS = 13  // colour swatch half-size (px)
 export const COLOR_PICKER_HIT_RADIUS = 14   // pointer hit-test radius for a swatch (px)
 
+// ── Layout defaults ──
+export const DEFAULT_LAYOUT_GAP = 8
+export const DEFAULT_LAYOUT_PADDING = 8
+export const DEFAULT_LAYOUT_COLUMNS = 2
+
 // ── Overlay geometry (pixel units, before zoom compensation) ──
 export const HANDLE_SIZE_PX = 8      // corner handle half-size
 export const DISTANCE_TICK_PX = 4    // distance measurement tick mark length

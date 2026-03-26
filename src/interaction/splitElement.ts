@@ -1,5 +1,5 @@
 import { useChoanStore } from '../store/useChoanStore'
-import { nanoid } from '../canvas/nanoid'
+import { nanoid } from '../utils/nanoid'
 import type { ChoanElement } from '../store/useChoanStore'
 
 export function splitElement(

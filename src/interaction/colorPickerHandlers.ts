@@ -1,7 +1,7 @@
 // Color picker interaction — screen-space hit testing against color wheel cells.
 // Uses the same cell center projection as rendering for pixel-perfect accuracy.
 
-import { COLOR_FAMILIES } from '../canvas/materials'
+import { COLOR_FAMILIES } from '../config/materials'
 import { applyToSiblings } from './elementHelpers'
 import { useUIStore } from '../store/useUIStore'
 import type { ColorWheelTexture } from '../engine/colorWheel'

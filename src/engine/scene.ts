@@ -1,9 +1,9 @@
 // Scene data pipeline: ChoanElement[] → UBO for GPU
 
 import type { ChoanElement } from '../store/useChoanStore'
-import { PALETTE } from '../canvas/materials'
+import { PALETTE } from '../config/materials'
 import { pixelToWorld, pixelWidthToWorld, pixelHeightToWorld } from '../coords/coordinateSystem'
-import { getExportAnim, phaseProgress } from '../canvas/exportAnimation'
+import { getExportAnim, phaseProgress } from '../animation/exportAnimation'
 
 export const MAX_OBJECTS = 128
 export const EXTRUDE_DEPTH = 0.05

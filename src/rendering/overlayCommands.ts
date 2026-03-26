@@ -5,7 +5,7 @@
 
 import type { OverlayRenderer } from '../engine/overlay'
 import type { ChoanElement } from '../store/useChoanStore'
-import type { SnapLine, DistanceMeasure } from '../canvas/snapUtils'
+import type { SnapLine, DistanceMeasure } from '../utils/snapUtils'
 import type { RenderSettings } from '../store/useRenderSettings'
 import {
   SELECTION_COLOR, SNAP_COLOR, DISTANCE_COLOR,

@@ -5,7 +5,8 @@ import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 
 import { AnimatePresence, motion } from 'framer-motion'
 import type { SplitMode } from '../interaction/useKeyboardHandlers'
 import { splitElement } from '../interaction/splitElement'
-import * as RadixPopover from '@radix-ui/react-popover'
+import { PopoverPrimitive as RadixPopover } from '../components/ui/Popover'
+import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING, DEFAULT_LAYOUT_COLUMNS } from '../constants'
 import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 // SKIN_REGISTRY no longer used — skin picker removed from toolbar
@@ -599,7 +600,7 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                       {dir === 'grid' && (
                         <ScrubInput
                           icon={<Columns size={13} />}
-                          value={el!.layoutColumns ?? 2}
+                          value={el!.layoutColumns ?? DEFAULT_LAYOUT_COLUMNS}
                           min={1}
                           max={12}
                           onChange={(v) => applyLayoutUpdate({ layoutColumns: v })}
@@ -607,14 +608,14 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
                       )}
                       <ScrubInput
                         icon={<ArrowsOutLineHorizontal size={13} />}
-                        value={el!.layoutGap ?? 8}
+                        value={el!.layoutGap ?? DEFAULT_LAYOUT_GAP}
                         min={0}
                         max={100}
                         onChange={(v) => applyLayoutUpdate({ layoutGap: v })}
                       />
                       <ScrubInput
                         icon={<FrameCorners size={13} />}
-                        value={el!.layoutPadding ?? 8}
+                        value={el!.layoutPadding ?? DEFAULT_LAYOUT_PADDING}
                         min={0}
                         max={100}
                         onChange={(v) => applyLayoutUpdate({ layoutPadding: v })}
