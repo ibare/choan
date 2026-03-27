@@ -44,9 +44,14 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const [exporting, setExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
 
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
-  const dragRef = useRef<{ markerId: string; startX: number; startTime: number } | null>(null)
+  const dragRef = useRef<{
+    markerId: string; mode: 'move' | 'resize'
+    startX: number; startTime: number; startDuration: number
+  } | null>(null)
 
   const scene = scenes.find((s) => s.id === activeSceneId)
   const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
@@ -117,23 +122,34 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       const barW = effectiveDur * PX_PER_MS
       const color = BUNDLE_COLORS[i % BUNDLE_COLORS.length]
 
-      ctx.fillStyle = color + '88'
+      const isSelected = marker.id === selectedMarkerId
+      const drawW = Math.max(barW, 8)
+
+      ctx.fillStyle = isSelected ? color + 'cc' : color + '88'
       ctx.beginPath()
-      ctx.roundRect(x, evtY + 4, Math.max(barW, 4), TRACK_H - 8, 3)
+      ctx.roundRect(x, evtY + 4, drawW, TRACK_H - 8, 3)
       ctx.fill()
 
-      ctx.fillStyle = color
+      ctx.strokeStyle = isSelected ? '#fff' : color
+      ctx.lineWidth = isSelected ? 2 : 1
       ctx.beginPath()
-      ctx.roundRect(x, evtY + 4, Math.max(barW, 4), TRACK_H - 8, 3)
+      ctx.roundRect(x, evtY + 4, drawW, TRACK_H - 8, 3)
       ctx.stroke()
+      ctx.lineWidth = 1
+
+      // Resize handle (right edge indicator)
+      if (isSelected) {
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(x + drawW - 3, evtY + 8, 2, TRACK_H - 16)
+      }
 
       // Label
       ctx.fillStyle = '#fff'
       ctx.font = '9px system-ui'
       ctx.textAlign = 'left'
       const labelX = x + 4
-      if (labelX + 40 < x + barW) {
-        ctx.fillText(bundle.name, labelX, evtY + TRACK_H / 2 + 3, barW - 8)
+      if (labelX + 20 < x + drawW) {
+        ctx.fillText(bundle.name, labelX, evtY + TRACK_H / 2 + 3, drawW - 8)
       }
     }
 
@@ -171,7 +187,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.textAlign = 'left'
     ctx.fillText('🎥 Camera', 8, RULER_H + TRACK_H / 2 + 4)
     ctx.fillText('⚡ Events', 8, RULER_H + TRACK_H + TRACK_H / 2 + 4)
-  }, [dt, sceneDuration, directorPlayheadTime, animationBundles])
+  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId])
 
   useEffect(() => { draw() }, [draw])
 
@@ -191,6 +207,26 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     return Math.max(0, Math.min(sceneDuration, (clientX - rect.left - SIDEBAR_W) / PX_PER_MS))
   }
 
+  const EDGE_ZONE = 8  // px from right edge for resize handle
+
+  const hitTestEventBar = (localX: number, localY: number): { marker: EventMarker; isEdge: boolean } | null => {
+    const evtY = RULER_H + TRACK_H
+    if (localY < evtY || localY >= evtY + TRACK_H) return null
+    for (const marker of dt.eventMarkers) {
+      const bundle = animationBundles.find((b) => b.id === marker.bundleId)
+      if (!bundle) continue
+      const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
+      const effectiveDur = marker.durationOverride ?? bundleDur
+      const mx = SIDEBAR_W + marker.time * PX_PER_MS
+      const mw = Math.max(effectiveDur * PX_PER_MS, 8)
+      if (localX >= mx && localX <= mx + mw) {
+        const isEdge = localX >= mx + mw - EDGE_ZONE
+        return { marker, isEdge }
+      }
+    }
+    return null
+  }
+
   const handlePointerDown = (e: React.PointerEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -200,22 +236,26 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (localX < SIDEBAR_W) return
 
     // Check event bar hit
-    const evtY = RULER_H + TRACK_H
-    if (localY >= evtY && localY < evtY + TRACK_H) {
-      for (const marker of dt.eventMarkers) {
-        const bundle = animationBundles.find((b) => b.id === marker.bundleId)
-        if (!bundle) continue
-        const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
-        const effectiveDur = marker.durationOverride ?? bundleDur
-        const mx = SIDEBAR_W + marker.time * PX_PER_MS
-        const mw = effectiveDur * PX_PER_MS
-        if (localX >= mx && localX <= mx + mw) {
-          dragRef.current = { markerId: marker.id, startX: e.clientX, startTime: marker.time }
-          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-          return
-        }
+    const hit = hitTestEventBar(localX, localY)
+    if (hit) {
+      const { marker, isEdge } = hit
+      const bundle = animationBundles.find((b) => b.id === marker.bundleId)
+      const bundleDur = bundle ? Math.max(1, ...bundle.clips.map((c) => c.duration)) : 300
+      const effectiveDur = marker.durationOverride ?? bundleDur
+      setSelectedMarkerId(marker.id)
+      dragRef.current = {
+        markerId: marker.id,
+        mode: isEdge ? 'resize' : 'move',
+        startX: e.clientX,
+        startTime: marker.time,
+        startDuration: effectiveDur,
       }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
     }
+
+    // Click on empty area deselects
+    setSelectedMarkerId(null)
 
     // Ruler/playhead scrub
     scrubRef.current = true
@@ -227,12 +267,34 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
-      const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
-      updateEventMarker(dragRef.current.markerId, { time: Math.round(newTime) })
+      if (dragRef.current.mode === 'move') {
+        const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
+        updateEventMarker(dragRef.current.markerId, { time: Math.round(newTime) })
+      } else {
+        // Resize: change duration
+        const newDur = Math.max(50, dragRef.current.startDuration + dtMs)
+        updateEventMarker(dragRef.current.markerId, { durationOverride: Math.round(newDur) })
+      }
       return
     }
     if (scrubRef.current) {
       setDirectorPlayheadTime(xToMs(e.clientX))
+      return
+    }
+
+    // Cursor feedback on hover
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const localX = e.clientX - rect.left
+    const localY = e.clientY - rect.top
+    const hit = hitTestEventBar(localX, localY)
+    if (hit?.isEdge) {
+      canvas.style.cursor = 'ew-resize'
+    } else if (hit) {
+      canvas.style.cursor = 'grab'
+    } else {
+      canvas.style.cursor = 'default'
     }
   }
 
