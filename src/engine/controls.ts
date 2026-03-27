@@ -23,9 +23,8 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   let phi = Math.PI / 2  // vertical angle (radians, PI/2 = front view)
   let radius = 20  // distance from target
 
-  // Pan offset in world space
-  let panX = 0
-  let panY = 0
+  // Pan offset in 3D world space (camera-relative panning)
+  let panOffset: [number, number, number] = [0, 0, 0]
 
   // Damping state (rotation + zoom only; panning is direct)
   let thetaVel = 0
@@ -47,6 +46,37 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   // Clamp phi to avoid gimbal lock
   const PHI_MIN = 0.01
   const PHI_MAX = Math.PI - 0.01
+
+  /** Compute camera right and up vectors from current spherical angles. */
+  function getCameraBasis(): { right: [number, number, number]; up: [number, number, number] } {
+    const sinPhi = Math.sin(phi)
+    const cosPhi = Math.cos(phi)
+    const sinTheta = Math.sin(theta)
+    const cosTheta = Math.cos(theta)
+
+    // Forward direction (from camera to target, normalized)
+    const fx = -sinPhi * sinTheta
+    const fy = -cosPhi
+    const fz = -sinPhi * cosTheta
+
+    // Right = forward × worldUp (0,1,0)
+    let rx = fy * 0 - fz * 1   // = -fz
+    let ry = fz * 0 - fx * 0   // = 0  (not quite — cross with (0,1,0))
+    let rz = fx * 1 - fy * 0   // = fx
+    // Simplified: right = (-fz, 0, fx) for forward × (0,1,0)
+    rx = -fz
+    ry = 0
+    rz = fx
+    const rl = Math.sqrt(rx * rx + rz * rz)
+    if (rl > 0.001) { rx /= rl; rz /= rl }
+
+    // Up = right × forward
+    const ux = ry * fz - rz * fy
+    const uy = rz * fx - rx * fz
+    const uz = rx * fy - ry * fx
+
+    return { right: [rx, ry, rz], up: [ux, uy, uz] }
+  }
 
   function onPointerDown(e: PointerEvent) {
     if (e.button === 2) {
@@ -74,9 +104,12 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
       thetaVel -= dx * rotateSpeed
       phiVel -= dy * rotateSpeed
     } else if (isPanning) {
-      // Direct panning — no velocity/inertia for precision (like Figma)
-      panX -= dx * panSpeed * (radius / 20)
-      panY += dy * panSpeed * (radius / 20)
+      // Camera-relative panning
+      const { right, up } = getCameraBasis()
+      const scale = panSpeed * (radius / 20)
+      panOffset[0] -= dx * scale * right[0] - dy * scale * up[0]
+      panOffset[1] -= dx * scale * right[1] - dy * scale * up[1]
+      panOffset[2] -= dx * scale * right[2] - dy * scale * up[2]
     }
   }
 
@@ -116,24 +149,30 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1
       const ndcY = 1 - ((e.clientY - rect.top) / rect.height) * 2
 
+      const { right, up } = getCameraBasis()
       const aspect = rect.width / rect.height
       const fovRad = camera.fov * Math.PI / 180
       const halfH = Math.tan(fovRad / 2) * radius
       const halfW = halfH * aspect
-      const cursorWX = ndcX * halfW
-      const cursorWY = ndcY * halfH
 
       const delta = e.deltaY * zoomSpeed * radius
       const newRadius = Math.max(1, Math.min(200, radius + delta))
       const scale = 1 - newRadius / radius
 
-      panX += cursorWX * scale
-      panY += cursorWY * scale
+      // Offset along camera right/up toward cursor position
+      const cursorRight = ndcX * halfW
+      const cursorUp = ndcY * halfH
+      panOffset[0] += (right[0] * cursorRight + up[0] * cursorUp) * scale
+      panOffset[1] += (right[1] * cursorRight + up[1] * cursorUp) * scale
+      panOffset[2] += (right[2] * cursorRight + up[2] * cursorUp) * scale
       radius = newRadius
     } else {
-      // Two-finger scroll → direct pan
-      panX -= e.deltaX * panSpeed * (radius / 20)
-      panY += e.deltaY * panSpeed * (radius / 20)
+      // Two-finger scroll → camera-relative pan
+      const { right, up } = getCameraBasis()
+      const scale = panSpeed * (radius / 20)
+      panOffset[0] -= e.deltaX * scale * right[0] + e.deltaY * scale * up[0]
+      panOffset[1] -= e.deltaX * scale * right[1] + e.deltaY * scale * up[1]
+      panOffset[2] -= e.deltaX * scale * right[2] + e.deltaY * scale * up[2]
     }
   }
 
@@ -161,8 +200,9 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
       theta = theta + (resetTarget.theta - theta) * t
       phi = phi + (resetTarget.phi - phi) * t
       radius = radius + (resetTarget.radius - radius) * t
-      panX = panX + (resetTarget.panX - panX) * t
-      panY = panY + (resetTarget.panY - panY) * t
+      panOffset[0] = panOffset[0] + (resetTarget.panOffset[0] - panOffset[0]) * t
+      panOffset[1] = panOffset[1] + (resetTarget.panOffset[1] - panOffset[1]) * t
+      panOffset[2] = panOffset[2] + (resetTarget.panOffset[2] - panOffset[2]) * t
       if (raw >= 1) resetTarget = null
     }
 
@@ -186,13 +226,13 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     const sinTheta = Math.sin(theta)
     const cosTheta = Math.cos(theta)
 
-    camera.position[0] = panX + radius * sinPhi * sinTheta
-    camera.position[1] = panY + radius * cosPhi
-    camera.position[2] = radius * sinPhi * cosTheta
+    camera.position[0] = panOffset[0] + radius * sinPhi * sinTheta
+    camera.position[1] = panOffset[1] + radius * cosPhi
+    camera.position[2] = panOffset[2] + radius * sinPhi * cosTheta
 
-    camera.target[0] = panX
-    camera.target[1] = panY
-    camera.target[2] = 0
+    camera.target[0] = panOffset[0]
+    camera.target[1] = panOffset[1]
+    camera.target[2] = panOffset[2]
   }
 
   function dispose() {
@@ -209,11 +249,11 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
   function setAngles(t: number, p: number) { theta = t; phi = p }
 
   // Animated reset
-  let resetTarget: { theta: number; phi: number; radius: number; panX: number; panY: number; startTime: number; duration: number } | null = null
+  let resetTarget: { theta: number; phi: number; radius: number; panOffset: [number, number, number]; startTime: number; duration: number } | null = null
 
   function resetView() {
     thetaVel = 0; phiVel = 0; radiusVel = 0
-    resetTarget = { theta: 0, phi: Math.PI / 2, radius: 20, panX: 0, panY: 0, startTime: performance.now(), duration: 3000 }
+    resetTarget = { theta: 0, phi: Math.PI / 2, radius: 20, panOffset: [0, 0, 0], startTime: performance.now(), duration: 3000 }
   }
 
   // Initialize camera position
