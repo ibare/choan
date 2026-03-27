@@ -8,23 +8,19 @@ import { usePreviewStore } from '../store/usePreviewStore'
 import type { DisplayLayer, RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../utils/nanoid'
-import { Play, Pause, Stop, Plus, X, FilmStrip, VideoCamera, Export } from '@phosphor-icons/react'
+import { Play, Pause, Stop, Plus, X, FilmStrip, Export } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
-import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
 import { track } from '../utils/analytics'
 import { Input } from '../components/ui/Input'
 import { buildLayerTree } from '../animation/buildLayerTree'
 import { kfAnimator } from '../rendering/kfAnimator'
-import { useAnimationStore } from '../store/useAnimationStore'
-import { CAMERA_PRESETS, createCameraPreset, type CameraPreset } from '../animation/cameraPresets'
 import VideoExportDialog, { type VideoExportSettings } from './VideoExportDialog'
 import { createVideoExporter } from '../engine/videoExporter'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { evaluateAnimation } from '../animation/animationEvaluator'
 import { createLayoutAnimator } from '../layout/animator'
-import { evaluateCameraAnimation } from '../animation/cameraEvaluator'
 import { applyMultiSelectTint } from '../rendering/multiSelectTint'
 import TimelineCanvas from './TimelineCanvas'
 import TimelineSidebar from './TimelineSidebar'
@@ -69,27 +65,9 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   }
 
   const displayClips: DisplayClipEntry[] = []
-  let activeBundle: AnimationBundle | undefined
   if (activeBundleId) {
-    activeBundle = animationBundles.find((b) => b.id === activeBundleId)
+    const activeBundle = animationBundles.find((b) => b.id === activeBundleId)
     if (activeBundle) {
-      // Camera clip at the top
-      if (activeBundle.cameraClip && activeBundle.cameraClip.tracks.length > 0) {
-        displayClips.push({
-          clip: {
-            id: activeBundle.cameraClip.id,
-            elementId: '__camera__',
-            duration: activeBundle.cameraClip.duration,
-            easing: activeBundle.cameraClip.easing,
-            tracks: [],  // camera tracks displayed via cameraTracks field
-          },
-          label: 'Camera',
-          depth: 0,
-          bundleId: activeBundle.id,
-          isCamera: true,
-          cameraTracks: activeBundle.cameraClip.tracks,
-        })
-      }
       for (const { el, depth } of buildLayerTree(elements)) {
         const clip = activeBundle.clips.find((c) => c.elementId === el.id)
         if (clip) displayClips.push({ clip, label: el.label, depth, bundleId: activeBundle.id })
@@ -98,14 +76,11 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   }
 
   const maxDuration = Math.max(300, ...displayClips.map((c) => c.clip.duration))
-  const displayLayers: DisplayLayer[] = displayClips.map((entry) => {
-    const sourceTracks = entry.isCamera && entry.cameraTracks ? entry.cameraTracks : entry.clip.tracks
-    return {
-      clipId: entry.clip.id,
-      label: entry.label,
-      tracks: sourceTracks.map((t) => ({ property: t.property, keyframes: [...t.keyframes].sort((a, b) => a.time - b.time) })),
-    }
-  })
+  const displayLayers: DisplayLayer[] = displayClips.map((entry) => ({
+    clipId: entry.clip.id,
+    label: entry.label,
+    tracks: entry.clip.tracks.map((t) => ({ property: t.property, keyframes: [...t.keyframes].sort((a, b) => a.time - b.time) })),
+  }))
   const renderOptions: RenderOptions = {
     scrollX, scrollY, pxPerMs: PX_PER_MS,
     rulerHeight: RULER_HEIGHT, trackHeight: TRACK_HEIGHT, layerHeaderHeight: LAYER_HEADER_HEIGHT,
@@ -164,24 +139,6 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     stop()
   }
 
-  // ── Camera preset ──
-  const handleCameraPreset = (presetId: string) => {
-    if (!activeBundleId) return
-    const cam = rendererSingleton.renderer?.camera ?? {
-      position: [0, 0, 20] as [number, number, number],
-      target: [0, 0, 0] as [number, number, number],
-      up: [0, 1, 0] as [number, number, number],
-      fov: 50, near: 0.1, far: 1000, aspect: 1,
-    }
-    const duration = Math.max(maxDuration, 3000)
-    const clip = createCameraPreset(presetId as CameraPreset, duration, cam)
-    useAnimationStore.getState().setCameraClipInBundle(activeBundleId, clip)
-  }
-
-  const handleRemoveCameraClip = () => {
-    if (activeBundleId) useAnimationStore.getState().removeCameraClipFromBundle(activeBundleId)
-  }
-
   // ── Video export ──
   const handleExport = (settings: VideoExportSettings) => {
     const renderer = rendererSingleton.renderer
@@ -190,7 +147,6 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     setExporting(true)
     setExportProgress(0)
 
-    // Create a dedicated layout animator for export (no spring physics needed)
     const exportAnimator = createLayoutAnimator()
     const rs = useRenderSettings.getState()
 
@@ -198,11 +154,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       renderer.canvas,
       (w, h) => renderer.resize(w, h),
       (timeMs) => {
-        // Evaluate animation at this time
         const state = useChoanStore.getState()
-        const bundle = activeBundleId
-          ? state.animationBundles.find((b) => b.id === activeBundleId)
-          : null
 
         const animated = evaluateAnimation({
           elements: state.elements,
@@ -216,21 +168,6 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           manipulatedIds: new Set(),
         })
 
-        // Apply camera keyframes
-        if (bundle?.cameraClip && bundle.cameraClip.tracks.length > 0) {
-          const camState = evaluateCameraAnimation(bundle.cameraClip, timeMs, renderer.camera)
-          if (camState) {
-            renderer.camera.position[0] = camState.position[0]
-            renderer.camera.position[1] = camState.position[1]
-            renderer.camera.position[2] = camState.position[2]
-            renderer.camera.target[0] = camState.target[0]
-            renderer.camera.target[1] = camState.target[1]
-            renderer.camera.target[2] = camState.target[2]
-            renderer.camera.fov = camState.fov
-          }
-        }
-
-        // Update scene and render
         renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
         renderer.render(rs)
       },
@@ -274,26 +211,9 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           <Tooltip content="Stop"><Button className="btn-small" onClick={handleStop}><Stop size={14} weight="fill" /></Button></Tooltip>
           <Tooltip content="New Animation"><Button className="btn-small" onClick={handleCreateBundle}><Plus size={14} /></Button></Tooltip>
           <Tooltip content="Ghost Preview"><Button className="btn-small" active={ghostPreview} onClick={toggleGhostPreview}><FilmStrip size={14} /></Button></Tooltip>
-          {activeBundleId && (
-            <>
-              <div className="timeline-separator" />
-              <Select
-                options={CAMERA_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
-                value=""
-                onChange={handleCameraPreset}
-                placeholder="Camera"
-                size="sm"
-              />
-              {activeBundle?.cameraClip && (
-                <Tooltip content="Remove Camera">
-                  <Button className="btn-small" onClick={handleRemoveCameraClip}><VideoCamera size={14} /><X size={10} /></Button>
-                </Tooltip>
-              )}
-              <Tooltip content="Export Video">
-                <Button className="btn-small" onClick={() => setExportDialogOpen(true)}><Export size={14} /></Button>
-              </Tooltip>
-            </>
-          )}
+          <Tooltip content="Export Video">
+            <Button className="btn-small" onClick={() => setExportDialogOpen(true)}><Export size={14} /></Button>
+          </Tooltip>
           {previewState !== 'stopped' && (
             <span className="preview-state-label">{previewState === 'playing' ? 'Playing' : 'Paused'}</span>
           )}

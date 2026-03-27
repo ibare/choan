@@ -21,7 +21,6 @@ import { createLayoutAnimator } from '../layout/animator'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
 import { hoveredHistoryColor } from '../utils/colorHistoryHover'
 import { tickExportAnim, getExportAnim, phaseProgress } from '../animation/exportAnimation'
-import { evaluateCameraAnimation } from '../animation/cameraEvaluator'
 
 export function useAnimateLoop({
   rendererRef,
@@ -79,32 +78,6 @@ export function useAnimateLoop({
       const cam = renderer.camera
       const state = useChoanStore.getState()
       const preview = usePreviewStore.getState()
-
-      // ── Camera keyframe override ──
-      const activeBundleId = preview.editingBundleId
-      const activeBundle = activeBundleId
-        ? state.animationBundles.find((b) => b.id === activeBundleId)
-        : null
-
-      if (activeBundle?.cameraClip && activeBundle.cameraClip.tracks.length > 0) {
-        const isPlaying = preview.previewState === 'playing'
-        const isScrubbing = preview.previewState === 'stopped' && !!activeBundleId
-        const camTime = isPlaying ? preview.playheadTime : isScrubbing ? preview.playheadTime : 0
-        const camState = evaluateCameraAnimation(activeBundle.cameraClip, camTime, cam)
-        if (camState) {
-          cam.position[0] = camState.position[0]
-          cam.position[1] = camState.position[1]
-          cam.position[2] = camState.position[2]
-          cam.target[0] = camState.target[0]
-          cam.target[1] = camState.target[1]
-          cam.target[2] = camState.target[2]
-          cam.fov = camState.fov
-        }
-        // Disable orbit controls during camera animation playback
-        if (controlsRef.current) controlsRef.current.disabled = isPlaying
-      } else {
-        if (controlsRef.current) controlsRef.current.disabled = false
-      }
 
       const cdx = cam.position[0] - cam.target[0]
       const cdy = cam.position[1] - cam.target[1]
