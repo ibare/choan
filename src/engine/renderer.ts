@@ -7,7 +7,7 @@ import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
 import { DOF_FRAG } from './dofShaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
-import { createSceneUBO, type SceneUBO } from './scene'
+import { createSceneUBO, EXTRUDE_DEPTH, type SceneUBO } from './scene'
 import { buildBVH2D, type BVHData, type AABB2D } from './bvh'
 import { pixelToWorld, pixelWidthToWorld, pixelHeightToWorld } from '../coords/coordinateSystem'
 import { createTextureAtlas, type TextureAtlas } from './textureAtlas'
@@ -185,7 +185,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
       const [wx, wy] = pixelToWorld(cx, cy, cssWidth, cssHeight)
       const hw = pixelWidthToWorld(el.width, cssWidth, cssHeight) / 2
       const hh = pixelHeightToWorld(el.height, cssHeight) / 2
-      return { cx: wx, cy: wy, hw, hh }
+      const ed = extrudeDepth ?? EXTRUDE_DEPTH
+      const wz = el.z * ed
+      return { cx: wx, cy: wy, cz: wz, hw, hh, hd: ed / 2 }
     })
 
     // Build BVH

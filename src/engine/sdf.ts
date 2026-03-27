@@ -37,17 +37,17 @@ export interface HitResult {
   objectIndex: number
 }
 
-function elementToWorld(el: ChoanElement, canvasW: number, canvasH: number) {
+function elementToWorld(el: ChoanElement, canvasW: number, canvasH: number, ed = EXTRUDE_DEPTH) {
   const aspect = canvasW / canvasH
   const cx = el.x + el.width / 2
   const cy = el.y + el.height / 2
   return {
     wx: -FRUSTUM * aspect + (cx / canvasW) * 2 * FRUSTUM * aspect,
     wy: FRUSTUM - (cy / canvasH) * 2 * FRUSTUM,
-    wz: el.z * EXTRUDE_DEPTH,
+    wz: el.z * ed,
     hw: ((el.width / canvasW) * 2 * FRUSTUM * aspect) / 2,
     hh: ((el.height / canvasH) * 2 * FRUSTUM) / 2,
-    hd: EXTRUDE_DEPTH / 2,
+    hd: ed / 2,
   }
 }
 
@@ -55,8 +55,9 @@ function evalElementSDF(
   px: number, py: number, pz: number,
   el: ChoanElement,
   canvasW: number, canvasH: number,
+  ed = EXTRUDE_DEPTH,
 ): number {
-  const { wx, wy, wz, hw, hh, hd } = elementToWorld(el, canvasW, canvasH)
+  const { wx, wy, wz, hw, hh, hd } = elementToWorld(el, canvasW, canvasH, ed)
   const lx = px - wx, ly = py - wy, lz = pz - wz
 
   if (el.type === 'circle') {
@@ -79,6 +80,7 @@ function sceneSDF_BVH(
   elements: ChoanElement[],
   canvasW: number, canvasH: number,
   bvh: BVHData,
+  ed = EXTRUDE_DEPTH,
 ): { dist: number; idx: number } {
   let resDist = 1e10
   let resIdx = -1
@@ -92,16 +94,18 @@ function sceneSDF_BVH(
     const idx = stack[--sp]
     if (idx >= MAX_BVH_NODES) continue
 
-    const ni = idx * 4
-    const minX = nodes[ni], minY = nodes[ni + 1], maxX = nodes[ni + 2], maxY = nodes[ni + 3]
+    const ni = idx * 6
+    const minX = nodes[ni], minY = nodes[ni + 1], minZ = nodes[ni + 2]
+    const maxX = nodes[ni + 3], maxY = nodes[ni + 4], maxZ = nodes[ni + 5]
 
     // Degenerate (padding)
     if (minX > maxX) continue
 
-    // 2D AABB distance
+    // 3D AABB distance
     const dx = Math.max(minX - px, Math.max(px - maxX, 0))
     const dy = Math.max(minY - py, Math.max(py - maxY, 0))
-    const boxDist = Math.sqrt(dx * dx + dy * dy)
+    const dz = Math.max(minZ - pz, Math.max(pz - maxZ, 0))
+    const boxDist = Math.sqrt(dx * dx + dy * dy + dz * dz)
 
     // Only prune when point is outside AABB (boxDist > 0).
     // Inside the AABB (boxDist = 0), the actual SDF can be negative
@@ -113,7 +117,7 @@ function sceneSDF_BVH(
       const leafIdx = idx - numInternalNodes
       const origIdx = objectOrder[leafIdx]
       if (origIdx >= 0 && origIdx < elements.length) {
-        const d = evalElementSDF(px, py, pz, elements[origIdx], canvasW, canvasH)
+        const d = evalElementSDF(px, py, pz, elements[origIdx], canvasW, canvasH, ed)
         if (d < resDist) {
           resDist = d
           resIdx = origIdx
@@ -136,9 +140,10 @@ export function cpuRayMarch(
   elements: ChoanElement[],
   canvasW: number, canvasH: number,
   bvh?: BVHData,
+  extrudeDepth = EXTRUDE_DEPTH,
 ): HitResult | null {
-  const MAX_STEPS = 64
-  const MAX_DIST = 100
+  const MAX_STEPS = 128
+  const MAX_DIST = 500
   const EPSILON = 0.005 // slightly larger than GPU for robustness
 
   let t = 0
@@ -151,7 +156,7 @@ export function cpuRayMarch(
     let hitIdx: number
 
     if (bvh && bvh.numLeaves > 0) {
-      const res = sceneSDF_BVH(px, py, pz, elements, canvasW, canvasH, bvh)
+      const res = sceneSDF_BVH(px, py, pz, elements, canvasW, canvasH, bvh, extrudeDepth)
       minDist = res.dist
       hitIdx = res.idx
     } else {
@@ -159,7 +164,7 @@ export function cpuRayMarch(
       hitIdx = -1
       for (let i = 0; i < elements.length; i++) {
         if (elements[i].skinOnly || elements[i].frameless) continue
-        const d = evalElementSDF(px, py, pz, elements[i], canvasW, canvasH)
+        const d = evalElementSDF(px, py, pz, elements[i], canvasW, canvasH, extrudeDepth)
         if (d < minDist) {
           minDist = d
           hitIdx = i
@@ -185,13 +190,14 @@ export function cpuSkinOnlyHit(
   elements: ChoanElement[],
   canvasW: number, canvasH: number,
   sdfHitDist: number, // distance of existing SDF hit (-1 if no hit)
+  extrudeDepth = EXTRUDE_DEPTH,
 ): HitResult | null {
   let bestT = sdfHitDist >= 0 ? sdfHitDist : 1e10
   let bestIdx = -1
 
   for (let i = 0; i < elements.length; i++) {
     if (!elements[i].skinOnly && !elements[i].frameless) continue
-    const { wx, wy, wz, hw, hh, hd } = elementToWorld(elements[i], canvasW, canvasH)
+    const { wx, wy, wz, hw, hh, hd } = elementToWorld(elements[i], canvasW, canvasH, extrudeDepth)
     const frontZ = wz + hd
 
     // Ray-plane intersection: plane at z = frontZ

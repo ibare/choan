@@ -9,6 +9,7 @@ import { PopoverPrimitive as RadixPopover } from '../components/ui/Popover'
 import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING, DEFAULT_LAYOUT_COLUMNS } from '../constants'
 import { useElementStore } from '../store/useElementStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
+import { useRenderSettings } from '../store/useRenderSettings'
 // SKIN_REGISTRY no longer used — skin picker removed from toolbar
 import type { SDFRenderer } from '../engine/renderer'
 import type { OrbitControls } from '../engine/controls'
@@ -431,9 +432,11 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
       const { w, h } = canvasSizeRef.current
       const dpr = window.devicePixelRatio || 1
       const ov = rendererRef.current.overlay
+      const ed = useRenderSettings.getState().extrudeDepth
+      const elZ = elem.z * ed + ed / 2
       const project = (px: number, py: number) => {
         const [wx, wy] = pixelToWorldCS(px, py, w, h)
-        const s = ov.projectToScreen(wx, wy, 0)
+        const s = ov.projectToScreen(wx, wy, elZ)
         return { x: s.px / dpr, y: s.py / dpr }
       }
 

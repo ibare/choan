@@ -7,6 +7,13 @@ import { getCameraRayParams } from '../engine/camera'
 import { cpuRayMarch, cpuSkinOnlyHit, screenToRay } from '../engine/sdf'
 import { useChoanStore } from '../store/useChoanStore'
 import { HANDLE_HIT_RADIUS } from '../constants'
+import { useRenderSettings } from '../store/useRenderSettings'
+
+type ScreenToPixelFn = (cx: number, cy: number, zPlane?: number) => { x: number; y: number } | null
+
+function getExtrudeDepth(): number {
+  return useRenderSettings.getState().extrudeDepth
+}
 
 export function raycastElement(
   clientX: number,
@@ -22,10 +29,11 @@ export function raycastElement(
     clientX, clientY, rect, ray.ro, ray.forward, ray.right, ray.up, ray.fovScale, w, h,
   )
   const elements = elementsOverride ?? useChoanStore.getState().elements
-  const hit = cpuRayMarch(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, renderer.bvhData ?? undefined)
+  const ed = getExtrudeDepth()
+  const hit = cpuRayMarch(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, renderer.bvhData ?? undefined, ed)
 
   // skinOnly elements (icons etc.) use ray-plane intersection, not SDF
-  const skinHit = cpuSkinOnlyHit(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, hit?.distance ?? -1)
+  const skinHit = cpuSkinOnlyHit(ro[0], ro[1], ro[2], rd[0], rd[1], rd[2], elements, w, h, hit?.distance ?? -1, ed)
 
   const best = skinHit ?? hit
   if (!best || best.objectIndex < 0 || best.objectIndex >= elements.length) return null
@@ -37,12 +45,12 @@ export function hitTestCorner(
   clientY: number,
   selectedId: string,
   elements: ChoanElement[],
-  screenToPixel: (cx: number, cy: number) => { x: number; y: number } | null,
+  screenToPixel: ScreenToPixelFn,
   zoomScale: number,
 ): number {
   const el = elements.find((e) => e.id === selectedId)
   if (!el) return -1
-  const pixel = screenToPixel(clientX, clientY)
+  const pixel = screenToPixel(clientX, clientY, el.z * getExtrudeDepth())
   if (!pixel) return -1
   // Corners: 0=BL, 1=BR, 2=TR, 3=TL
   const corners = [
@@ -84,14 +92,14 @@ export function hitTestSizingIndicator(
   clientY: number,
   containerId: string,
   elements: ChoanElement[],
-  screenToPixel: (cx: number, cy: number) => { x: number; y: number } | null,
+  screenToPixel: ScreenToPixelFn,
   zoomScale: number,
 ): string | null {
   const container = elements.find((e) => e.id === containerId)
   if (!container) return null
   const dir = container.layoutDirection
   if (dir !== 'row' && dir !== 'column') return null
-  const pixel = screenToPixel(clientX, clientY)
+  const pixel = screenToPixel(clientX, clientY, container.z * getExtrudeDepth())
   if (!pixel) return null
 
   const children = elements.filter((e) => e.parentId === containerId)
@@ -111,14 +119,14 @@ export function hitTestLayoutHandle(
   clientY: number,
   containerId: string,
   elements: ChoanElement[],
-  screenToPixel: (cx: number, cy: number) => { x: number; y: number } | null,
+  screenToPixel: ScreenToPixelFn,
   zoomScale: number,
 ): number {
   const container = elements.find((e) => e.id === containerId)
   if (!container) return -1
   const dir = container.layoutDirection
   if (dir !== 'row' && dir !== 'column') return -1
-  const pixel = screenToPixel(clientX, clientY)
+  const pixel = screenToPixel(clientX, clientY, container.z * getExtrudeDepth())
   if (!pixel) return -1
 
   const children = elements.filter((e) => e.parentId === containerId)

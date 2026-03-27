@@ -65,7 +65,7 @@ export function usePointerHandlers({
   mountRef: MutableRefObject<HTMLDivElement | null>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
 }): UsePointerHandlersResult {
-  const screenToPixel = useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+  const screenToPixel = useCallback((clientX: number, clientY: number, zPlane = 0): { x: number; y: number } | null => {
     const renderer = rendererRef.current
     if (!renderer) return null
     const ray = getCameraRayParams(renderer.camera)
@@ -73,7 +73,7 @@ export function usePointerHandlers({
     const { w, h } = canvasSizeRef.current
     const { ro, rd } = screenToRay(clientX, clientY, rect, ray.ro, ray.forward, ray.right, ray.up, ray.fovScale, w, h)
     if (Math.abs(rd[2]) < 1e-6) return null
-    const t = -ro[2] / rd[2]
+    const t = (zPlane - ro[2]) / rd[2]
     if (t < 0) return null
     const [px, py] = worldToPixelCS(ro[0] + rd[0] * t, ro[1] + rd[1] * t, w, h)
     return { x: px, y: py }
