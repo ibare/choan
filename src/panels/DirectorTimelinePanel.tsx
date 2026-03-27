@@ -347,10 +347,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   // ── Actions ──
   const handleFocalLengthChange = (mm: number) => {
-    const clamped = Math.max(10, Math.min(200, mm))
-    setFocalLength(clamped)
-    const cam = rendererSingleton.renderer?.camera
-    if (cam) cam.fov = mmToFov(clamped)
+    setFocalLength(Math.max(10, Math.min(200, mm)))
   }
 
   const handleSaveView = () => {
@@ -361,7 +358,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       time: Math.round(directorPlayheadTime),
       position: [...cam.position] as [number, number, number],
       target: [...cam.target] as [number, number, number],
-      fov: cam.fov,
+      fov: mmToFov(focalLength),
     }
     addCameraKeyframe(kf)
   }
