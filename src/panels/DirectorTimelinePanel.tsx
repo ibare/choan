@@ -18,6 +18,7 @@ import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
 import type { RenderOptions } from '../engine/timeline2dTypes'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
+import { generateCameraPreset, CAMERA_PRESET_OPTIONS, type CameraPresetType } from '../animation/cameraPresets'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createVideoExporter } from '../engine/videoExporter'
@@ -341,6 +342,27 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     addCameraKeyframe(kf)
   }
 
+  const handleApplyPreset = (presetType: string) => {
+    const cam = rendererSingleton.renderer?.camera
+    const keyframes = generateCameraPreset(presetType as CameraPresetType, {
+      center: cam ? [...cam.target] as [number, number, number] : [0, 0, 0],
+      radius: cam ? Math.sqrt(
+        (cam.position[0] - cam.target[0]) ** 2 +
+        (cam.position[1] - cam.target[1]) ** 2 +
+        (cam.position[2] - cam.target[2]) ** 2,
+      ) : 15,
+      duration: sceneDuration,
+      fov: cam?.fov ?? 50,
+    })
+    // Clear existing keyframes and apply preset
+    for (const kf of dt.cameraKeyframes) {
+      useDirectorStore.getState().removeCameraKeyframe(kf.id)
+    }
+    for (const kf of keyframes) {
+      addCameraKeyframe(kf)
+    }
+  }
+
   const handleAddEvent = (bundleId: string) => {
     const marker: EventMarker = {
       id: nanoid(),
@@ -429,6 +451,13 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         <Tooltip content="Save Current View as Keyframe">
           <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Save View</Button>
         </Tooltip>
+        <Select
+          options={CAMERA_PRESET_OPTIONS}
+          value=""
+          onChange={handleApplyPreset}
+          placeholder="Preset"
+          size="sm"
+        />
         {bundleOptions.length > 0 && (
           <Select
             options={bundleOptions}
