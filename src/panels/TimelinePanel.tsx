@@ -2,7 +2,7 @@
 // Owns state, derived data, and playback logic.
 // Delegates Canvas2D to TimelineCanvas, DOM sidebar to TimelineSidebar.
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
 import { useDirectorStore } from '../store/useDirectorStore'
@@ -63,9 +63,11 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     : animationBundles[0]?.id ?? null
 
   // Keep editingBundleId in sync with active bundle so playhead is always visible
-  if (activeBundleId && editingBundleId !== activeBundleId) {
-    setEditingBundle(activeBundleId)
-  }
+  useEffect(() => {
+    if (activeBundleId && editingBundleId !== activeBundleId) {
+      setEditingBundle(activeBundleId)
+    }
+  }, [activeBundleId, editingBundleId, setEditingBundle])
 
   const displayClips: DisplayClipEntry[] = []
   if (activeBundleId) {
