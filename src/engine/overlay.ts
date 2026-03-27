@@ -6,7 +6,7 @@ import { OVERLAY_VERT, OVERLAY_FRAG, OVERLAY_VERT_3D, DASH_VERT, DASH_FRAG, DISC
 
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
-  drawLines3D(vertices: Float32Array, color: [number, number, number, number]): void
+  drawLines3D(vertices: Float32Array, color: [number, number, number, number], lineWidth?: number): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
   drawWorldRect(cx: number, cy: number, hw: number, hh: number, color: [number, number, number, number]): void
@@ -97,8 +97,9 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindVertexArray(null)
   }
 
-  function drawLines3D(vertices: Float32Array, color: [number, number, number, number]) {
+  function drawLines3D(vertices: Float32Array, color: [number, number, number, number], lineWidth = 2) {
     if (vertices.length < 6 || !currentViewProj) return
+    gl.lineWidth(lineWidth)
 
     gl.useProgram(line3DProgram)
     gl.uniformMatrix4fv(gl.getUniformLocation(line3DProgram, 'uViewProj'), false, currentViewProj)

@@ -6,15 +6,15 @@ import type { CameraViewKeyframe } from '../animation/directorTypes'
 import type { DirectorCameraState } from '../animation/directorCameraEvaluator'
 import { sampleCatmullRomPath3D } from '../engine/catmullRom'
 
-// Colors
-const PATH_COLOR: [number, number, number, number] = [0.3, 0.7, 1.0, 0.5]
-const KF_COLOR: [number, number, number, number] = [0.3, 0.7, 1.0, 0.9]
-const KF_SELECTED_COLOR: [number, number, number, number] = [1.0, 0.85, 0.2, 1.0]
-const TARGET_LINE_COLOR: [number, number, number, number] = [1.0, 0.6, 0.2, 0.4]
-const FRUSTUM_COLOR: [number, number, number, number] = [0.3, 0.7, 1.0, 0.3]
-const CURRENT_POS_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]
+// Colors — high contrast for visibility
+const PATH_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 0.85]
+const KF_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 1.0]
+const KF_SELECTED_COLOR: [number, number, number, number] = [1.0, 0.85, 0.1, 1.0]
+const TARGET_LINE_COLOR: [number, number, number, number] = [1.0, 0.5, 0.1, 0.7]
+const FRUSTUM_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 0.5]
+const CURRENT_POS_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
 
-const FRUSTUM_DEPTH = 3  // world units forward from camera position
+const FRUSTUM_DEPTH = 4  // world units forward from camera position
 
 export function drawCameraPathOverlay(
   ov: OverlayRenderer,
@@ -54,9 +54,9 @@ export function drawCameraPathOverlay(
     // Keyframe disc marker (screen space)
     const screen = ov.projectToScreen(pos[0], pos[1], pos[2])
     if (isSelected) {
-      ov.drawDiscScreen(screen.px, screen.py, 9 * dpr, KF_SELECTED_COLOR)
+      ov.drawDiscScreen(screen.px, screen.py, 12 * dpr, KF_SELECTED_COLOR)
     }
-    ov.drawDiscScreen(screen.px, screen.py, 6 * dpr, KF_COLOR)
+    ov.drawDiscScreen(screen.px, screen.py, 8 * dpr, KF_COLOR)
   }
 
   // ── Current position on path ──
@@ -64,7 +64,7 @@ export function drawCameraPathOverlay(
     const screen = ov.projectToScreen(
       currentState.position[0], currentState.position[1], currentState.position[2],
     )
-    ov.drawDiscScreen(screen.px, screen.py, 4 * dpr, CURRENT_POS_COLOR)
+    ov.drawDiscScreen(screen.px, screen.py, 6 * dpr, CURRENT_POS_COLOR)
   }
 }
 
