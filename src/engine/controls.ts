@@ -156,7 +156,7 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
       const halfW = halfH * aspect
 
       const delta = e.deltaY * zoomSpeed * radius
-      const newRadius = Math.max(1, Math.min(200, radius + delta))
+      const newRadius = Math.max(1, Math.min(500, radius + delta))
       const scale = 1 - newRadius / radius
 
       // Offset along camera right/up toward cursor position
@@ -218,7 +218,7 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
 
     // Clamp
     phi = Math.max(PHI_MIN, Math.min(PHI_MAX, phi))
-    radius = Math.max(1, Math.min(200, radius))
+    radius = Math.max(1, Math.min(500, radius))
 
     // Spherical → cartesian (camera position relative to target)
     const sinPhi = Math.sin(phi)

@@ -168,7 +168,7 @@ vec3 calcNormal(vec3 p, int objId) {
 // ─── Ray March ────────────────────────────────────
 
 const int MAX_STEPS = 128;
-const float MAX_DIST = 100.0;
+const float MAX_DIST = 500.0;
 const float EPSILON = 0.001;
 
 vec2 rayMarch(vec3 ro, vec3 rd) {
