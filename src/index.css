@@ -1551,3 +1551,26 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   height: 100%;
   cursor: default;
 }
+
+/* ── Camera PIP ────────────────────────────────────────── */
+.ui-camera-pip {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  border-radius: var(--radius-3);
+  overflow: hidden;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border);
+  background: var(--surface-0);
+  z-index: 50;
+}
+.ui-camera-pip__label {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  padding: 4px 8px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border);
+}
+.ui-camera-pip__canvas {
+  display: block;
+}
