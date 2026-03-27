@@ -167,10 +167,14 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   // ── Camera preset ──
   const handleCameraPreset = (presetId: string) => {
     if (!activeBundleId) return
-    // Get camera from renderer via the canvas — we need to find it through the DOM
-    // For now, use default camera values as fallback
-    const defaultCam = { position: [0, 0, 20] as [number, number, number], target: [0, 0, 0] as [number, number, number], up: [0, 1, 0] as [number, number, number], fov: 50, near: 0.1, far: 1000, aspect: 1 }
-    const clip = createCameraPreset(presetId as CameraPreset, maxDuration, defaultCam)
+    const cam = rendererSingleton.renderer?.camera ?? {
+      position: [0, 0, 20] as [number, number, number],
+      target: [0, 0, 0] as [number, number, number],
+      up: [0, 1, 0] as [number, number, number],
+      fov: 50, near: 0.1, far: 1000, aspect: 1,
+    }
+    const duration = Math.max(maxDuration, 3000)
+    const clip = createCameraPreset(presetId as CameraPreset, duration, cam)
     useAnimationStore.getState().setCameraClipInBundle(activeBundleId, clip)
   }
 
@@ -232,7 +236,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       },
     )
     exporter.onProgress = (p) => setExportProgress(p)
-    exporter.start({ ...settings, duration: maxDuration }).then((blob) => {
+    exporter.start(settings).then((blob) => {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

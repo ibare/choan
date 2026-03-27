@@ -1514,3 +1514,7 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   min-width: 36px;
   text-align: right;
 }
+.ui-export-dialog__duration-input {
+  width: 72px;
+  text-align: right;
+}
