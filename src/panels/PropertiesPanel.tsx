@@ -9,13 +9,19 @@ import SkinSection from './SkinSection'
 import ContainerLayoutSection from './ContainerLayoutSection'
 import GeometrySection from './GeometrySection'
 import TriggersSection from './TriggersSection'
+import Viewfinder from './Viewfinder'
 
 export default function PropertiesPanel() {
   const { updateElement, runLayout, elements, animationBundles } = useChoanStore()
   const el = useSelectedElement()
 
   if (!el) {
-    return <div className="props-empty">No element selected</div>
+    return (
+      <div className="props-panel">
+        <Viewfinder />
+        <div className="props-empty">No element selected</div>
+      </div>
+    )
   }
 
   const isChild     = !!el.parentId
@@ -39,6 +45,8 @@ export default function PropertiesPanel() {
 
   return (
     <div className="props-panel">
+
+      <Viewfinder />
 
       <ElementSection el={el} onUpdate={onUpdate} />
 

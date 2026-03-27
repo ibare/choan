@@ -10,7 +10,6 @@ import { useKeyboardHandlers } from '../interaction/useKeyboardHandlers'
 import { useAnimateLoop } from '../rendering/useAnimateLoop'
 import { rendererSingleton } from '../rendering/rendererRef'
 import RenderSettingsPanel from '../panels/RenderSettingsPanel'
-import CameraPIP from './CameraPIP'
 import DragSelectBox from './DragSelectBox'
 import DistanceLabels from './DistanceLabels'
 import FrameIndicator from './FrameIndicator'
@@ -143,7 +142,6 @@ export default function SDFCanvas() {
       <NavigationGizmo controlsRef={controlsRef} />
       <SplitLabels splitModeRef={splitModeRef} canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} />
       <ContextToolbar canvasSizeRef={canvasSizeRef} rendererRef={rendererRef} isDraggingRef={isDraggingRef} isResizingRef={isResizingRef} isDrawingRef={isDrawingRef} controlsRef={controlsRef} splitModeRef={splitModeRef} />
-      <CameraPIP />
     </div>
   )
 }
