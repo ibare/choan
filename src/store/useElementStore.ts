@@ -46,6 +46,7 @@ export interface ChoanElement {
   skinOnly?: boolean                      // hide SDF body, show only skin texture
   frameless?: boolean                     // hide container background (separate from skinOnly)
   componentState?: Record<string, unknown>
+  rotationY?: number                      // Y-axis rotation in radians (Director mode)
 }
 
 export type Tool = 'select' | 'rectangle' | 'circle' | 'line'

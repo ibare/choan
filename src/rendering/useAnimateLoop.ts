@@ -27,6 +27,7 @@ import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 import { drawCameraPathOverlay } from './cameraPathOverlay'
+import { drawZTunnelOverlay, drawRotationRing, canShowZTunnel, type TunnelHover } from './zTunnelOverlay'
 
 export function useAnimateLoop({
   rendererRef,
@@ -46,6 +47,7 @@ export function useAnimateLoop({
   colorPickerHoverRef,
   animatedElementsRef,
   splitModeRef,
+  tunnelHoverRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
@@ -64,6 +66,7 @@ export function useAnimateLoop({
   colorPickerHoverRef: MutableRefObject<number>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
   splitModeRef: MutableRefObject<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>
+  tunnelHoverRef: MutableRefObject<TunnelHover>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -284,9 +287,22 @@ export function useAnimateLoop({
         renderer.colorWheel,
       )
 
-      // ── Camera path overlay (Director mode, not playing) ──
+      // ── Director mode overlays (not playing) ──
       const dirState = useDirectorStore.getState()
       if (dirState.directorMode && !dirState.directorPlaying) {
+        // Z tunnel guide overlay (single selection only)
+        if (state.selectedIds.length === 1) {
+          const selEl = state.elements.find((e) => e.id === state.selectedIds[0])
+          const angles = controlsRef.current?.getAngles()
+          if (selEl && angles && canShowZTunnel(angles.phi, angles.theta)) {
+            drawZTunnelOverlay(renderer.overlay, selEl, canvasSizeRef.current.w, canvasSizeRef.current.h, rs.extrudeDepth, tunnelHoverRef.current)
+          }
+          // Rotation ring (always shown in Director mode when element selected)
+          const dprRing = window.devicePixelRatio || 1
+          drawRotationRing(renderer.overlay, selEl, canvasSizeRef.current.w, canvasSizeRef.current.h, rs.extrudeDepth, dprRing)
+        }
+
+        // Camera path overlay
         const scState = useSceneStore.getState()
         const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
         const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()

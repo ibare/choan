@@ -42,6 +42,7 @@ export default function SDFCanvas() {
     isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef,
     snapLinesRef,
+    tunnelHoverRef,
   } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef })
 
   useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef, controlsRef)
@@ -52,6 +53,7 @@ export default function SDFCanvas() {
     isDrawingRef, drawElIdRef, snapLinesRef, colorPickerOpenRef, colorPickerHoverRef,
     animatedElementsRef,
     splitModeRef,
+    tunnelHoverRef,
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {

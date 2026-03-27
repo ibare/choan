@@ -26,6 +26,7 @@ import { useSceneStore } from '../store/useSceneStore'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 import { hitTestCameraKeyframe, computeCameraKeyframeDragPosition } from './cameraPathHandlers'
 import { handleDragMove, finalizeDrag } from './dragHandlers'
+import { canShowZTunnel, hitTestRotationRing, hitTestTunnelFace, type TunnelHover } from '../rendering/zTunnelOverlay'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
 import { handleDrawMove, finalizeDrawn } from './drawHandlers'
 import { handleDragSelectMove } from './dragSelectHandlers'
@@ -40,6 +41,7 @@ export interface InteractionRefs {
   isDrawingRef: MutableRefObject<boolean>
   drawElIdRef: MutableRefObject<string | null>
   snapLinesRef: MutableRefObject<SnapLine[]>
+  tunnelHoverRef: MutableRefObject<TunnelHover>
 }
 
 export interface UsePointerHandlersResult extends InteractionRefs {
@@ -79,9 +81,17 @@ export function usePointerHandlers({
 
   // ── Space key state (for panning passthrough to OrbitControls) ──
   const spaceDownRef = useRef(false)
+  // ── Z key state (for Z-axis drag in Director mode) ──
+  const zKeyDownRef = useRef(false)
   useEffect(() => {
-    const down = (e: KeyboardEvent) => { if (e.code === 'Space') spaceDownRef.current = true }
-    const up = (e: KeyboardEvent) => { if (e.code === 'Space') spaceDownRef.current = false }
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceDownRef.current = true
+      if (e.code === 'KeyZ' && !e.metaKey && !e.ctrlKey) zKeyDownRef.current = true
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceDownRef.current = false
+      if (e.code === 'KeyZ') zKeyDownRef.current = false
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
@@ -98,6 +108,17 @@ export function usePointerHandlers({
   const dragCameraKfIdRef = useRef<string | null>(null)
   const dragCameraKfOrigPosRef = useRef<[number, number, number]>([0, 0, 0])
   const dragCameraKfTypeRef = useRef<'position' | 'target'>('position')
+
+  // Z-axis drag refs (Director mode)
+  const isZDraggingRef = useRef(false)
+  const zDragStartYRef = useRef(0)
+  const zDragOriginalZRef = useRef(0)
+  const tunnelHoverRef = useRef<TunnelHover>(null)
+
+  // Rotation drag refs (Director mode)
+  const isRotationDraggingRef = useRef(false)
+  const rotationCenterScreenRef = useRef({ px: 0, py: 0 })
+  const rotationOriginalRef = useRef(0)
 
   const isDraggingRef = useRef(false)
   const dragStartPixelRef = useRef({ x: 0, y: 0 })
@@ -170,6 +191,47 @@ export function usePointerHandlers({
             useDirectorStore.getState().setSelectedCameraKeyframeId(hit.keyframeId)
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
+          }
+        }
+      }
+
+      // ── Z-axis drag (Director mode + tunnel face click) ──
+      if (tunnelHoverRef.current) {
+        const { selectedIds, elements: els } = useChoanStore.getState()
+        if (selectedIds.length === 1) {
+          const selEl = els.find((el) => el.id === selectedIds[0])
+          if (selEl) {
+            isZDraggingRef.current = true
+            zDragStartYRef.current = e.clientY
+            zDragOriginalZRef.current = selEl.z
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
+        }
+      }
+
+      // ── Rotation ring drag (Director mode + click near ring) ──
+      {
+        const { selectedIds, elements: els } = useChoanStore.getState()
+        if (selectedIds.length === 1 && renderer) {
+          const selEl = els.find((el) => el.id === selectedIds[0])
+          if (selEl) {
+            const dpr = window.devicePixelRatio || 1
+            const rect = renderer.canvas.getBoundingClientRect()
+            const canvasPx = (e.clientX - rect.left) * dpr
+            const canvasPy = (e.clientY - rect.top) * dpr
+            const { w, h } = canvasSizeRef.current
+            const rs = useRenderSettings.getState()
+            if (hitTestRotationRing(canvasPx, canvasPy, renderer.overlay, selEl, w, h, rs.extrudeDepth, 12 * dpr)) {
+              const cxWorld = pixelToWorld(selEl.x + selEl.width / 2, selEl.y + selEl.height / 2, w, h)
+              const elZ = selEl.z * rs.extrudeDepth + rs.extrudeDepth / 2
+              const centerScreen = renderer.overlay.projectToScreen(cxWorld[0], cxWorld[1], elZ)
+              isRotationDraggingRef.current = true
+              rotationCenterScreenRef.current = centerScreen
+              rotationOriginalRef.current = selEl.rotationY ?? 0
+              ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+              return
+            }
           }
         }
       }
@@ -436,6 +498,36 @@ export function usePointerHandlers({
       return
     }
 
+    // ── Z-axis drag ──
+    if (isZDraggingRef.current) {
+      const dy = e.clientY - zDragStartYRef.current
+      const zSpeed = 0.30
+      const zDelta = dy * zSpeed  // drag down = Z+ (forward), drag up = Z- (backward)
+      const { selectedIds, updateElement } = useChoanStore.getState()
+      if (selectedIds.length === 1) {
+        updateElement(selectedIds[0], { z: zDragOriginalZRef.current + zDelta })
+      }
+      return
+    }
+
+    // ── Rotation drag ──
+    if (isRotationDraggingRef.current) {
+      const dpr = window.devicePixelRatio || 1
+      const renderer = rendererRef.current
+      const rect = renderer?.canvas.getBoundingClientRect()
+      if (rect) {
+        const canvasPx = (e.clientX - rect.left) * dpr
+        const canvasPy = (e.clientY - rect.top) * dpr
+        const center = rotationCenterScreenRef.current
+        const angle = Math.atan2(canvasPy - center.py, canvasPx - center.px)
+        const { selectedIds, updateElement } = useChoanStore.getState()
+        if (selectedIds.length === 1) {
+          updateElement(selectedIds[0], { rotationY: angle })
+        }
+      }
+      return
+    }
+
     const { elements: els, selectedIds: selIds, updateElement: update } = useChoanStore.getState()
     const selId = selIds[0] ?? null
     const setSnap = (lines: SnapLine[]) => { snapLinesRef.current = lines }
@@ -538,6 +630,35 @@ export function usePointerHandlers({
       return
     }
 
+    // ── Tunnel face hover (Director mode) ──
+    const dirMoveState = useDirectorStore.getState()
+    if (dirMoveState.directorMode && !dirMoveState.directorPlaying && selIds.length === 1 && selId) {
+      const renderer = rendererRef.current
+      const selEl = els.find((el) => el.id === selId)
+      if (renderer && selEl) {
+        const dpr = window.devicePixelRatio || 1
+        const rect = renderer.canvas.getBoundingClientRect()
+        const cpx = (e.clientX - rect.left) * dpr
+        const cpy = (e.clientY - rect.top) * dpr
+        const { w, h } = canvasSizeRef.current
+        const cam = renderer.camera
+        const dx = cam.position[0] - cam.target[0]
+        const dy = cam.position[1] - cam.target[1]
+        const dz = cam.position[2] - cam.target[2]
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+        const phi = Math.acos(dy / dist)
+        const theta = Math.atan2(dx, dz)
+        if (canShowZTunnel(phi, theta)) {
+          const rs = useRenderSettings.getState()
+          tunnelHoverRef.current = hitTestTunnelFace(cpx, cpy, renderer.overlay, selEl, w, h, rs.extrudeDepth)
+        } else {
+          tunnelHoverRef.current = null
+        }
+      }
+    } else {
+      tunnelHoverRef.current = null
+    }
+
     // Hover cursor
     if (tool === 'select' && selIds.length === 1 && selId) {
       const corner = hitTestCorner(e.clientX, e.clientY, selId, els, screenToPixel, zoomScaleRef.current)
@@ -562,6 +683,20 @@ export function usePointerHandlers({
     if (isDraggingCameraKfRef.current) {
       isDraggingCameraKfRef.current = false
       dragCameraKfIdRef.current = null
+      pushSnapshot()
+      return
+    }
+
+    // ── Z-axis drag cleanup ──
+    if (isZDraggingRef.current) {
+      isZDraggingRef.current = false
+      pushSnapshot()
+      return
+    }
+
+    // ── Rotation drag cleanup ──
+    if (isRotationDraggingRef.current) {
+      isRotationDraggingRef.current = false
       pushSnapshot()
       return
     }
@@ -655,5 +790,6 @@ export function usePointerHandlers({
     isResizingRef, resizeElIdRef,
     isDrawingRef, drawElIdRef,
     snapLinesRef,
+    tunnelHoverRef,
   }
 }

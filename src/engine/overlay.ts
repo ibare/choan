@@ -7,6 +7,7 @@ import { OVERLAY_VERT, OVERLAY_FRAG, OVERLAY_VERT_3D, DASH_VERT, DASH_FRAG, DISC
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
   drawLines3D(vertices: Float32Array, color: [number, number, number, number], lineWidth?: number): void
+  drawTriangles3D(vertices: Float32Array, color: [number, number, number, number]): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
   drawWorldRect(cx: number, cy: number, hw: number, hh: number, color: [number, number, number, number]): void
@@ -109,6 +110,20 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindBuffer(gl.ARRAY_BUFFER, line3DVbo)
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
     gl.drawArrays(gl.LINES, 0, vertices.length / 3)
+    gl.bindVertexArray(null)
+  }
+
+  function drawTriangles3D(vertices: Float32Array, color: [number, number, number, number]) {
+    if (vertices.length < 9 || !currentViewProj) return
+
+    gl.useProgram(line3DProgram)
+    gl.uniformMatrix4fv(gl.getUniformLocation(line3DProgram, 'uViewProj'), false, currentViewProj)
+    gl.uniform4fv(gl.getUniformLocation(line3DProgram, 'uColor'), color)
+
+    gl.bindVertexArray(line3DVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, line3DVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 3)
     gl.bindVertexArray(null)
   }
 
@@ -328,5 +343,5 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteBuffer(discVbo)
   }
 
-  return { drawLines, drawLines3D, drawDashedLoop, drawQuads, drawWorldRect, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
+  return { drawLines, drawLines3D, drawTriangles3D, drawDashedLoop, drawQuads, drawWorldRect, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
 }

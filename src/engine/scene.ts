@@ -24,7 +24,8 @@ const SIZE_OFFSET = POS_OFFSET + MAX_OBJECTS * 4
 const COLOR_OFFSET = SIZE_OFFSET + MAX_OBJECTS * 4
 const EFFECT_OFFSET = COLOR_OFFSET + MAX_OBJECTS * 4
 const TEXRECT_OFFSET = EFFECT_OFFSET + MAX_OBJECTS * 4
-const UBO_FLOATS = TEXRECT_OFFSET + MAX_OBJECTS * 4
+const EXTRA_OFFSET = TEXRECT_OFFSET + MAX_OBJECTS * 4
+const UBO_FLOATS = EXTRA_OFFSET + MAX_OBJECTS * 4
 
 // Color-change effect tracking
 const EFFECT_DURATION = 300 // ms
@@ -266,6 +267,10 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
         data[ti + 2] = tr[2]
         data[ti + 3] = tr[3]
       }
+
+      // uExtra[i]: x = rotationY
+      const xi = EXTRA_OFFSET + i * 4
+      data[xi + 0] = el.rotationY ?? 0
     }
 
     gl.bindBuffer(gl.UNIFORM_BUFFER, buffer)

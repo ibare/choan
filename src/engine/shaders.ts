@@ -45,6 +45,7 @@ layout(std140) uniform SceneData {
   vec4 uColorAlpha[MAX_OBJECTS];
   vec4 uEffect[MAX_OBJECTS];     // x = pulse intensity, y = flash intensity, w = skinOnly
   vec4 uTexRect[MAX_OBJECTS];    // xy = atlas UV offset, zw = atlas UV scale (0 = no texture)
+  vec4 uExtra[MAX_OBJECTS];      // x = rotationY (radians), yzw = reserved
 };
 
 uniform sampler2D uAtlasTex;
@@ -88,6 +89,14 @@ float singleSDF(vec3 p, int objId) {
   vec3  hs        = uSizeRadius[objId].xyz;
   float radius    = uSizeRadius[objId].w;
   vec3  lp        = p - uPosType[objId].xyz;
+
+  // Y-axis rotation
+  float rotY = uExtra[objId].x;
+  if (abs(rotY) > 0.001) {
+    float cosR = cos(rotY);
+    float sinR = sin(rotY);
+    lp = vec3(cosR * lp.x + sinR * lp.z, lp.y, -sinR * lp.x + cosR * lp.z);
+  }
 
   if (shapeType < 0.5) {
     return sdExtrudedRoundRect(lp, hs, radius * min(hs.x, hs.y));
