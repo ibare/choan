@@ -14,6 +14,9 @@ import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
 import { createDefaultDirectorTimeline, type CameraViewKeyframe, type EventMarker } from '../animation/directorTypes'
+import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
+import { drawDiamond } from '../engine/timeline2dPrimitives'
+import type { RenderOptions } from '../engine/timeline2dTypes'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
@@ -23,8 +26,9 @@ import VideoExportDialog, { type VideoExportSettings } from './VideoExportDialog
 
 const PX_PER_MS = 0.15
 const TRACK_H = 32
-const RULER_H = 28
+const RULER_H = 35  // Match bundle timeline ruler height
 const SIDEBAR_W = 120
+const LEFT_PAD = 24  // Match bundle timeline left padding
 
 interface DirectorTimelinePanelProps {
   onSwitchToBundle: (bundleId: string) => void
@@ -72,45 +76,52 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
 
-    const msToX = (ms: number) => SIDEBAR_W + ms * PX_PER_MS
-
-    // Ruler
-    ctx.fillStyle = '#1a1a2e'
-    ctx.fillRect(SIDEBAR_W, 0, w - SIDEBAR_W, RULER_H)
-    ctx.fillStyle = '#666'
-    ctx.font = '10px system-ui'
-    ctx.textAlign = 'center'
-    const step = 500
-    for (let ms = 0; ms <= sceneDuration; ms += step) {
-      const x = msToX(ms)
-      if (x < SIDEBAR_W || x > w) continue
-      ctx.fillText(`${(ms / 1000).toFixed(1)}s`, x, RULER_H - 6)
-      ctx.fillRect(x, RULER_H - 3, 1, 3)
+    // Build RenderOptions for shared ruler/playhead
+    const renderOpts: RenderOptions = {
+      scrollX: 0,
+      scrollY: 0,
+      pxPerMs: PX_PER_MS,
+      rulerHeight: RULER_H,
+      trackHeight: TRACK_H,
+      layerHeaderHeight: 0,
+      maxDuration: sceneDuration,
+      hoverKf: null,
+      playheadTime: directorPlayheadTime,
     }
+    const msToX = (ms: number, _opts?: RenderOptions) => SIDEBAR_W + LEFT_PAD + ms * PX_PER_MS
 
-    // Camera track
+    // ── Ruler (shared with Bundle timeline) ──
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(SIDEBAR_W, 0, w - SIDEBAR_W, RULER_H)
+    ctx.clip()
+    ctx.translate(SIDEBAR_W, 0)
+    renderRuler(ctx, w - SIDEBAR_W, renderOpts, (_ms, _o) => LEFT_PAD + _ms * PX_PER_MS)
+    ctx.restore()
+
+    // ── Camera track ──
     const camY = RULER_H + TRACK_H / 2
-    ctx.fillStyle = '#2a2a3e'
+    ctx.fillStyle = 'var(--surface-2)'
     ctx.fillRect(SIDEBAR_W, RULER_H, w - SIDEBAR_W, TRACK_H)
-    ctx.strokeStyle = '#333'
+    ctx.strokeStyle = 'var(--border)'
     ctx.lineWidth = 1
     ctx.beginPath()
-    ctx.moveTo(SIDEBAR_W, RULER_H + TRACK_H)
-    ctx.lineTo(w, RULER_H + TRACK_H)
+    ctx.moveTo(SIDEBAR_W, Math.round(RULER_H + TRACK_H) - 0.5)
+    ctx.lineTo(w, Math.round(RULER_H + TRACK_H) - 0.5)
     ctx.stroke()
 
-    // Camera keyframe diamonds
     for (const kf of dt.cameraKeyframes) {
       const x = msToX(kf.time)
-      drawDiamond(ctx, x, camY, '#5b9fcf')
+      if (x >= SIDEBAR_W - 10 && x <= w + 10) {
+        drawDiamond(ctx, x, camY, false)
+      }
     }
 
-    // Events track
+    // ── Events track ──
     const evtY = RULER_H + TRACK_H
-    ctx.fillStyle = '#1e1e30'
+    ctx.fillStyle = 'var(--bg)'
     ctx.fillRect(SIDEBAR_W, evtY, w - SIDEBAR_W, TRACK_H)
 
-    // Event bars
     const BUNDLE_COLORS = ['#5b4fcf', '#cf5b4f', '#4fcf5b', '#cf9f4f', '#4f9fcf', '#9f4fcf']
     for (let i = 0; i < dt.eventMarkers.length; i++) {
       const marker = dt.eventMarkers[i]
@@ -123,67 +134,56 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       const color = BUNDLE_COLORS[i % BUNDLE_COLORS.length]
 
       const isSelected = marker.id === selectedMarkerId
-      const drawW = Math.max(barW, 8)
+      const drawBarW = Math.max(barW, 8)
 
       ctx.fillStyle = isSelected ? color + 'cc' : color + '88'
       ctx.beginPath()
-      ctx.roundRect(x, evtY + 4, drawW, TRACK_H - 8, 3)
+      ctx.roundRect(x, evtY + 4, drawBarW, TRACK_H - 8, 3)
       ctx.fill()
 
       ctx.strokeStyle = isSelected ? '#fff' : color
       ctx.lineWidth = isSelected ? 2 : 1
       ctx.beginPath()
-      ctx.roundRect(x, evtY + 4, drawW, TRACK_H - 8, 3)
+      ctx.roundRect(x, evtY + 4, drawBarW, TRACK_H - 8, 3)
       ctx.stroke()
       ctx.lineWidth = 1
 
-      // Resize handle (right edge indicator)
       if (isSelected) {
         ctx.fillStyle = '#fff'
-        ctx.fillRect(x + drawW - 3, evtY + 8, 2, TRACK_H - 16)
+        ctx.fillRect(x + drawBarW - 3, evtY + 8, 2, TRACK_H - 16)
       }
 
-      // Label
       ctx.fillStyle = '#fff'
-      ctx.font = '9px system-ui'
+      ctx.font = '500 9px Inter, system-ui, sans-serif'
       ctx.textAlign = 'left'
       const labelX = x + 4
-      if (labelX + 20 < x + drawW) {
-        ctx.fillText(bundle.name, labelX, evtY + TRACK_H / 2 + 3, drawW - 8)
+      if (labelX + 20 < x + drawBarW) {
+        ctx.fillText(bundle.name, labelX, evtY + TRACK_H / 2 + 3, drawBarW - 8)
       }
     }
 
-    // Playhead
-    const phX = msToX(directorPlayheadTime)
-    if (phX >= SIDEBAR_W) {
-      ctx.strokeStyle = '#ff4444'
-      ctx.lineWidth = 1.5
-      ctx.beginPath()
-      ctx.moveTo(phX, 0)
-      ctx.lineTo(phX, h)
-      ctx.stroke()
-
-      // Playhead handle
-      ctx.fillStyle = '#ff4444'
-      ctx.beginPath()
-      ctx.moveTo(phX - 5, 0)
-      ctx.lineTo(phX + 5, 0)
-      ctx.lineTo(phX, 8)
-      ctx.closePath()
-      ctx.fill()
-    }
-
-    // Sidebar labels
-    ctx.fillStyle = '#1a1a2e'
-    ctx.fillRect(0, 0, SIDEBAR_W, h)
-    ctx.strokeStyle = '#333'
+    // ── Playhead (shared with Bundle timeline) ──
+    ctx.save()
     ctx.beginPath()
-    ctx.moveTo(SIDEBAR_W, 0)
-    ctx.lineTo(SIDEBAR_W, h)
+    ctx.rect(SIDEBAR_W, 0, w - SIDEBAR_W, h)
+    ctx.clip()
+    ctx.translate(SIDEBAR_W, 0)
+    renderPlayhead(ctx, w - SIDEBAR_W, h, renderOpts, (_ms, _o) => LEFT_PAD + _ms * PX_PER_MS)
+    ctx.restore()
+
+    // ── Sidebar ──
+    const sidebarStyle = getComputedStyle(ctx.canvas)
+    ctx.fillStyle = sidebarStyle.getPropertyValue('--surface-1').trim() || '#1a1a2e'
+    ctx.fillRect(0, 0, SIDEBAR_W, h)
+    ctx.strokeStyle = sidebarStyle.getPropertyValue('--border').trim() || '#333'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(SIDEBAR_W - 0.5, 0)
+    ctx.lineTo(SIDEBAR_W - 0.5, h)
     ctx.stroke()
 
-    ctx.fillStyle = '#aaa'
-    ctx.font = '11px system-ui'
+    ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
+    ctx.font = '500 11px Inter, system-ui, sans-serif'
     ctx.textAlign = 'left'
     ctx.fillText('🎥 Camera', 8, RULER_H + TRACK_H / 2 + 4)
     ctx.fillText('⚡ Events', 8, RULER_H + TRACK_H + TRACK_H / 2 + 4)
@@ -204,7 +204,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const xToMs = (clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return 0
-    return Math.max(0, Math.min(sceneDuration, (clientX - rect.left - SIDEBAR_W) / PX_PER_MS))
+    return Math.max(0, Math.min(sceneDuration, (clientX - rect.left - SIDEBAR_W - LEFT_PAD) / PX_PER_MS))
   }
 
   const EDGE_ZONE = 8  // px from right edge for resize handle
@@ -217,7 +217,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       if (!bundle) continue
       const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
       const effectiveDur = marker.durationOverride ?? bundleDur
-      const mx = SIDEBAR_W + marker.time * PX_PER_MS
+      const mx = SIDEBAR_W + LEFT_PAD + marker.time * PX_PER_MS
       const mw = Math.max(effectiveDur * PX_PER_MS, 8)
       if (localX >= mx && localX <= mx + mw) {
         const isEdge = localX >= mx + mw - EDGE_ZONE
@@ -317,7 +317,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         if (!bundle) continue
         const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
         const effectiveDur = marker.durationOverride ?? bundleDur
-        const mx = SIDEBAR_W + marker.time * PX_PER_MS
+        const mx = SIDEBAR_W + LEFT_PAD + marker.time * PX_PER_MS
         const mw = effectiveDur * PX_PER_MS
         if (localX >= mx && localX <= mx + mw) {
           onSwitchToBundle(marker.bundleId)
@@ -467,17 +467,4 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       />
     </div>
   )
-}
-
-function drawDiamond(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string) {
-  const s = 5
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate(Math.PI / 4)
-  ctx.fillStyle = color
-  ctx.fillRect(-s, -s, s * 2, s * 2)
-  ctx.strokeStyle = '#fff'
-  ctx.lineWidth = 1
-  ctx.strokeRect(-s, -s, s * 2, s * 2)
-  ctx.restore()
 }
