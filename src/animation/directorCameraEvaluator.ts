@@ -1,7 +1,8 @@
-// Director camera evaluator — interpolates between CameraViewKeyframes.
+// Director camera evaluator — Catmull-Rom spline interpolation between view keyframes.
 // Pure function, no React/Zustand imports.
 
 import type { CameraViewKeyframe } from './directorTypes'
+import { catmullRomPoint } from '../engine/catmullRom'
 
 export interface DirectorCameraState {
   position: [number, number, number]
@@ -14,16 +15,18 @@ function lerp(a: number, b: number, t: number): number {
 }
 
 /**
- * Evaluate camera state at a given absolute time by interpolating between keyframes.
- * Returns null if there are no keyframes (orbit controls remain active).
+ * Evaluate camera state at a given absolute time using Catmull-Rom spline.
+ * Position and target use CR spline for smooth curves.
+ * FOV uses linear interpolation (curves on FOV are not intuitive).
+ * Returns null if there are no keyframes.
  */
 export function evaluateDirectorCamera(
   keyframes: CameraViewKeyframe[],
   time: number,
+  tension = 0.5,
 ): DirectorCameraState | null {
   if (keyframes.length === 0) return null
 
-  // Single keyframe — return its values
   if (keyframes.length === 1) {
     const k = keyframes[0]
     return { position: [...k.position], target: [...k.target], fov: k.fov }
@@ -46,25 +49,36 @@ export function evaluateDirectorCamera(
     const a = keyframes[i]
     const b = keyframes[i + 1]
     if (time >= a.time && time <= b.time) {
-      const segDuration = b.time - a.time
-      if (segDuration <= 0) {
+      const segDur = b.time - a.time
+      if (segDur <= 0) {
         return { position: [...b.position], target: [...b.target], fov: b.fov }
       }
-      const t = (time - a.time) / segDuration
+      const t = (time - a.time) / segDur
 
-      return {
-        position: [
-          lerp(a.position[0], b.position[0], t),
-          lerp(a.position[1], b.position[1], t),
-          lerp(a.position[2], b.position[2], t),
-        ],
-        target: [
-          lerp(a.target[0], b.target[0], t),
-          lerp(a.target[1], b.target[1], t),
-          lerp(a.target[2], b.target[2], t),
-        ],
-        fov: lerp(a.fov, b.fov, t),
-      }
+      // Build 4-point window, clamping at boundaries
+      const k0 = keyframes[Math.max(0, i - 1)]
+      const k1 = a
+      const k2 = b
+      const k3 = keyframes[Math.min(keyframes.length - 1, i + 2)]
+
+      // Catmull-Rom for position
+      const position: [number, number, number] = [
+        catmullRomPoint(k0.position[0], k1.position[0], k2.position[0], k3.position[0], t, tension),
+        catmullRomPoint(k0.position[1], k1.position[1], k2.position[1], k3.position[1], t, tension),
+        catmullRomPoint(k0.position[2], k1.position[2], k2.position[2], k3.position[2], t, tension),
+      ]
+
+      // Catmull-Rom for target
+      const target: [number, number, number] = [
+        catmullRomPoint(k0.target[0], k1.target[0], k2.target[0], k3.target[0], t, tension),
+        catmullRomPoint(k0.target[1], k1.target[1], k2.target[1], k3.target[1], t, tension),
+        catmullRomPoint(k0.target[2], k1.target[2], k2.target[2], k3.target[2], t, tension),
+      ]
+
+      // Linear for FOV
+      const fov = lerp(a.fov, b.fov, t)
+
+      return { position, target, fov }
     }
   }
 

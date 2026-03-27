@@ -149,3 +149,12 @@ void main() {
   fragColor = vec4(uColor.rgb, uColor.a * aa);
 }
 `
+
+// ── 3D line vertex shader (vec3 position, no uniform Z) ──
+export const OVERLAY_VERT_3D = /* glsl */ `#version 300 es
+layout(location = 0) in vec3 aPosition;
+uniform mat4 uViewProj;
+void main() {
+  gl_Position = uViewProj * vec4(aPosition, 1.0);
+}
+`

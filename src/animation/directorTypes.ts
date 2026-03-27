@@ -9,6 +9,7 @@ export interface CameraViewKeyframe {
   target: [number, number, number]
   fov: number
   easing?: EasingType
+  tension?: number  // Catmull-Rom tension, default 0.5
 }
 
 export interface EventMarker {

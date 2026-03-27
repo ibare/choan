@@ -2,10 +2,11 @@
 // Renders lines and quads on top of the SDF scene (depth test disabled)
 
 import { createProgram } from './gl'
-import { OVERLAY_VERT, OVERLAY_FRAG, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT, RECT_SCREEN_FRAG, TEX_SCREEN_VERT, TEX_SCREEN_FRAG, AA_RECT_VERT, AA_RECT_FRAG } from './overlayShaders'
+import { OVERLAY_VERT, OVERLAY_FRAG, OVERLAY_VERT_3D, DASH_VERT, DASH_FRAG, DISC_VERT, DISC_FRAG, DISC_SCREEN_VERT, RECT_SCREEN_FRAG, TEX_SCREEN_VERT, TEX_SCREEN_FRAG, AA_RECT_VERT, AA_RECT_FRAG } from './overlayShaders'
 
 export interface OverlayRenderer {
   drawLines(vertices: Float32Array, color: [number, number, number, number]): void
+  drawLines3D(vertices: Float32Array, color: [number, number, number, number]): void
   drawDashedLoop(vertices: Float32Array, color: [number, number, number, number]): void
   drawQuads(centers: Float32Array, size: number, color: [number, number, number, number]): void
   drawWorldRect(cx: number, cy: number, hw: number, hh: number, color: [number, number, number, number]): void
@@ -29,13 +30,23 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
   const aaRectScreenProgram = createProgram(gl, DISC_SCREEN_VERT, AA_RECT_FRAG)
   const texScreenProgram = createProgram(gl, TEX_SCREEN_VERT, TEX_SCREEN_FRAG)
 
-  // Line VAO
+  // Line VAO (2D)
   const lineVao = gl.createVertexArray()!
   const lineVbo = gl.createBuffer()!
   gl.bindVertexArray(lineVao)
   gl.bindBuffer(gl.ARRAY_BUFFER, lineVbo)
   gl.enableVertexAttribArray(0)
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0)
+  gl.bindVertexArray(null)
+
+  // Line3D VAO (3D — vec3 attribute for camera path etc.)
+  const line3DProgram = createProgram(gl, OVERLAY_VERT_3D, OVERLAY_FRAG)
+  const line3DVao = gl.createVertexArray()!
+  const line3DVbo = gl.createBuffer()!
+  gl.bindVertexArray(line3DVao)
+  gl.bindBuffer(gl.ARRAY_BUFFER, line3DVbo)
+  gl.enableVertexAttribArray(0)
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0)
   gl.bindVertexArray(null)
 
   // Quad VAO (for handles)
@@ -83,6 +94,20 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.bindBuffer(gl.ARRAY_BUFFER, lineVbo)
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
     gl.drawArrays(gl.LINES, 0, vertices.length / 2)
+    gl.bindVertexArray(null)
+  }
+
+  function drawLines3D(vertices: Float32Array, color: [number, number, number, number]) {
+    if (vertices.length < 6 || !currentViewProj) return
+
+    gl.useProgram(line3DProgram)
+    gl.uniformMatrix4fv(gl.getUniformLocation(line3DProgram, 'uViewProj'), false, currentViewProj)
+    gl.uniform4fv(gl.getUniformLocation(line3DProgram, 'uColor'), color)
+
+    gl.bindVertexArray(line3DVao)
+    gl.bindBuffer(gl.ARRAY_BUFFER, line3DVbo)
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW)
+    gl.drawArrays(gl.LINES, 0, vertices.length / 3)
     gl.bindVertexArray(null)
   }
 
@@ -284,6 +309,7 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
 
   function dispose() {
     gl.deleteProgram(lineProgram)
+    gl.deleteProgram(line3DProgram)
     gl.deleteProgram(dashProgram)
     gl.deleteProgram(discProgram)
     gl.deleteProgram(discScreenProgram)
@@ -293,11 +319,13 @@ export function createOverlayRenderer(gl: WebGL2RenderingContext): OverlayRender
     gl.deleteProgram(texScreenProgram)
     gl.deleteVertexArray(lineVao)
     gl.deleteBuffer(lineVbo)
+    gl.deleteVertexArray(line3DVao)
+    gl.deleteBuffer(line3DVbo)
     gl.deleteVertexArray(quadVao)
     gl.deleteBuffer(quadVbo)
     gl.deleteVertexArray(discVao)
     gl.deleteBuffer(discVbo)
   }
 
-  return { drawLines, drawDashedLoop, drawQuads, drawWorldRect, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
+  return { drawLines, drawLines3D, drawDashedLoop, drawQuads, drawWorldRect, drawDisc, drawDiscScreen, drawRectScreen, drawTexturedScreen, projectToScreen, beginFrame, setZ, dispose }
 }

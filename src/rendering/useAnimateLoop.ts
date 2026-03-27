@@ -26,6 +26,7 @@ import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
+import { drawCameraPathOverlay } from './cameraPathOverlay'
 
 export function useAnimateLoop({
   rendererRef,
@@ -282,6 +283,26 @@ export function useAnimateLoop({
         splitModeRef.current,
         renderer.colorWheel,
       )
+
+      // ── Camera path overlay (Director mode, not playing) ──
+      const dirState = useDirectorStore.getState()
+      if (dirState.directorMode && !dirState.directorPlaying) {
+        const scState = useSceneStore.getState()
+        const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
+        const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
+        if (dirTl.cameraKeyframes.length >= 1) {
+          const curCamState = evaluateDirectorCamera(dirTl.cameraKeyframes, dirState.directorPlayheadTime)
+          const dpr = window.devicePixelRatio || 1
+          drawCameraPathOverlay(
+            renderer.overlay,
+            dirTl.cameraKeyframes,
+            curCamState,
+            dirState.selectedCameraKeyframeId ?? null,
+            0.5,
+            dpr,
+          )
+        }
+      }
     }
     animate()
 

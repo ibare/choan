@@ -11,12 +11,14 @@ interface DirectorStore {
   directorPlayheadTime: number
   directorPlaying: boolean
   playStartTime: number  // performance.now() epoch for elapsed calculation
+  selectedCameraKeyframeId: string | null
 
   // Mode controls
   setDirectorMode: (on: boolean) => void
   setDirectorPlayheadTime: (ms: number) => void
   startPlaying: () => void
   stopPlaying: () => void
+  setSelectedCameraKeyframeId: (id: string | null) => void
 
   // Camera keyframe CRUD (operates on active scene)
   addCameraKeyframe: (kf: CameraViewKeyframe) => void
@@ -47,8 +49,10 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   directorPlayheadTime: 0,
   directorPlaying: false,
   playStartTime: 0,
+  selectedCameraKeyframeId: null,
 
   setDirectorMode: (on) => set({ directorMode: on, directorPlaying: false }),
+  setSelectedCameraKeyframeId: (id) => set({ selectedCameraKeyframeId: id }),
 
   setDirectorPlayheadTime: (ms) => set({ directorPlayheadTime: Math.max(0, ms) }),
 
