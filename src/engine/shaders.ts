@@ -18,6 +18,7 @@ precision highp float;
 in vec2 vUV;
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outNormalId;
+layout(location = 2) out float outDepth;
 
 uniform vec2 uResolution;
 uniform vec3 uBgColor;
@@ -248,6 +249,7 @@ void main() {
   // Default to background
   outColor = vec4(uBgColor, 1.0);
   outNormalId = vec4(0.0, 0.0, 0.0, -1.0);
+  outDepth = 1.0;  // max depth for background
 
   if (hit.y >= 0.0) {
     vec3 p = ro + rd * hit.x;
@@ -310,6 +312,7 @@ void main() {
 
     outColor = vec4(color, opacity);
     outNormalId = vec4(normal, hit.y);
+    outDepth = hit.x / MAX_DIST;
   }
 
   // ── skinOnly overlay: ray-plane intersection (starts after regular objects) ──
@@ -344,6 +347,7 @@ void main() {
 
     if (texColor.a > 0.01) {
       outColor = vec4(mix(outColor.rgb, texColor.rgb, texColor.a), 1.0);
+      outDepth = t / MAX_DIST;
       // Don't write outNormalId — edge detection would draw jagged outlines.
       // The Canvas texture already has its own toon-style strokes.
     }

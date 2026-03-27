@@ -486,7 +486,18 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         const animated = evaluateDirectorFrame(state.elements, activeEvents)
 
         renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
-        renderer.render(rs)
+        renderer.applyPendingResize()
+        renderer.renderPipeline(rs)
+
+        // Bokeh DoF — focus at camera target distance
+        const cam = renderer.camera
+        const ddx = cam.position[0] - cam.target[0]
+        const ddy = cam.position[1] - cam.target[1]
+        const ddz = cam.position[2] - cam.target[2]
+        const focusDist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
+        renderer.applyDoF({ focusDist, aperture: 25.0, maxBlurPx: 40 })
+
+        renderer.blitAndOverlay()
       },
     )
     exporter.onProgress = (p) => setExportProgress(p)

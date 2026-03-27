@@ -71,10 +71,22 @@ export default function CameraPIP() {
       ? evaluateDirectorFrame(state.elements, activeEvents)
       : state.elements
 
-    // Render one frame with the director camera
+    // Render one frame with the director camera + DoF
     const rs = useRenderSettings.getState()
     renderer.updateScene(animated, rs.extrudeDepth)
     renderer.renderPipeline(rs)
+
+    // Bokeh DoF — focus at camera target distance
+    const dx = cam.position[0] - cam.target[0]
+    const dy = cam.position[1] - cam.target[1]
+    const dz = cam.position[2] - cam.target[2]
+    const focusDist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    renderer.applyDoF({
+      focusDist,
+      aperture: (focalLengthMm / 50) * 25.0,
+      maxBlurPx: 40,
+    })
+
     renderer.blitAndOverlay()
 
     // Copy the WebGL canvas to the PIP 2D canvas

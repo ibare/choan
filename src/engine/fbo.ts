@@ -1,11 +1,13 @@
-// GBuffer — FBO with MRT for screen-space edge detection
+// GBuffer — FBO with MRT for screen-space edge detection + depth
 // RT0: RGBA8 (toon color + opacity)
 // RT1: RGBA16F (world normal + objectID)
+// RT2: R16F (linear depth, normalized 0..1)
 
 export interface GBuffer {
   framebuffer: WebGLFramebuffer
   colorTex: WebGLTexture
   normalIdTex: WebGLTexture
+  depthTex: WebGLTexture
   width: number
   height: number
   resize(gl: WebGL2RenderingContext, w: number, h: number): void
@@ -43,11 +45,13 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
   const framebuffer = gl.createFramebuffer()!
   let colorTex = createTexture(gl, w, h, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE)
   let normalIdTex = createTexture(gl, w, h, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT)
+  let depthTex = createTexture(gl, w, h, gl.R16F, gl.RED, gl.HALF_FLOAT)
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTex, 0)
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, normalIdTex, 0)
-  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1])
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, depthTex, 0)
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2])
 
   const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
   if (status !== gl.FRAMEBUFFER_COMPLETE) {
@@ -61,13 +65,16 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
     if (nw === curW && nh === curH) return
     gl.deleteTexture(colorTex)
     gl.deleteTexture(normalIdTex)
+    gl.deleteTexture(depthTex)
 
     colorTex = createTexture(gl, nw, nh, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE)
     normalIdTex = createTexture(gl, nw, nh, gl.RGBA16F, gl.RGBA, gl.HALF_FLOAT)
+    depthTex = createTexture(gl, nw, nh, gl.R16F, gl.RED, gl.HALF_FLOAT)
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTex, 0)
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, normalIdTex, 0)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2, gl.TEXTURE_2D, depthTex, 0)
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
     curW = nw
@@ -78,6 +85,7 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
     gl.clearBufferfv(gl.COLOR, 0, new Float32Array([0, 0, 0, 0]))
     gl.clearBufferfv(gl.COLOR, 1, RT1_CLEAR)
+    gl.clearBufferfv(gl.COLOR, 2, new Float32Array([1, 0, 0, 0]))  // depth default = 1.0 (max)
   }
 
   function unbind(gl: WebGL2RenderingContext) {
@@ -87,6 +95,7 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
   function dispose(gl: WebGL2RenderingContext) {
     gl.deleteTexture(colorTex)
     gl.deleteTexture(normalIdTex)
+    gl.deleteTexture(depthTex)
     gl.deleteFramebuffer(framebuffer)
   }
 
@@ -94,6 +103,7 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
     get framebuffer() { return framebuffer },
     get colorTex() { return colorTex },
     get normalIdTex() { return normalIdTex },
+    get depthTex() { return depthTex },
     get width() { return curW },
     get height() { return curH },
     resize, bind, unbind, dispose,

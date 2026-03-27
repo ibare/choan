@@ -5,6 +5,7 @@
 import { createGL, createProgram, getUniformLocation } from './gl'
 import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
+import { DOF_FRAG } from './dofShaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, type SceneUBO } from './scene'
 import { buildBVH2D, type BVHData, type AABB2D } from './bvh'
@@ -16,6 +17,12 @@ import { buildViewProjMatrix } from './camera'
 import { createGBuffer } from './fbo'
 import type { ChoanElement } from '../store/useChoanStore'
 import type { RenderSettings } from '../store/useRenderSettings'
+
+export interface DoFParams {
+  focusDist: number
+  aperture: number
+  maxBlurPx: number
+}
 
 export interface SDFRenderer {
   canvas: HTMLCanvasElement
@@ -44,6 +51,8 @@ export interface SDFRenderer {
   getSuperSampledSize(): [number, number]
   /** Get the shared fullscreen quad VAO (for scene transitions). */
   getQuad(): WebGLVertexArrayObject
+  /** Apply bokeh DoF post-process. Call between renderPipeline() and blitAndOverlay(). */
+  applyDoF(params: DoFParams): void
   dispose(): void
 }
 
@@ -287,10 +296,71 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     drawFullscreenQuad(gl, quad)
   }
 
+  // ── DoF pass (lazy init — zero overhead when unused) ──
+  let dofProgram: WebGLProgram | null = null
+  let dofFB: WebGLFramebuffer | null = null
+  let dofTex: WebGLTexture | null = null
+  let dofW = 0, dofH = 0
+  let blitSourceFB: WebGLFramebuffer | null = null
+
+  function ensureDoF() {
+    if (dofProgram) return
+    dofProgram = createProgram(gl, RAYMARCH_VERT, DOF_FRAG)
+  }
+
+  function resizeDoF(w: number, h: number) {
+    if (dofW === w && dofH === h) return
+    if (dofTex) gl.deleteTexture(dofTex)
+    if (!dofFB) dofFB = gl.createFramebuffer()!
+    dofTex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, dofTex)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dofFB)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, dofTex, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    dofW = w; dofH = h
+  }
+
+  function applyDoF(params: DoFParams) {
+    ensureDoF()
+    resizeDoF(ssW, ssH)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dofFB)
+    gl.viewport(0, 0, ssW, ssH)
+    gl.disable(gl.BLEND)
+    gl.useProgram(dofProgram!)
+
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, resolveTex)
+    gl.uniform1i(gl.getUniformLocation(dofProgram!, 'uColorTex'), 0)
+
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, gbuffer.depthTex)
+    gl.uniform1i(gl.getUniformLocation(dofProgram!, 'uDepthTex'), 1)
+
+    gl.uniform2f(gl.getUniformLocation(dofProgram!, 'uTexelSize'), 1 / ssW, 1 / ssH)
+    gl.uniform1f(gl.getUniformLocation(dofProgram!, 'uFocusDist'), params.focusDist)
+    gl.uniform1f(gl.getUniformLocation(dofProgram!, 'uAperture'), params.aperture)
+    gl.uniform1f(gl.getUniformLocation(dofProgram!, 'uMaxBlurPx'), params.maxBlurPx)
+    gl.uniform1f(gl.getUniformLocation(dofProgram!, 'uMaxDist'), 500.0)
+
+    drawFullscreenQuad(gl, quad)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+    blitSourceFB = dofFB  // redirect next blitAndOverlay to read from DoF result
+  }
+
   /** Blit resolveFB → canvas + start overlay pass. */
   function blitAndOverlay() {
-    // ── Downsample: resolve FBO (2x) → canvas (1x) ──
-    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, resolveFB)
+    // ── Downsample: source FBO (2x) → canvas (1x) ──
+    const srcFB = blitSourceFB ?? resolveFB
+    blitSourceFB = null
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, srcFB)
     gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
     gl.blitFramebuffer(
       0, 0, ssW, ssH,
@@ -319,6 +389,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gbuffer.dispose(gl)
     gl.deleteTexture(resolveTex)
     gl.deleteFramebuffer(resolveFB)
+    if (dofProgram) gl.deleteProgram(dofProgram)
+    if (dofTex) gl.deleteTexture(dofTex)
+    if (dofFB) gl.deleteFramebuffer(dofFB)
     sceneUBO.dispose(gl)
     atlas.dispose(gl)
     colorWheel.dispose(gl)
@@ -334,7 +407,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     canvas, gl, camera, overlay, atlas, colorWheel,
     get bvhData() { return currentBVH },
     resize, updateScene, setSmoothK(k: number) { currentSmoothK = k },
-    render, renderPipeline, blitAndOverlay, applyPendingResize,
+    render, renderPipeline, blitAndOverlay, applyPendingResize, applyDoF,
     getResolveTex() { return resolveTex },
     getResolveFB() { return resolveFB },
     getSuperSampledSize(): [number, number] { return [ssW, ssH] },
