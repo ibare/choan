@@ -57,31 +57,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
 
   const { directorMode, setDirectorMode } = useDirectorStore()
 
-  if (!visible) return null
-
-  // ── Director mode ──
-  if (directorMode) {
-    return (
-      <div className="timeline-panel" style={height ? { height } : undefined}>
-        <div className="timeline-header-bar">
-          <SegmentedControl
-            options={[{ value: 'bundle', label: 'Bundle' }, { value: 'director', label: 'Director' }]}
-            value="director"
-            onChange={(v) => setDirectorMode(v === 'director')}
-          />
-        </div>
-        <DirectorTimelinePanel
-          onSwitchToBundle={(bundleId) => {
-            setDirectorMode(false)
-            setSelectedBundleId(bundleId)
-            setEditingBundle(bundleId)
-          }}
-        />
-      </div>
-    )
-  }
-
-  // ── Derive display data ──
+  // ── Derive display data (must run before useCallback to keep hooks order stable) ──
   const activeBundleId = selectedBundleId && animationBundles.some((b) => b.id === selectedBundleId)
     ? selectedBundleId
     : animationBundles[0]?.id ?? null
@@ -224,6 +200,29 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   const handleLeftScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setScrollY((e.target as HTMLDivElement).scrollTop)
   }, [])
+
+  if (!visible) return null
+
+  if (directorMode) {
+    return (
+      <div className="timeline-panel" style={height ? { height } : undefined}>
+        <div className="timeline-header-bar">
+          <SegmentedControl
+            options={[{ value: 'bundle', label: 'Bundle' }, { value: 'director', label: 'Director' }]}
+            value="director"
+            onChange={(v) => setDirectorMode(v === 'director')}
+          />
+        </div>
+        <DirectorTimelinePanel
+          onSwitchToBundle={(bundleId) => {
+            setDirectorMode(false)
+            setSelectedBundleId(bundleId)
+            setEditingBundle(bundleId)
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="timeline-panel" style={height ? { height } : undefined}>
