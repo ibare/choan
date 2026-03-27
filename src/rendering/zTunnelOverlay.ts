@@ -231,3 +231,149 @@ export function hitTestRotationRing(
   }
   return false
 }
+
+// ── Ground grid ──
+
+const GRID_COLOR: [number, number, number, number] = [0.0, 0.0, 0.0, 0.06]
+const GRID_AXIS_X_COLOR: [number, number, number, number] = [0.8, 0.2, 0.2, 0.2]
+const GRID_AXIS_Y_COLOR: [number, number, number, number] = [0.2, 0.6, 0.2, 0.2]
+const GRID_AXIS_Z_COLOR: [number, number, number, number] = [0.2, 0.4, 0.9, 0.2]
+const GRID_STEP = 2    // world units between lines
+const GRID_EXTENT = 40 // half-size of grid in world units
+
+/** Draw a ground-plane grid at Z=0 for spatial orientation. */
+export function drawGroundGrid(ov: OverlayRenderer): void {
+  const verts: number[] = []
+  const n = Math.floor(GRID_EXTENT / GRID_STEP)
+
+  // Lines parallel to Y axis (varying X)
+  for (let i = -n; i <= n; i++) {
+    if (i === 0) continue // skip axis — drawn separately
+    const x = i * GRID_STEP
+    verts.push(x, -GRID_EXTENT, 0, x, GRID_EXTENT, 0)
+  }
+  // Lines parallel to X axis (varying Y)
+  for (let i = -n; i <= n; i++) {
+    if (i === 0) continue
+    const y = i * GRID_STEP
+    verts.push(-GRID_EXTENT, y, 0, GRID_EXTENT, y, 0)
+  }
+
+  if (verts.length > 0) ov.drawLines3D(new Float32Array(verts), GRID_COLOR)
+
+  // X axis (red)
+  ov.drawLines3D(new Float32Array([-GRID_EXTENT, 0, 0, GRID_EXTENT, 0, 0]), GRID_AXIS_X_COLOR)
+  // Y axis (green)
+  ov.drawLines3D(new Float32Array([0, -GRID_EXTENT, 0, 0, GRID_EXTENT, 0]), GRID_AXIS_Y_COLOR)
+
+  // ── XZ plane grid (vertical wall at Y=0) — shows Z depth ──
+  const wallVerts: number[] = []
+  // Lines parallel to Z axis (varying X)
+  for (let i = -n; i <= n; i++) {
+    if (i === 0) continue
+    const x = i * GRID_STEP
+    wallVerts.push(x, 0, -GRID_EXTENT, x, 0, GRID_EXTENT)
+  }
+  // Lines parallel to X axis (varying Z)
+  for (let i = -n; i <= n; i++) {
+    if (i === 0) continue
+    const z = i * GRID_STEP
+    wallVerts.push(-GRID_EXTENT, 0, z, GRID_EXTENT, 0, z)
+  }
+  if (wallVerts.length > 0) ov.drawLines3D(new Float32Array(wallVerts), GRID_COLOR)
+
+  // Z axis (blue)
+  ov.drawLines3D(new Float32Array([0, 0, -GRID_EXTENT, 0, 0, GRID_EXTENT]), GRID_AXIS_Z_COLOR)
+}
+
+const FOOTPRINT_CELL_COLOR: [number, number, number, number] = [0.4, 0.7, 1.0, 0.1]
+
+// Point-in-convex-quad test (2D, using cross product signs)
+function ptInQuad2D(
+  px: number, py: number,
+  q: [number, number][],
+): boolean {
+  let sign = 0
+  for (let i = 0; i < 4; i++) {
+    const [ax, ay] = q[i]
+    const [bx, by] = q[(i + 1) % 4]
+    const cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+    if (cross > 0) { if (sign < 0) return false; sign = 1 }
+    else if (cross < 0) { if (sign > 0) return false; sign = -1 }
+  }
+  return true
+}
+
+/** Draw the director camera's frustum as filled grid cells on the Z=0 plane. */
+export function drawCameraFootprint(
+  ov: OverlayRenderer,
+  camPos: [number, number, number],
+  camTarget: [number, number, number],
+  fov: number,
+  aspect: number,
+): void {
+  // Camera basis vectors
+  const fx = camTarget[0] - camPos[0]
+  const fy = camTarget[1] - camPos[1]
+  const fz = camTarget[2] - camPos[2]
+  const fl = Math.sqrt(fx * fx + fy * fy + fz * fz)
+  if (fl < 1e-6) return
+  const fwd: [number, number, number] = [fx / fl, fy / fl, fz / fl]
+
+  let rx = -fwd[2], ry = 0, rz = fwd[0]
+  const rl = Math.sqrt(rx * rx + rz * rz)
+  if (rl < 1e-6) return
+  rx /= rl; rz /= rl
+
+  const ux = ry * fwd[2] - rz * fwd[1]
+  const uy = rz * fwd[0] - rx * fwd[2]
+  const uz = rx * fwd[1] - ry * fwd[0]
+
+  const fovScale = Math.tan(fov * Math.PI / 360)
+
+  // 4 frustum corner directions → intersect with Z=0
+  const hits: [number, number][] = []
+  for (const [sx, sy] of [[-1, 1], [1, 1], [1, -1], [-1, -1]] as const) {
+    const dz = fwd[2] + sx * fovScale * aspect * rz + sy * fovScale * uz
+    if (Math.abs(dz) < 1e-6) return
+    const t = -camPos[2] / dz
+    if (t < 0) return
+    const dx = fwd[0] + sx * fovScale * aspect * rx + sy * fovScale * ux
+    const dy = fwd[1] + sx * fovScale * aspect * ry + sy * fovScale * uy
+    hits.push([camPos[0] + dx * t, camPos[1] + dy * t])
+  }
+  if (hits.length < 4) return
+
+  // Bounding box of the frustum quad (clamp to grid extent)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const [hx, hy] of hits) {
+    minX = Math.min(minX, hx); minY = Math.min(minY, hy)
+    maxX = Math.max(maxX, hx); maxY = Math.max(maxY, hy)
+  }
+  minX = Math.max(minX, -GRID_EXTENT); minY = Math.max(minY, -GRID_EXTENT)
+  maxX = Math.min(maxX, GRID_EXTENT); maxY = Math.min(maxY, GRID_EXTENT)
+
+  // Fill grid cells whose center is inside the frustum quad (aligned with floor grid)
+  const cellStep = GRID_STEP
+  const cellVerts: number[] = []
+  const startX = Math.floor(minX / cellStep) * cellStep
+  const startY = Math.floor(minY / cellStep) * cellStep
+
+  for (let cx = startX; cx < maxX; cx += cellStep) {
+    for (let cy = startY; cy < maxY; cy += cellStep) {
+      const mx = cx + cellStep / 2
+      const my = cy + cellStep / 2
+      if (ptInQuad2D(mx, my, hits)) {
+        const x0 = cx, y0 = cy, x1 = cx + cellStep, y1 = cy + cellStep
+        cellVerts.push(
+          x0, y0, 0, x1, y0, 0, x1, y1, 0,
+          x0, y0, 0, x1, y1, 0, x0, y1, 0,
+        )
+      }
+    }
+  }
+
+  if (cellVerts.length > 0) {
+    ov.drawTriangles3D(new Float32Array(cellVerts), FOOTPRINT_CELL_COLOR)
+  }
+}

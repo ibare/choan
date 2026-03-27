@@ -27,7 +27,7 @@ import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 import { drawCameraPathOverlay } from './cameraPathOverlay'
-import { drawZTunnelOverlay, drawRotationRing, canShowZTunnel, type TunnelHover } from './zTunnelOverlay'
+import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, type TunnelHover } from './zTunnelOverlay'
 
 export function useAnimateLoop({
   rendererRef,
@@ -290,6 +290,9 @@ export function useAnimateLoop({
       // ── Director mode overlays (not playing) ──
       const dirState = useDirectorStore.getState()
       if (dirState.directorMode && !dirState.directorPlaying) {
+        // Ground grid for spatial orientation
+        drawGroundGrid(renderer.overlay)
+
         // Z tunnel guide overlay (single selection only)
         if (state.selectedIds.length === 1) {
           const selEl = state.elements.find((e) => e.id === state.selectedIds[0])
@@ -311,6 +314,19 @@ export function useAnimateLoop({
         if (dirTl.cameraKeyframes.length >= 1) {
           const curCamState = evaluateDirectorCamera(dirTl.cameraKeyframes, dirState.directorPlayheadTime)
           const dpr = window.devicePixelRatio || 1
+
+          // Camera frustum footprint on Z=0 ground plane
+          if (curCamState) {
+            const { w: cw, h: ch } = canvasSizeRef.current
+            const focalMm = dirState.focalLengthMm
+            const fovFromMm = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
+            drawCameraFootprint(
+              renderer.overlay,
+              curCamState.position, curCamState.target,
+              fovFromMm, cw / ch,
+            )
+          }
+
           drawCameraPathOverlay(
             renderer.overlay,
             dirTl.cameraKeyframes,
