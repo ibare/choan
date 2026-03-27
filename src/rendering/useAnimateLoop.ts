@@ -21,6 +21,11 @@ import { createLayoutAnimator } from '../layout/animator'
 import { paintComponent, type StrokeStyle } from '../engine/painters'
 import { hoveredHistoryColor } from '../utils/colorHistoryHover'
 import { tickExportAnim, getExportAnim, phaseProgress } from '../animation/exportAnimation'
+import { useDirectorStore } from '../store/useDirectorStore'
+import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
+import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
+import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
+import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 
 export function useAnimateLoop({
   rendererRef,
@@ -78,6 +83,47 @@ export function useAnimateLoop({
       const cam = renderer.camera
       const state = useChoanStore.getState()
       const preview = usePreviewStore.getState()
+
+      // ── Director mode playback ──
+      const director = useDirectorStore.getState()
+      if (director.directorMode && director.directorPlaying) {
+        // Advance playhead
+        const elapsed = performance.now() - director.playStartTime
+        const sceneState = useSceneStore.getState()
+        const activeScene = sceneState.scenes.find((s) => s.id === sceneState.activeSceneId)
+        const sceneDuration = activeScene?.duration ?? 3000
+        const dt = activeScene?.directorTimeline ?? createDefaultDirectorTimeline()
+
+        if (elapsed >= sceneDuration) {
+          useDirectorStore.getState().stopPlaying()
+          useDirectorStore.getState().setDirectorPlayheadTime(sceneDuration)
+        } else {
+          useDirectorStore.getState().setDirectorPlayheadTime(elapsed)
+
+          // Camera interpolation
+          const camState = evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
+          if (camState) {
+            cam.position[0] = camState.position[0]
+            cam.position[1] = camState.position[1]
+            cam.position[2] = camState.position[2]
+            cam.target[0] = camState.target[0]
+            cam.target[1] = camState.target[1]
+            cam.target[2] = camState.target[2]
+            cam.fov = camState.fov
+          }
+
+          // Event evaluation
+          const activeEvents = evaluateDirectorEvents(dt.eventMarkers, elapsed, state.animationBundles)
+          if (activeEvents.length > 0) {
+            const animated = evaluateDirectorFrame(state.elements, activeEvents)
+            animatedElementsRef.current = animated
+          }
+        }
+
+        if (controlsRef.current) controlsRef.current.disabled = true
+      } else {
+        if (controlsRef.current) controlsRef.current.disabled = false
+      }
 
       const cdx = cam.position[0] - cam.target[0]
       const cdy = cam.position[1] - cam.target[1]

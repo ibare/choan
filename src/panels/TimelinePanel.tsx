@@ -5,6 +5,9 @@
 import { useState, useRef, useCallback } from 'react'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
+import { useDirectorStore } from '../store/useDirectorStore'
+import DirectorTimelinePanel from './DirectorTimelinePanel'
+import { SegmentedControl } from '../components/ui/SegmentedControl'
 import type { DisplayLayer, RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../utils/nanoid'
@@ -52,7 +55,31 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
 
   const canvasWrapRef = useRef<HTMLDivElement | null>(null)
 
+  const { directorMode, setDirectorMode } = useDirectorStore()
+
   if (!visible) return null
+
+  // ── Director mode ──
+  if (directorMode) {
+    return (
+      <div className="timeline-panel" style={height ? { height } : undefined}>
+        <div className="timeline-header-bar">
+          <SegmentedControl
+            options={[{ value: 'bundle', label: 'Bundle' }, { value: 'director', label: 'Director' }]}
+            value="director"
+            onChange={(v) => setDirectorMode(v === 'director')}
+          />
+        </div>
+        <DirectorTimelinePanel
+          onSwitchToBundle={(bundleId) => {
+            setDirectorMode(false)
+            setSelectedBundleId(bundleId)
+            setEditingBundle(bundleId)
+          }}
+        />
+      </div>
+    )
+  }
 
   // ── Derive display data ──
   const activeBundleId = selectedBundleId && animationBundles.some((b) => b.id === selectedBundleId)
@@ -202,6 +229,11 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     <div className="timeline-panel" style={height ? { height } : undefined}>
       {/* Header: playback controls + bundle tabs */}
       <div className="timeline-header-bar">
+        <SegmentedControl
+          options={[{ value: 'bundle', label: 'Bundle' }, { value: 'director', label: 'Director' }]}
+          value="bundle"
+          onChange={(v) => setDirectorMode(v === 'director')}
+        />
         <div className="playback-controls">
           <Tooltip content={previewState === 'playing' ? 'Pause' : 'Play'}>
             <Button className="btn-small" onClick={handlePlayPause}>
