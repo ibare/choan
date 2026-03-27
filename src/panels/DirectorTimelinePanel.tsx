@@ -39,11 +39,6 @@ function mmToFov(mm: number): number {
   return 2 * Math.atan(SENSOR_W / (2 * mm)) * (180 / Math.PI)
 }
 
-/** Convert vertical FOV (degrees) to focal length (mm). */
-function fovToMm(fov: number): number {
-  return SENSOR_W / (2 * Math.tan((fov * Math.PI / 180) / 2))
-}
-
 interface DirectorTimelinePanelProps {
   onSwitchToBundle: (bundleId: string) => void
 }
@@ -52,8 +47,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const { scenes, activeSceneId } = useSceneStore()
   const { animationBundles } = useChoanStore()
   const {
-    directorPlayheadTime, directorPlaying,
-    setDirectorPlayheadTime, startPlaying, stopPlaying,
+    directorPlayheadTime, directorPlaying, focalLengthMm,
+    setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm,
     addCameraKeyframe,
     addEventMarker, updateEventMarker,
   } = useDirectorStore()
@@ -61,10 +56,6 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
-  const [focalLength, setFocalLength] = useState(() => {
-    const cam = rendererSingleton.renderer?.camera
-    return cam ? Math.round(fovToMm(cam.fov)) : 38
-  })
 
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
 
@@ -347,7 +338,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   // ── Actions ──
   const handleFocalLengthChange = (mm: number) => {
-    setFocalLength(Math.max(10, Math.min(200, mm)))
+    setFocalLengthMm(mm)
   }
 
   const handleSaveView = () => {
@@ -358,7 +349,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       time: Math.round(directorPlayheadTime),
       position: [...cam.position] as [number, number, number],
       target: [...cam.target] as [number, number, number],
-      fov: mmToFov(focalLength),
+      fov: mmToFov(focalLengthMm),
     }
     addCameraKeyframe(kf)
   }
@@ -485,11 +476,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
             type="range"
             min={10}
             max={200}
-            value={focalLength}
+            value={focalLengthMm}
             onChange={(e) => handleFocalLengthChange(Number(e.target.value))}
             className="ui-director-focal__slider"
           />
-          <span className="ui-director-focal__label">{focalLength}mm</span>
+          <span className="ui-director-focal__label">{focalLengthMm}mm</span>
         </div>
         <div className="timeline-separator" />
         {bundleOptions.length > 0 && (

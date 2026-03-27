@@ -19,15 +19,15 @@ const PIP_H = 180
 
 export default function CameraPIP() {
   const pipRef = useRef<HTMLCanvasElement>(null)
-  const { directorMode, directorPlaying, directorPlayheadTime } = useDirectorStore()
+  const { directorMode, directorPlaying, directorPlayheadTime, focalLengthMm } = useDirectorStore()
   const { scenes, activeSceneId } = useSceneStore()
 
   const scene = scenes.find((s) => s.id === activeSceneId)
   const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
   const hasCameraKfs = dt.cameraKeyframes.length > 0
 
-  // Only show PIP in Director mode when not playing and there are camera keyframes
-  const visible = directorMode && !directorPlaying && hasCameraKfs
+  // Show PIP in Director mode when not playing
+  const visible = directorMode && !directorPlaying
 
   useEffect(() => {
     if (!visible) return
@@ -49,7 +49,10 @@ export default function CameraPIP() {
     const savedFov = cam.fov
 
     // Apply director camera at current playhead time
-    const camState = evaluateDirectorCamera(dt.cameraKeyframes, directorPlayheadTime)
+    const fovFromMm = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
+    const camState = hasCameraKfs
+      ? evaluateDirectorCamera(dt.cameraKeyframes, directorPlayheadTime)
+      : null
     if (camState) {
       cam.position[0] = camState.position[0]
       cam.position[1] = camState.position[1]
@@ -57,8 +60,9 @@ export default function CameraPIP() {
       cam.target[0] = camState.target[0]
       cam.target[1] = camState.target[1]
       cam.target[2] = camState.target[2]
-      cam.fov = camState.fov
     }
+    // Always use the focal length slider's FOV
+    cam.fov = fovFromMm
 
     // Evaluate events at this time
     const state = useChoanStore.getState()
@@ -90,7 +94,7 @@ export default function CameraPIP() {
     renderer.updateScene(state.elements, rs.extrudeDepth)
     renderer.renderPipeline(rs)
     renderer.blitAndOverlay()
-  }, [visible, directorPlayheadTime, dt, scene])
+  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, hasCameraKfs])
 
   if (!visible) return null
 

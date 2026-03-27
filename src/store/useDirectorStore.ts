@@ -12,6 +12,7 @@ interface DirectorStore {
   directorPlaying: boolean
   playStartTime: number  // performance.now() epoch for elapsed calculation
   selectedCameraKeyframeId: string | null
+  focalLengthMm: number  // focal length in mm for FOV control
 
   // Mode controls
   setDirectorMode: (on: boolean) => void
@@ -19,6 +20,7 @@ interface DirectorStore {
   startPlaying: () => void
   stopPlaying: () => void
   setSelectedCameraKeyframeId: (id: string | null) => void
+  setFocalLengthMm: (mm: number) => void
 
   // Camera keyframe CRUD (operates on active scene)
   addCameraKeyframe: (kf: CameraViewKeyframe) => void
@@ -50,9 +52,11 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   directorPlaying: false,
   playStartTime: 0,
   selectedCameraKeyframeId: null,
+  focalLengthMm: 38,
 
   setDirectorMode: (on) => set({ directorMode: on, directorPlaying: false }),
   setSelectedCameraKeyframeId: (id) => set({ selectedCameraKeyframeId: id }),
+  setFocalLengthMm: (mm) => set({ focalLengthMm: Math.max(10, Math.min(200, mm)) }),
 
   setDirectorPlayheadTime: (ms) => set({ directorPlayheadTime: Math.max(0, ms) }),
 
