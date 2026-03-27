@@ -21,6 +21,10 @@ import { handleColorPickerClick, computeColorPickerHover } from './colorPickerHa
 import { SKIN_BY_ID } from '../config/skins'
 import { track } from '../utils/analytics'
 import { pushSnapshot } from '../store/history'
+import { useDirectorStore } from '../store/useDirectorStore'
+import { useSceneStore } from '../store/useSceneStore'
+import { createDefaultDirectorTimeline } from '../animation/directorTypes'
+import { hitTestCameraKeyframe, computeCameraKeyframeDragPosition } from './cameraPathHandlers'
 import { handleDragMove, finalizeDrag } from './dragHandlers'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
 import { handleDrawMove, finalizeDrawn } from './drawHandlers'
@@ -89,6 +93,12 @@ export function usePointerHandlers({
   const colorPickerHoverRef = useRef(-1)
   const colorPickerAnchorRef = useRef<{ px: number; py: number } | null>(null)
 
+  // Camera keyframe 3D drag refs
+  const isDraggingCameraKfRef = useRef(false)
+  const dragCameraKfIdRef = useRef<string | null>(null)
+  const dragCameraKfOrigPosRef = useRef<[number, number, number]>([0, 0, 0])
+  const dragCameraKfTypeRef = useRef<'position' | 'target'>('position')
+
   const isDraggingRef = useRef(false)
   const dragStartPixelRef = useRef({ x: 0, y: 0 })
   const dragGroupStartRef = useRef<Map<string, { x: number; y: number }>>(new Map())
@@ -133,6 +143,37 @@ export function usePointerHandlers({
     if (e.button !== 0) return
     // Space + left-click is reserved for panning (handled by OrbitControls)
     if (spaceDownRef.current) return
+
+    // ── Camera keyframe 3D drag (Director mode) ──
+    const director = useDirectorStore.getState()
+    if (director.directorMode && !director.directorPlaying) {
+      const renderer = rendererRef.current
+      if (renderer) {
+        const scState = useSceneStore.getState()
+        const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
+        const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
+        if (dirTl.cameraKeyframes.length > 0) {
+          const hit = hitTestCameraKeyframe(
+            e.clientX, e.clientY,
+            renderer.canvas.getBoundingClientRect(),
+            renderer.overlay,
+            dirTl.cameraKeyframes,
+            16,
+            e.altKey,
+          )
+          if (hit) {
+            const kf = dirTl.cameraKeyframes.find((k) => k.id === hit.keyframeId)!
+            isDraggingCameraKfRef.current = true
+            dragCameraKfIdRef.current = hit.keyframeId
+            dragCameraKfOrigPosRef.current = hit.type === 'position' ? [...kf.position] : [...kf.target]
+            dragCameraKfTypeRef.current = hit.type
+            useDirectorStore.getState().setSelectedCameraKeyframeId(hit.keyframeId)
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
+        }
+      }
+    }
 
     if (isDragSelectRef.current) {
       const originalPointerId = dragSelectPointerIdRef.current
@@ -377,6 +418,20 @@ export function usePointerHandlers({
   // ── handlePointerMove ──
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // ── Camera keyframe drag ──
+    if (isDraggingCameraKfRef.current && dragCameraKfIdRef.current) {
+      const { w, h } = canvasSizeRef.current
+      const newPos = computeCameraKeyframeDragPosition(
+        e.clientX, e.clientY, w, h,
+        dragCameraKfOrigPosRef.current, e.shiftKey,
+      )
+      const patch = dragCameraKfTypeRef.current === 'position'
+        ? { position: newPos as [number, number, number] }
+        : { target: newPos as [number, number, number] }
+      useDirectorStore.getState().updateCameraKeyframe(dragCameraKfIdRef.current, patch)
+      return
+    }
+
     const { elements: els, selectedIds: selIds, updateElement: update } = useChoanStore.getState()
     const selId = selIds[0] ?? null
     const setSnap = (lines: SnapLine[]) => { snapLinesRef.current = lines }
@@ -499,6 +554,14 @@ export function usePointerHandlers({
   // ── handlePointerUp ──
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    // ── Camera keyframe drag cleanup ──
+    if (isDraggingCameraKfRef.current) {
+      isDraggingCameraKfRef.current = false
+      dragCameraKfIdRef.current = null
+      pushSnapshot()
+      return
+    }
+
     if (isDragSelectRef.current) {
       if (e.pointerId !== dragSelectPointerIdRef.current) return
       const start = dragSelectStartClientRef.current
