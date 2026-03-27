@@ -1552,6 +1552,25 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
   cursor: default;
 }
 
+/* ── Director focal length slider ──────────────────────── */
+.ui-director-focal {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ui-director-focal__slider {
+  width: 72px;
+  height: 3px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.ui-director-focal__label {
+  font-size: var(--text-xs);
+  color: var(--text-2);
+  min-width: 36px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Camera PIP ────────────────────────────────────────── */
 .ui-camera-pip {
   position: absolute;

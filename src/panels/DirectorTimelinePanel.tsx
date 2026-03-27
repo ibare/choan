@@ -31,6 +31,19 @@ const RULER_H = 35  // Match bundle timeline ruler height
 const SIDEBAR_W = 120
 const LEFT_PAD = 24  // Match bundle timeline left padding
 
+// 35mm full-frame sensor: width = 36mm
+const SENSOR_W = 36
+
+/** Convert focal length (mm) to vertical FOV (degrees). */
+function mmToFov(mm: number): number {
+  return 2 * Math.atan(SENSOR_W / (2 * mm)) * (180 / Math.PI)
+}
+
+/** Convert vertical FOV (degrees) to focal length (mm). */
+function fovToMm(fov: number): number {
+  return SENSOR_W / (2 * Math.tan((fov * Math.PI / 180) / 2))
+}
+
 interface DirectorTimelinePanelProps {
   onSwitchToBundle: (bundleId: string) => void
 }
@@ -48,6 +61,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportProgress, setExportProgress] = useState(0)
+  const [focalLength, setFocalLength] = useState(() => {
+    const cam = rendererSingleton.renderer?.camera
+    return cam ? Math.round(fovToMm(cam.fov)) : 38
+  })
 
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
 
@@ -329,6 +346,13 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   // ── Actions ──
+  const handleFocalLengthChange = (mm: number) => {
+    const clamped = Math.max(10, Math.min(200, mm))
+    setFocalLength(clamped)
+    const cam = rendererSingleton.renderer?.camera
+    if (cam) cam.fov = mmToFov(clamped)
+  }
+
   const handleSaveView = () => {
     const cam = rendererSingleton.renderer?.camera
     if (!cam) return
@@ -458,6 +482,19 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           placeholder="Preset"
           size="sm"
         />
+        <div className="timeline-separator" />
+        <div className="ui-director-focal">
+          <input
+            type="range"
+            min={10}
+            max={200}
+            value={focalLength}
+            onChange={(e) => handleFocalLengthChange(Number(e.target.value))}
+            className="ui-director-focal__slider"
+          />
+          <span className="ui-director-focal__label">{focalLength}mm</span>
+        </div>
+        <div className="timeline-separator" />
         {bundleOptions.length > 0 && (
           <Select
             options={bundleOptions}
