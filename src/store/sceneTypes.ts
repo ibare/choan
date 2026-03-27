@@ -2,6 +2,7 @@
 
 import type { ChoanElement } from './useElementStore'
 import type { AnimationBundle, EasingType } from '../animation/types'
+import type { DirectorTimeline } from '../animation/directorTypes'
 
 // ── Types ──
 
@@ -19,6 +20,7 @@ export interface Scene {
   order: number
   duration: number  // ms
   transitionOut?: SceneTransition
+  directorTimeline?: DirectorTimeline
 }
 
 export interface TransitionState {
