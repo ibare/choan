@@ -298,8 +298,10 @@ export function useAnimateLoop({
             drawZTunnelOverlay(renderer.overlay, selEl, canvasSizeRef.current.w, canvasSizeRef.current.h, rs.extrudeDepth, tunnelHoverRef.current)
           }
           // Rotation ring (always shown in Director mode when element selected)
-          const dprRing = window.devicePixelRatio || 1
-          drawRotationRing(renderer.overlay, selEl, canvasSizeRef.current.w, canvasSizeRef.current.h, rs.extrudeDepth, dprRing)
+          if (selEl) {
+            const dprRing = window.devicePixelRatio || 1
+            drawRotationRing(renderer.overlay, selEl, canvasSizeRef.current.w, canvasSizeRef.current.h, rs.extrudeDepth, dprRing)
+          }
         }
 
         // Camera path overlay
