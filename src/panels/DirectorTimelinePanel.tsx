@@ -175,6 +175,15 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   useEffect(() => { draw() }, [draw])
 
+  // Redraw on container resize
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ro = new ResizeObserver(() => draw())
+    ro.observe(canvas)
+    return () => ro.disconnect()
+  }, [draw])
+
   // ── Pointer handlers ──
   const xToMs = (clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect()
