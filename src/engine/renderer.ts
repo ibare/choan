@@ -5,7 +5,7 @@
 import { createGL, createProgram, getUniformLocation } from './gl'
 import { createFullscreenQuad, drawFullscreenQuad } from './quad'
 import { RAYMARCH_VERT, RAYMARCH_FRAG, EDGE_FRAG } from './shaders'
-import { DOF_FRAG } from './dofShaders'
+import { DOF_FRAG, FRUSTUM_MASK_FRAG } from './dofShaders'
 import { createCamera, getCameraRayParams, type Camera } from './camera'
 import { createSceneUBO, EXTRUDE_DEPTH, type SceneUBO } from './scene'
 import { buildBVH2D, type BVHData, type AABB2D } from './bvh'
@@ -53,6 +53,8 @@ export interface SDFRenderer {
   getQuad(): WebGLVertexArrayObject
   /** Apply bokeh DoF post-process. Call between renderPipeline() and blitAndOverlay(). */
   applyDoF(params: DoFParams): void
+  /** Darken pixels outside the director camera frustum. */
+  applyFrustumMask(dirViewProj: Float32Array, darken?: number): void
   dispose(): void
 }
 
@@ -357,6 +359,52 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     blitSourceFB = dofFB  // redirect next blitAndOverlay to read from DoF result
   }
 
+  // ── Frustum mask pass (lazy init) ──
+  let fmProgram: WebGLProgram | null = null
+
+  function ensureFM() {
+    if (fmProgram) return
+    fmProgram = createProgram(gl, RAYMARCH_VERT, FRUSTUM_MASK_FRAG)
+  }
+
+  function applyFrustumMask(dirViewProj: Float32Array, darken = 0.25) {
+    ensureFM()
+    resizeDoF(ssW, ssH)
+
+    const ray = getCameraRayParams(camera)
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dofFB)
+    gl.viewport(0, 0, ssW, ssH)
+    gl.disable(gl.BLEND)
+    gl.useProgram(fmProgram!)
+
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, resolveTex)
+    gl.uniform1i(gl.getUniformLocation(fmProgram!, 'uColorTex'), 0)
+
+    const cdx = camera.position[0] - camera.target[0]
+    const cdy = camera.position[1] - camera.target[1]
+    const cdz = camera.position[2] - camera.target[2]
+    const camDist = Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz)
+
+    gl.uniform2f(gl.getUniformLocation(fmProgram!, 'uResolution'), ssW, ssH)
+    gl.uniform1f(gl.getUniformLocation(fmProgram!, 'uDarken'), darken)
+    gl.uniform1f(gl.getUniformLocation(fmProgram!, 'uCamDist'), camDist)
+
+    gl.uniform3f(gl.getUniformLocation(fmProgram!, 'uMainCamPos'), ray.ro[0], ray.ro[1], ray.ro[2])
+    gl.uniform3f(gl.getUniformLocation(fmProgram!, 'uMainCamForward'), ray.forward[0], ray.forward[1], ray.forward[2])
+    gl.uniform3f(gl.getUniformLocation(fmProgram!, 'uMainCamRight'), ray.right[0], ray.right[1], ray.right[2])
+    gl.uniform3f(gl.getUniformLocation(fmProgram!, 'uMainCamUp'), ray.up[0], ray.up[1], ray.up[2])
+    gl.uniform1f(gl.getUniformLocation(fmProgram!, 'uMainFovScale'), ray.fovScale)
+
+    gl.uniformMatrix4fv(gl.getUniformLocation(fmProgram!, 'uDirViewProj'), false, dirViewProj)
+
+    drawFullscreenQuad(gl, quad)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+    blitSourceFB = dofFB
+  }
+
   /** Blit resolveFB → canvas + start overlay pass. */
   function blitAndOverlay() {
     // ── Downsample: source FBO (2x) → canvas (1x) ──
@@ -392,6 +440,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.deleteTexture(resolveTex)
     gl.deleteFramebuffer(resolveFB)
     if (dofProgram) gl.deleteProgram(dofProgram)
+    if (fmProgram) gl.deleteProgram(fmProgram)
     if (dofTex) gl.deleteTexture(dofTex)
     if (dofFB) gl.deleteFramebuffer(dofFB)
     sceneUBO.dispose(gl)
@@ -409,7 +458,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     canvas, gl, camera, overlay, atlas, colorWheel,
     get bvhData() { return currentBVH },
     resize, updateScene, setSmoothK(k: number) { currentSmoothK = k },
-    render, renderPipeline, blitAndOverlay, applyPendingResize, applyDoF,
+    render, renderPipeline, blitAndOverlay, applyPendingResize, applyDoF, applyFrustumMask,
     getResolveTex() { return resolveTex },
     getResolveFB() { return resolveFB },
     getSuperSampledSize(): [number, number] { return [ssW, ssH] },

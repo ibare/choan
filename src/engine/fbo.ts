@@ -83,9 +83,10 @@ export function createGBuffer(gl: WebGL2RenderingContext, w: number, h: number):
 
   function bind(gl: WebGL2RenderingContext) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1, gl.COLOR_ATTACHMENT2])
     gl.clearBufferfv(gl.COLOR, 0, new Float32Array([0, 0, 0, 0]))
     gl.clearBufferfv(gl.COLOR, 1, RT1_CLEAR)
-    gl.clearBufferfv(gl.COLOR, 2, new Float32Array([1, 0, 0, 0]))  // depth default = 1.0 (max)
+    gl.clearBufferfv(gl.COLOR, 2, new Float32Array([1, 0, 0, 0]))
   }
 
   function unbind(gl: WebGL2RenderingContext) {

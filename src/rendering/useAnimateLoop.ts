@@ -27,6 +27,7 @@ import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 import { drawCameraPathOverlay } from './cameraPathOverlay'
+import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, type TunnelHover } from './zTunnelOverlay'
 
 export function useAnimateLoop({
@@ -76,6 +77,13 @@ export function useAnimateLoop({
     const animator = createLayoutAnimator()
     const atlasDirty = new Map<string, string>() // id → stateKey for dirty tracking
     let frameId = 0
+
+    // Q key: frustum spotlight mode
+    let qKeyDown = false
+    const onQDown = (e: KeyboardEvent) => { if (e.code === 'KeyQ' && !e.repeat) qKeyDown = true }
+    const onQUp = (e: KeyboardEvent) => { if (e.code === 'KeyQ') qKeyDown = false }
+    window.addEventListener('keydown', onQDown)
+    window.addEventListener('keyup', onQUp)
 
     const animate = () => {
       frameId = requestAnimationFrame(animate)
@@ -242,6 +250,27 @@ export function useAnimateLoop({
 
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth, hoveredHistoryColor)
 
+      // Pre-compute director camera viewProj for frustum mask (Q key)
+      let dirCamStateForMask: Float32Array | null = null
+      const dirForMask = useDirectorStore.getState()
+      if (qKeyDown && dirForMask.directorMode && !dirForMask.directorPlaying) {
+        const scForMask = useSceneStore.getState()
+        const actForMask = scForMask.scenes.find((s) => s.id === scForMask.activeSceneId)
+        const dtForMask = actForMask?.directorTimeline ?? createDefaultDirectorTimeline()
+        if (dtForMask.cameraKeyframes.length >= 1) {
+          const camSt = evaluateDirectorCamera(dtForMask.cameraKeyframes, dirForMask.directorPlayheadTime)
+          if (camSt) {
+            const focalMm = dirForMask.focalLengthMm
+            const fovMask = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
+            const { w: cw, h: ch } = canvasSizeRef.current
+            dirCamStateForMask = buildViewProjMatrix(
+              camSt.position, camSt.target, [0, 1, 0],
+              fovMask, cw / ch, 0.1, 500,
+            )
+          }
+        }
+      }
+
       // ── Scene transition rendering ──
       const transitionState = useSceneStore.getState().transitionState
       const sceneMgr = sceneManagerRef.current
@@ -269,7 +298,15 @@ export function useAnimateLoop({
           useSceneStore.getState().endTransition()
         }
       } else {
-        renderer.render(rs)
+        // Q key: frustum spotlight — darken pixels outside director camera frustum
+        if (qKeyDown && dirCamStateForMask) {
+          renderer.applyPendingResize()
+          renderer.renderPipeline(rs)
+          renderer.applyFrustumMask(dirCamStateForMask)
+          renderer.blitAndOverlay()
+        } else {
+          renderer.render(rs)
+        }
       }
 
       drawOverlay(
@@ -324,6 +361,7 @@ export function useAnimateLoop({
               renderer.overlay,
               curCamState.position, curCamState.target,
               fovFromMm, cw / ch,
+              false,
             )
           }
 
@@ -343,6 +381,8 @@ export function useAnimateLoop({
     return () => {
       cancelAnimationFrame(frameId)
       kfAnimator.stopAll()
+      window.removeEventListener('keydown', onQDown)
+      window.removeEventListener('keyup', onQUp)
     }
   }, [])
 }

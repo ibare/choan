@@ -76,3 +76,56 @@ void main() {
   fragColor = vec4(colorAcc / max(weightAcc, 1.0), 1.0);
 }
 `
+
+// Frustum mask — darkens pixels whose ray doesn't pass through the director camera frustum.
+// Tests multiple sample points along each main-camera ray to approximate 3D volume test.
+export const FRUSTUM_MASK_FRAG = /* glsl */ `#version 300 es
+precision highp float;
+
+in vec2 vUV;
+out vec4 fragColor;
+
+uniform sampler2D uColorTex;
+uniform vec2 uResolution;
+uniform float uDarken;
+uniform float uCamDist;        // orbit camera distance to target (for adaptive sampling)
+
+uniform vec3 uMainCamPos;
+uniform vec3 uMainCamForward;
+uniform vec3 uMainCamRight;
+uniform vec3 uMainCamUp;
+uniform float uMainFovScale;
+
+uniform mat4 uDirViewProj;
+
+void main() {
+  vec3 color = texture(uColorTex, vUV).rgb;
+
+  vec2 uv = (2.0 * gl_FragCoord.xy - uResolution) / uResolution.y;
+  vec3 rd = normalize(uMainCamForward + uv.x * uMainFovScale * uMainCamRight + uv.y * uMainFovScale * uMainCamUp);
+
+  // Adaptive sample range based on camera distance
+  float near = max(uCamDist * 0.2, 0.5);
+  float far = uCamDist * 4.0;
+
+  // Sample 24 points along the ray, track min distance to frustum edge
+  float minEdge = 2.0; // >1 means never inside
+  for (int i = 0; i < 24; i++) {
+    float f = float(i) / 23.0;
+    float t = near + (far - near) * f * f; // quadratic distribution: denser near camera
+    vec3 p = uMainCamPos + rd * t;
+    vec4 clip = uDirViewProj * vec4(p, 1.0);
+    if (clip.w > 0.0) {
+      float ex = abs(clip.x / clip.w);
+      float ey = abs(clip.y / clip.w);
+      float edge = max(ex, ey);
+      minEdge = min(minEdge, edge);
+    }
+  }
+
+  // Smooth transition: 0.0 = deep inside frustum, 1.0 = far outside
+  float factor = mix(1.0, uDarken, smoothstep(0.85, 1.15, minEdge));
+
+  fragColor = vec4(color * factor, 1.0);
+}
+`
