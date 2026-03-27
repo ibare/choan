@@ -58,21 +58,24 @@ export function hitTestCameraKeyframe(
  * Drags in the XY plane at the keyframe's original Z by default.
  * With shiftKey, adjusts Z instead (vertical drag = Z change).
  */
+/**
+ * Compute the new world position for a dragged camera keyframe.
+ * canvasX/canvasY must be in canvas-local pixel coordinates (0~w, 0~h),
+ * NOT browser clientX/clientY.
+ */
 export function computeCameraKeyframeDragPosition(
-  clientX: number,
-  clientY: number,
+  canvasX: number,
+  canvasY: number,
   canvasW: number,
   canvasH: number,
   originalPosition: [number, number, number],
   shiftKey: boolean,
 ): [number, number, number] {
-  const [wx, wy] = pixelToWorld(clientX, clientY, canvasW, canvasH)
+  const [wx, wy] = pixelToWorld(canvasX, canvasY, canvasW, canvasH)
 
   if (shiftKey) {
-    // Shift+drag: keep X/Y, adjust Z based on vertical mouse movement
     return [originalPosition[0], originalPosition[1], originalPosition[2] + (wy - originalPosition[1]) * 0.5]
   }
 
-  // Normal drag: move in XY plane at original Z
   return [wx, wy, originalPosition[2]]
 }

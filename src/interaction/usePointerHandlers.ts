@@ -421,8 +421,12 @@ export function usePointerHandlers({
     // ── Camera keyframe drag ──
     if (isDraggingCameraKfRef.current && dragCameraKfIdRef.current) {
       const { w, h } = canvasSizeRef.current
+      const renderer = rendererRef.current
+      const rect = renderer?.canvas.getBoundingClientRect()
+      const canvasX = rect ? e.clientX - rect.left : e.clientX
+      const canvasY = rect ? e.clientY - rect.top : e.clientY
       const newPos = computeCameraKeyframeDragPosition(
-        e.clientX, e.clientY, w, h,
+        canvasX, canvasY, w, h,
         dragCameraKfOrigPosRef.current, e.shiftKey,
       )
       const patch = dragCameraKfTypeRef.current === 'position'

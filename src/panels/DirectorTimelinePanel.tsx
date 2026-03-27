@@ -49,8 +49,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const {
     directorPlayheadTime, directorPlaying, focalLengthMm,
     setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm,
-    addCameraKeyframe,
-    addEventMarker, updateEventMarker,
+    addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
+    addEventMarker, updateEventMarker, removeEventMarker,
   } = useDirectorStore()
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -58,11 +58,13 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const [exportProgress, setExportProgress] = useState(0)
 
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null)
+  const [selectedCameraKfId, setSelectedCameraKfId] = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
   const dragRef = useRef<{
-    markerId: string; mode: 'move' | 'resize'
+    type: 'event' | 'camera-kf'
+    id: string; mode: 'move' | 'resize'
     startX: number; startTime: number; startDuration: number
   } | null>(null)
 
@@ -122,7 +124,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     for (const kf of dt.cameraKeyframes) {
       const x = msToX(kf.time)
       if (x >= SIDEBAR_W - 10 && x <= w + 10) {
-        drawDiamond(ctx, x, camY, false)
+        const isSelected = kf.id === selectedCameraKfId
+        drawDiamond(ctx, x, camY, isSelected)
       }
     }
 
@@ -196,7 +199,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.textAlign = 'left'
     ctx.fillText('🎥 Camera', 8, RULER_H + TRACK_H / 2 + 4)
     ctx.fillText('⚡ Events', 8, RULER_H + TRACK_H + TRACK_H / 2 + 4)
-  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId])
+  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId])
 
   useEffect(() => { draw() }, [draw])
 
@@ -208,6 +211,27 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ro.observe(canvas)
     return () => ro.disconnect()
   }, [draw])
+
+  // ── Delete key handler ──
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        if (selectedCameraKfId) {
+          removeCameraKeyframe(selectedCameraKfId)
+          setSelectedCameraKfId(null)
+          e.preventDefault()
+        } else if (selectedMarkerId) {
+          removeEventMarker(selectedMarkerId)
+          setSelectedMarkerId(null)
+          e.preventDefault()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectedCameraKfId, selectedMarkerId, removeCameraKeyframe, removeEventMarker])
 
   // ── Pointer handlers ──
   const xToMs = (clientX: number) => {
@@ -236,6 +260,16 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     return null
   }
 
+  const hitTestCameraKf = (localX: number, localY: number): CameraViewKeyframe | null => {
+    const camY = RULER_H
+    if (localY < camY || localY >= camY + TRACK_H) return null
+    for (const kf of dt.cameraKeyframes) {
+      const kx = SIDEBAR_W + LEFT_PAD + kf.time * PX_PER_MS
+      if (Math.abs(localX - kx) < 10) return kf
+    }
+    return null
+  }
+
   const handlePointerDown = (e: React.PointerEvent) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -243,6 +277,23 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     const localY = e.clientY - rect.top
 
     if (localX < SIDEBAR_W) return
+
+    // Check camera keyframe hit
+    const camHit = hitTestCameraKf(localX, localY)
+    if (camHit) {
+      setSelectedCameraKfId(camHit.id)
+      setSelectedMarkerId(null)
+      dragRef.current = {
+        type: 'camera-kf',
+        id: camHit.id,
+        mode: 'move',
+        startX: e.clientX,
+        startTime: camHit.time,
+        startDuration: 0,
+      }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
 
     // Check event bar hit
     const hit = hitTestEventBar(localX, localY)
@@ -252,8 +303,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       const bundleDur = bundle ? Math.max(1, ...bundle.clips.map((c) => c.duration)) : 300
       const effectiveDur = marker.durationOverride ?? bundleDur
       setSelectedMarkerId(marker.id)
+      setSelectedCameraKfId(null)
       dragRef.current = {
-        markerId: marker.id,
+        type: 'event',
+        id: marker.id,
         mode: isEdge ? 'resize' : 'move',
         startX: e.clientX,
         startTime: marker.time,
@@ -265,6 +318,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
     // Click on empty area deselects
     setSelectedMarkerId(null)
+    setSelectedCameraKfId(null)
 
     // Ruler/playhead scrub
     scrubRef.current = true
@@ -276,13 +330,15 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
-      if (dragRef.current.mode === 'move') {
+      if (dragRef.current.type === 'camera-kf') {
         const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
-        updateEventMarker(dragRef.current.markerId, { time: Math.round(newTime) })
+        updateCameraKeyframe(dragRef.current.id, { time: Math.round(newTime) })
+      } else if (dragRef.current.mode === 'move') {
+        const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
+        updateEventMarker(dragRef.current.id, { time: Math.round(newTime) })
       } else {
-        // Resize: change duration
         const newDur = Math.max(50, dragRef.current.startDuration + dtMs)
-        updateEventMarker(dragRef.current.markerId, { durationOverride: Math.round(newDur) })
+        updateEventMarker(dragRef.current.id, { durationOverride: Math.round(newDur) })
       }
       return
     }
@@ -297,10 +353,13 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     const rect = canvas.getBoundingClientRect()
     const localX = e.clientX - rect.left
     const localY = e.clientY - rect.top
-    const hit = hitTestEventBar(localX, localY)
-    if (hit?.isEdge) {
+    const camHit = hitTestCameraKf(localX, localY)
+    const evtHit = hitTestEventBar(localX, localY)
+    if (camHit) {
+      canvas.style.cursor = 'grab'
+    } else if (evtHit?.isEdge) {
       canvas.style.cursor = 'ew-resize'
-    } else if (hit) {
+    } else if (evtHit) {
       canvas.style.cursor = 'grab'
     } else {
       canvas.style.cursor = 'default'
