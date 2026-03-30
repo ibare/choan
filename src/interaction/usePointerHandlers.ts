@@ -12,7 +12,7 @@ import { kfAnimator } from '../rendering/kfAnimator'
 import { raycastElement, hitTestCorner, hitTestLayoutHandle, hitTestSizingIndicator } from './hitTest'
 import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
-import { worldToPixel as worldToPixelCS, pixelToWorld } from '../coords/coordinateSystem'
+import { worldToPixel as worldToPixelCS, pixelToWorld, rayPlaneIntersect, rayAxisClosestT } from '../coords/coordinateSystem'
 import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING } from '../constants'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { getCameraRayParams } from '../engine/camera'
@@ -31,6 +31,7 @@ import {
 } from './cameraPathHandlers'
 
 const AXIS_IDX_MAP = { x: 0, y: 1, z: 2 } as const
+const RAIL_OFFSET = 4.5  // must match cameraPathOverlay.ts / cameraPathHandlers.ts
 import { handleDragMove, finalizeDrag } from './dragHandlers'
 import { canShowZTunnel, hitTestRotationRing, hitTestTunnelFace, hitTestCameraAxisHandle, type AxisHover } from '../rendering/zTunnelOverlay'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
@@ -119,7 +120,7 @@ export function usePointerHandlers({
   const isDraggingRailHandleRef  = useRef(false)
   const dragRailHandleRef        = useRef<RailHandleHit | null>(null)
   const dragRailOrigExtentRef    = useRef(0)
-  const dragRailOrigCanvasYRef   = useRef(0)  // for dolly (Y-drag → Z)
+  const dragRailStartTRef        = useRef(0)  // ray-axis T at drag start
   // Director camera body drag refs
   const isDraggingDirCameraRef   = useRef(false)
   const dragDirCameraOrigPosRef  = useRef<[number, number, number]>([0, 0, 0])
@@ -127,15 +128,15 @@ export function usePointerHandlers({
   // Axis drag refs (Director mode — Z for elements, XYZ for camera)
   const isAxisDraggingRef = useRef(false)
   const axisDragAxisRef = useRef<'x' | 'y' | 'z'>('z')
-  const axisDragStartXRef = useRef(0)
-  const axisDragStartYRef = useRef(0)
   const axisDragOrigValueRef = useRef(0)
   const axisDragTargetRef = useRef<'element' | 'camera'>('element')
+  const axisDragStartTRef = useRef(0)                                  // ray-axis T at drag start
+  const axisDragOriginRef = useRef<[number, number, number]>([0, 0, 0]) // axis origin at drag start
+  const axisDragOrigPosRef = useRef<[number, number, number]>([0, 0, 0]) // full camera pos at drag start
 
-  // Legacy aliases (kept for minimal diff)
-  const isZDraggingRef = isAxisDraggingRef
-  const zDragStartYRef = axisDragStartYRef
-  const zDragOriginalZRef = axisDragOrigValueRef
+  // Camera body drag — ray-plane based
+  const dragPlaneNormalRef = useRef<[number, number, number]>([0, 0, 1])
+  const dragStartWorldRef = useRef<[number, number, number]>([0, 0, 0])
   const tunnelHoverRef = useRef<AxisHover>(null)
 
   // Rotation drag refs (Director mode)
@@ -209,10 +210,19 @@ export function usePointerHandlers({
             const origExtent = axis === 'sphere'
               ? rails.sphere
               : rails[axis][dir]
+            // Compute ray T at drag start for ray-based rail drag
+            const railAxisIdx = axis === 'truck' ? 0 : axis === 'boom' ? 1 : 2
+            const railSign = dir === 'pos' ? 1 : -1
+            const railAxisDir: [number, number, number] = [0, 0, 0]; railAxisDir[railAxisIdx] = railSign
+            const railBase: [number, number, number] = [...director.directorCameraPos]
+            railBase[railAxisIdx] += railSign * RAIL_OFFSET
+            const rayP = getCameraRayParams(renderer.camera)
+            const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+            const startT = rayAxisClosestT(ro, rd, railBase, railAxisDir)
             isDraggingRailHandleRef.current = true
             dragRailHandleRef.current = railHit
             dragRailOrigExtentRef.current = origExtent
-            dragRailOrigCanvasYRef.current = e.clientY - rect.top
+            dragRailStartTRef.current = startT ?? 0
             useDirectorStore.getState().setSelectedRailHandle(railHit.handleId)
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
@@ -223,11 +233,16 @@ export function usePointerHandlers({
         if (director.directorCameraSelected) {
           const camHover = director.directorCameraAxisHover
           if (camHover) {
+            const rayP = getCameraRayParams(renderer.camera)
+            const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+            const axisDir: [number, number, number] = [0, 0, 0]; axisDir[AXIS_IDX_MAP[camHover.axis]] = 1
+            const startT = rayAxisClosestT(ro, rd, director.directorCameraPos, axisDir)
             isAxisDraggingRef.current = true
             axisDragAxisRef.current = camHover.axis
-            axisDragStartXRef.current = e.clientX
-            axisDragStartYRef.current = e.clientY
             axisDragOrigValueRef.current = director.directorCameraPos[AXIS_IDX_MAP[camHover.axis]]
+            axisDragStartTRef.current = startT ?? 0
+            axisDragOriginRef.current = [...director.directorCameraPos]
+            axisDragOrigPosRef.current = [...director.directorCameraPos]
             axisDragTargetRef.current = 'camera'
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
@@ -240,6 +255,12 @@ export function usePointerHandlers({
           director.directorCameraPos, 16,
         )
         if (camBodyHit) {
+          // Compute plane for drag: perpendicular to view camera forward, through director camera
+          const rayP = getCameraRayParams(renderer.camera)
+          const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+          dragPlaneNormalRef.current = [...rayP.forward]
+          const startHit = rayPlaneIntersect(ro, rd, rayP.forward, director.directorCameraPos)
+          dragStartWorldRef.current = startHit ?? [...director.directorCameraPos]
           isDraggingDirCameraRef.current = true
           dragDirCameraOrigPosRef.current = [...director.directorCameraPos]
           useDirectorStore.getState().setDirectorCameraSelected(true)
@@ -277,19 +298,31 @@ export function usePointerHandlers({
       }
 
       // ── Element Z-axis drag (Director mode + tunnel face click) ──
-      if (tunnelHoverRef.current) {
+      {
+        const elRenderer = rendererRef.current
+        if (tunnelHoverRef.current && elRenderer) {
         const { selectedIds, elements: els } = useChoanStore.getState()
         if (selectedIds.length === 1) {
           const selEl = els.find((el) => el.id === selectedIds[0])
           if (selEl) {
+            const rs = useRenderSettings.getState()
+            const { w: ew, h: eh } = canvasSizeRef.current
+            const elRect = elRenderer.canvas.getBoundingClientRect()
+            const elWorldZ = selEl.z * rs.extrudeDepth + rs.extrudeDepth / 2
+            const elCenter = pixelToWorld(selEl.x + selEl.width / 2, selEl.y + selEl.height / 2, ew, eh)
+            const rayP = getCameraRayParams(elRenderer.camera)
+            const { ro, rd } = screenToRay(e.clientX, e.clientY, elRect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, ew, eh)
+            const startT = rayAxisClosestT(ro, rd, [elCenter[0], elCenter[1], elWorldZ], [0, 0, 1])
             isAxisDraggingRef.current = true
             axisDragAxisRef.current = 'z'
-            axisDragStartYRef.current = e.clientY
+            axisDragStartTRef.current = startT ?? 0
+            axisDragOriginRef.current = [elCenter[0], elCenter[1], elWorldZ]
             axisDragOrigValueRef.current = selEl.z
             axisDragTargetRef.current = 'element'
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
+        }
         }
       }
 
@@ -563,39 +596,54 @@ export function usePointerHandlers({
   // ── handlePointerMove ──
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    // ── Rail handle drag ──
+    // ── Rail handle drag (ray-axis based) ──
     if (isDraggingRailHandleRef.current && dragRailHandleRef.current) {
       const renderer = rendererRef.current
-      const rect = renderer?.canvas.getBoundingClientRect()
-      const { w, h } = canvasSizeRef.current
-      const canvasX = rect ? e.clientX - rect.left : e.clientX
-      const canvasY = rect ? e.clientY - rect.top  : e.clientY
-      const director = useDirectorStore.getState()
-      const newExtent = computeRailHandleDrag(
-        canvasX, canvasY, w, h,
-        director.directorCameraPos,
-        director.directorTargetPos,
-        dragRailHandleRef.current.handleId,
-        dragRailOrigExtentRef.current,
-        dragRailOrigCanvasYRef.current,
-      )
-      const { axis, dir } = dragRailHandleRef.current.handleId
-      useDirectorStore.getState().extendRail(axis, dir, newExtent)
+      if (renderer) {
+        const rect = renderer.canvas.getBoundingClientRect()
+        const { w, h } = canvasSizeRef.current
+        const { axis, dir } = dragRailHandleRef.current.handleId
+        if (axis !== 'sphere') {
+          const railAxisIdx = axis === 'truck' ? 0 : axis === 'boom' ? 1 : 2
+          const railSign = dir === 'pos' ? 1 : -1
+          const railAxisDir: [number, number, number] = [0, 0, 0]; railAxisDir[railAxisIdx] = railSign
+          const director = useDirectorStore.getState()
+          const railBase: [number, number, number] = [...director.directorCameraPos]
+          railBase[railAxisIdx] += railSign * RAIL_OFFSET
+          const rayP = getCameraRayParams(renderer.camera)
+          const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+          const currentT = rayAxisClosestT(ro, rd, railBase, railAxisDir)
+          if (currentT !== null) {
+            const delta = currentT - dragRailStartTRef.current
+            const newExtent = Math.max(0.5, dragRailOrigExtentRef.current + delta)
+            useDirectorStore.getState().extendRail(axis, dir, newExtent)
+          }
+        }
+      }
       return
     }
 
-    // ── Director camera body drag ──
+    // ── Director camera body drag (ray-plane) ──
     if (isDraggingDirCameraRef.current) {
       const renderer = rendererRef.current
-      const rect = renderer?.canvas.getBoundingClientRect()
-      const { w, h } = canvasSizeRef.current
-      const canvasX = rect ? e.clientX - rect.left : e.clientX
-      const canvasY = rect ? e.clientY - rect.top  : e.clientY
-      const newPos = computeCameraKeyframeDragPosition(
-        canvasX, canvasY, w, h,
-        dragDirCameraOrigPosRef.current, e.shiftKey,
-      )
-      useDirectorStore.getState().setDirectorCameraPos(newPos)
+      if (renderer) {
+        const rect = renderer.canvas.getBoundingClientRect()
+        const { w, h } = canvasSizeRef.current
+        const rayP = getCameraRayParams(renderer.camera)
+        const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+        const hit = rayPlaneIntersect(ro, rd, dragPlaneNormalRef.current, dragDirCameraOrigPosRef.current)
+        if (hit) {
+          const dx = hit[0] - dragStartWorldRef.current[0]
+          const dy = hit[1] - dragStartWorldRef.current[1]
+          const dz = hit[2] - dragStartWorldRef.current[2]
+          const newPos: [number, number, number] = [
+            dragDirCameraOrigPosRef.current[0] + dx,
+            dragDirCameraOrigPosRef.current[1] + dy,
+            dragDirCameraOrigPosRef.current[2] + dz,
+          ]
+          useDirectorStore.getState().setDirectorCameraPos(newPos)
+        }
+      }
       return
     }
 
@@ -617,30 +665,32 @@ export function usePointerHandlers({
       return
     }
 
-    // ── Axis drag (element Z / camera XYZ) ──
+    // ── Axis drag (element Z / camera XYZ) — ray-axis based ──
     if (isAxisDraggingRef.current) {
-      const speed = 0.30
-      if (axisDragTargetRef.current === 'camera') {
+      const renderer = rendererRef.current
+      if (renderer) {
+        const rect = renderer.canvas.getBoundingClientRect()
+        const { w, h } = canvasSizeRef.current
+        const rayP = getCameraRayParams(renderer.camera)
+        const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
         const axis = axisDragAxisRef.current
-        let delta: number
-        if (axis === 'x') {
-          delta = (e.clientX - axisDragStartXRef.current) * speed
-        } else if (axis === 'y') {
-          delta = -(e.clientY - axisDragStartYRef.current) * speed  // up = Y+
-        } else {
-          delta = (e.clientY - axisDragStartYRef.current) * speed   // down = Z+
-        }
-        const dirSt = useDirectorStore.getState()
-        const newPos: [number, number, number] = [...dirSt.directorCameraPos]
-        newPos[AXIS_IDX_MAP[axis]] = axisDragOrigValueRef.current + delta
-        dirSt.setDirectorCameraPos(newPos)
-      } else {
-        // Element Z drag (existing behavior)
-        const dy = e.clientY - axisDragStartYRef.current
-        const zDelta = dy * speed
-        const { selectedIds, updateElement } = useChoanStore.getState()
-        if (selectedIds.length === 1) {
-          updateElement(selectedIds[0], { z: axisDragOrigValueRef.current + zDelta })
+        const axisDir: [number, number, number] = [0, 0, 0]; axisDir[AXIS_IDX_MAP[axis]] = 1
+        const currentT = rayAxisClosestT(ro, rd, axisDragOriginRef.current, axisDir)
+        if (currentT !== null) {
+          const delta = currentT - axisDragStartTRef.current
+          if (axisDragTargetRef.current === 'camera') {
+            const newPos: [number, number, number] = [...axisDragOrigPosRef.current]
+            newPos[AXIS_IDX_MAP[axis]] += delta
+            useDirectorStore.getState().setDirectorCameraPos(newPos)
+          } else {
+            // Element Z drag: convert world delta to element.z units
+            const rs = useRenderSettings.getState()
+            const zDelta = rs.extrudeDepth > 0 ? delta / rs.extrudeDepth : 0
+            const { selectedIds, updateElement } = useChoanStore.getState()
+            if (selectedIds.length === 1) {
+              updateElement(selectedIds[0], { z: axisDragOrigValueRef.current + zDelta })
+            }
+          }
         }
       }
       return
@@ -852,9 +902,9 @@ export function usePointerHandlers({
       return
     }
 
-    // ── Z-axis drag cleanup ──
-    if (isZDraggingRef.current) {
-      isZDraggingRef.current = false
+    // ── Axis drag cleanup ──
+    if (isAxisDraggingRef.current) {
+      isAxisDraggingRef.current = false
       pushSnapshot()
       return
     }
