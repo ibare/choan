@@ -78,7 +78,9 @@ void main() {
 `
 
 // Frustum mask — darkens pixels whose ray doesn't pass through the director camera frustum.
-// Tests multiple sample points along each main-camera ray to approximate 3D volume test.
+// Analytic solution: no sampling. ndcX(t) and ndcY(t) are monotonic rational functions of t,
+// so the minimum of max(|ndcX|, |ndcY|) is guaranteed to occur at one of a finite set of
+// candidate t values (zero-crossings, envelope-crossings, endpoints).
 export const FRUSTUM_MASK_FRAG = /* glsl */ `#version 300 es
 precision highp float;
 
@@ -88,7 +90,7 @@ out vec4 fragColor;
 uniform sampler2D uColorTex;
 uniform vec2 uResolution;
 uniform float uDarken;
-uniform float uCamDist;        // orbit camera distance to target (for adaptive sampling)
+uniform float uCamDist;
 
 uniform vec3 uMainCamPos;
 uniform vec3 uMainCamForward;
@@ -98,34 +100,61 @@ uniform float uMainFovScale;
 
 uniform mat4 uDirViewProj;
 
+// max(|ndcX|, |ndcY|) at parameter t. Returns 2.0 if behind director camera.
+float edgeAt(vec4 Q, vec4 D, float t) {
+  float w = Q.w + t * D.w;
+  if (w <= 0.0) return 2.0;
+  return max(abs((Q.x + t * D.x) / w), abs((Q.y + t * D.y) / w));
+}
+
+void testCandidate(vec4 Q, vec4 D, float t, float tNear, float tFar, inout float minEdge) {
+  if (t >= tNear && t <= tFar) minEdge = min(minEdge, edgeAt(Q, D, t));
+}
+
 void main() {
   vec3 color = texture(uColorTex, vUV).rgb;
 
   vec2 uv = (2.0 * gl_FragCoord.xy - uResolution) / uResolution.y;
   vec3 rd = normalize(uMainCamForward + uv.x * uMainFovScale * uMainCamRight + uv.y * uMainFovScale * uMainCamUp);
 
-  // Adaptive sample range based on camera distance
-  float near = max(uCamDist * 0.2, 0.5);
-  float far = uCamDist * 4.0;
+  // Parameterize ray in director clip space: clip(t) = Q + t*D
+  // ndcX(t) = (Q.x + t*D.x) / (Q.w + t*D.w)  — monotonic rational function of t
+  // ndcY(t) = (Q.y + t*D.y) / (Q.w + t*D.w)  — same
+  vec4 Q = uDirViewProj * vec4(uMainCamPos, 1.0);
+  vec4 D = uDirViewProj * vec4(rd, 0.0);
 
-  // Sample 24 points along the ray, track min distance to frustum edge
-  float minEdge = 2.0; // >1 means never inside
-  for (int i = 0; i < 24; i++) {
-    float f = float(i) / 23.0;
-    float t = near + (far - near) * f * f; // quadratic distribution: denser near camera
-    vec3 p = uMainCamPos + rd * t;
-    vec4 clip = uDirViewProj * vec4(p, 1.0);
-    if (clip.w > 0.0) {
-      float ex = abs(clip.x / clip.w);
-      float ey = abs(clip.y / clip.w);
-      float edge = max(ex, ey);
-      minEdge = min(minEdge, edge);
-    }
+  float tNear = 0.1;
+  float tFar  = max(uCamDist * 8.0, 100.0);
+
+  // Restrict to director camera's front hemisphere (clip.w > 0)
+  if (abs(D.w) > 1e-6) {
+    float tW = -Q.w / D.w;
+    if (D.w < 0.0) tFar  = min(tFar,  tW);
+    else           tNear = max(tNear, tW);
+  } else if (Q.w <= 0.0) {
+    fragColor = vec4(color * uDarken, 1.0);
+    return;
   }
+  if (tNear >= tFar) { fragColor = vec4(color * uDarken, 1.0); return; }
 
-  // Smooth transition: 0.0 = deep inside frustum, 1.0 = far outside
+  // Exact minimum of max(|ndcX|, |ndcY|) over t ∈ [tNear, tFar].
+  // Candidates:
+  //   (a) endpoints tNear, tFar
+  //   (b) zero-crossings of ndcX/ndcY → local minima of their absolute values
+  //   (c) crossings |ndcX| = |ndcY| → minimum of the upper envelope
+  float minEdge = min(edgeAt(Q, D, tNear), edgeAt(Q, D, tFar));
+
+  // (b) ndcX = 0: Q.x + t*D.x = 0
+  if (abs(D.x) > 1e-6) testCandidate(Q, D, -Q.x / D.x, tNear, tFar, minEdge);
+  // (b) ndcY = 0: Q.y + t*D.y = 0
+  if (abs(D.y) > 1e-6) testCandidate(Q, D, -Q.y / D.y, tNear, tFar, minEdge);
+  // (c) ndcX = ndcY: t = (Q.y - Q.x) / (D.x - D.y)
+  if (abs(D.x - D.y) > 1e-6) testCandidate(Q, D, (Q.y - Q.x) / (D.x - D.y), tNear, tFar, minEdge);
+  // (c) ndcX = -ndcY: t = -(Q.x + Q.y) / (D.x + D.y)
+  if (abs(D.x + D.y) > 1e-6) testCandidate(Q, D, -(Q.x + Q.y) / (D.x + D.y), tNear, tFar, minEdge);
+
+  // Smooth transition at frustum boundary
   float factor = mix(1.0, uDarken, smoothstep(0.85, 1.15, minEdge));
-
   fragColor = vec4(color * factor, 1.0);
 }
 `

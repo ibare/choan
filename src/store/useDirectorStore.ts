@@ -13,6 +13,7 @@ interface DirectorStore {
   playStartTime: number  // performance.now() epoch for elapsed calculation
   selectedCameraKeyframeId: string | null
   focalLengthMm: number  // focal length in mm for FOV control
+  frustumSpotlightOn: boolean  // Q key frustum spotlight toggle
 
   // Mode controls
   setDirectorMode: (on: boolean) => void
@@ -21,6 +22,7 @@ interface DirectorStore {
   stopPlaying: () => void
   setSelectedCameraKeyframeId: (id: string | null) => void
   setFocalLengthMm: (mm: number) => void
+  toggleFrustumSpotlight: () => void
 
   // Camera keyframe CRUD (operates on active scene)
   addCameraKeyframe: (kf: CameraViewKeyframe) => void
@@ -53,10 +55,12 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   playStartTime: 0,
   selectedCameraKeyframeId: null,
   focalLengthMm: 38,
+  frustumSpotlightOn: false,
 
-  setDirectorMode: (on) => set({ directorMode: on, directorPlaying: false }),
+  setDirectorMode: (on) => set({ directorMode: on, directorPlaying: false, frustumSpotlightOn: false }),
   setSelectedCameraKeyframeId: (id) => set({ selectedCameraKeyframeId: id }),
   setFocalLengthMm: (mm) => set({ focalLengthMm: Math.max(10, Math.min(200, mm)) }),
+  toggleFrustumSpotlight: () => set((s) => ({ frustumSpotlightOn: !s.frustumSpotlightOn })),
 
   setDirectorPlayheadTime: (ms) => set({ directorPlayheadTime: Math.max(0, ms) }),
 

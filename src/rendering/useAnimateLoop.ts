@@ -78,12 +78,11 @@ export function useAnimateLoop({
     const atlasDirty = new Map<string, string>() // id → stateKey for dirty tracking
     let frameId = 0
 
-    // Q key: frustum spotlight mode
-    let qKeyDown = false
-    const onQDown = (e: KeyboardEvent) => { if (e.code === 'KeyQ' && !e.repeat) qKeyDown = true }
-    const onQUp = (e: KeyboardEvent) => { if (e.code === 'KeyQ') qKeyDown = false }
+    // Q key: frustum spotlight toggle
+    const onQDown = (e: KeyboardEvent) => {
+      if (e.code === 'KeyQ' && !e.repeat) useDirectorStore.getState().toggleFrustumSpotlight()
+    }
     window.addEventListener('keydown', onQDown)
-    window.addEventListener('keyup', onQUp)
 
     const animate = () => {
       frameId = requestAnimationFrame(animate)
@@ -250,10 +249,10 @@ export function useAnimateLoop({
 
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth, hoveredHistoryColor)
 
-      // Pre-compute director camera viewProj for frustum mask (Q key)
+      // Pre-compute director camera viewProj for frustum mask (Q key toggle)
       let dirCamStateForMask: Float32Array | null = null
       const dirForMask = useDirectorStore.getState()
-      if (qKeyDown && dirForMask.directorMode && !dirForMask.directorPlaying) {
+      if (dirForMask.frustumSpotlightOn && dirForMask.directorMode && !dirForMask.directorPlaying) {
         const scForMask = useSceneStore.getState()
         const actForMask = scForMask.scenes.find((s) => s.id === scForMask.activeSceneId)
         const dtForMask = actForMask?.directorTimeline ?? createDefaultDirectorTimeline()
@@ -299,7 +298,7 @@ export function useAnimateLoop({
         }
       } else {
         // Q key: frustum spotlight — darken pixels outside director camera frustum
-        if (qKeyDown && dirCamStateForMask) {
+        if (dirForMask.frustumSpotlightOn && dirCamStateForMask) {
           renderer.applyPendingResize()
           renderer.renderPipeline(rs)
           renderer.applyFrustumMask(dirCamStateForMask)
@@ -382,7 +381,6 @@ export function useAnimateLoop({
       cancelAnimationFrame(frameId)
       kfAnimator.stopAll()
       window.removeEventListener('keydown', onQDown)
-      window.removeEventListener('keyup', onQUp)
     }
   }, [])
 }

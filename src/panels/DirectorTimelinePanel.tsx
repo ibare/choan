@@ -3,7 +3,7 @@
 // Double-click event bar → switch to bundle editing mode.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Stop, Camera, Export } from '@phosphor-icons/react'
+import { Play, Pause, Stop, Camera, Export, Screencast } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
@@ -47,8 +47,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const { scenes, activeSceneId } = useSceneStore()
   const { animationBundles } = useChoanStore()
   const {
-    directorPlayheadTime, directorPlaying, focalLengthMm,
-    setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm,
+    directorPlayheadTime, directorPlaying, focalLengthMm, frustumSpotlightOn,
+    setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm, toggleFrustumSpotlight,
     addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
     addEventMarker, updateEventMarker, removeEventMarker,
   } = useDirectorStore()
@@ -552,6 +552,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           />
           <span className="ui-director-focal__label">{focalLengthMm}mm</span>
         </div>
+        <Tooltip content="Frustum Spotlight (Q)">
+          <Button className="btn-small" active={frustumSpotlightOn} onClick={toggleFrustumSpotlight}>
+            <Screencast size={14} />
+          </Button>
+        </Tooltip>
         <div className="timeline-separator" />
         {bundleOptions.length > 0 && (
           <Select
