@@ -25,7 +25,7 @@ const HANDLE_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]     
 const TARGET_CROSS_LEN = 0.4  // world units for target cross arms
 const SPHERE_SEGMENTS  = 36   // line segments for sphere circle
 
-const FRUSTUM_DEPTH = 4  // world units forward from camera position
+const FRUSTUM_DEPTH = 8  // world units forward from camera position
 
 export function drawCameraPathOverlay(
   ov: OverlayRenderer,
@@ -90,6 +90,7 @@ export function drawDirectorCameraSetup(
   cameraPos: [number, number, number],
   targetPos: [number, number, number],
   rails: DirectorRails,
+  railWorldAnchor: [number, number, number],
   isSelected: boolean,
   fov: number,
   dpr: number,
@@ -102,7 +103,7 @@ export function drawDirectorCameraSetup(
 
   // Rails (only when camera is selected)
   if (isSelected) {
-    drawRailAxes(ov, cameraPos, targetPos, rails, dpr)
+    drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr)
   }
 }
 
@@ -132,28 +133,42 @@ function drawRailAxes(
   cameraPos: [number, number, number],
   targetPos: [number, number, number],
   rails: DirectorRails,
+  railWorldAnchor: [number, number, number],
   dpr: number,
 ): void {
-  const [cx, cy, cz] = cameraPos
-
-  // Helper: draw one sided rail segment offset beyond axis tunnels
+  // Helper: draw one sided rail segment.
+  // Extended rails are anchored in world space; unextended rails follow cameraPos.
   function drawOneSide(
-    dx: number, dy: number, dz: number,
+    axisIdx: number,  // 0=x, 1=y, 2=z
+    sign: number,     // +1 or -1
     extent: number,
   ): void {
-    // Start at the offset point (beyond axis tunnel)
-    const baseX = cx + dx * RAIL_OFFSET
-    const baseY = cy + dy * RAIL_OFFSET
-    const baseZ = cz + dz * RAIL_OFFSET
+    const isExtended = extent > RAIL_MIN_STUB + 0.001
+    // Anchor: extended rails use world anchor, otherwise camera position
+    const anchorVal = isExtended ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
+    const dx = axisIdx === 0 ? sign : 0
+    const dy = axisIdx === 1 ? sign : 0
+    const dz = axisIdx === 2 ? sign : 0
+    const baseX = (axisIdx === 0 ? anchorVal : cameraPos[0]) + dx * RAIL_OFFSET
+    const baseY = (axisIdx === 1 ? anchorVal : cameraPos[1]) + dy * RAIL_OFFSET
+    const baseZ = (axisIdx === 2 ? anchorVal : cameraPos[2]) + dz * RAIL_OFFSET
     const stub = RAIL_MIN_STUB
     const stubEndX = baseX + dx * stub
     const stubEndY = baseY + dy * stub
     const stubEndZ = baseZ + dz * stub
 
+    // Connecting line: camera → rail base (fills the gap for extended rails)
+    if (isExtended) {
+      ov.drawLines3D(new Float32Array([
+        cameraPos[0], cameraPos[1], cameraPos[2],
+        baseX, baseY, baseZ,
+      ]), RAIL_ACTIVE_COLOR)
+    }
+
     // Red stub (always present)
     ov.drawLines3D(new Float32Array([baseX, baseY, baseZ, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR)
 
-    if (extent > stub + 0.001) {
+    if (isExtended) {
       // Blue extension beyond the stub
       const tipX = baseX + dx * extent
       const tipY = baseY + dy * extent
@@ -169,15 +184,15 @@ function drawRailAxes(
     }
   }
 
-  // Truck (X axis)
-  drawOneSide( 1, 0, 0, rails.truck.pos)
-  drawOneSide(-1, 0, 0, rails.truck.neg)
-  // Boom (Y axis)
-  drawOneSide(0,  1, 0, rails.boom.pos)
-  drawOneSide(0, -1, 0, rails.boom.neg)
-  // Dolly (Z axis)
-  drawOneSide(0, 0,  1, rails.dolly.pos)
-  drawOneSide(0, 0, -1, rails.dolly.neg)
+  // Truck (X axis=0)
+  drawOneSide(0,  1, rails.truck.pos)
+  drawOneSide(0, -1, rails.truck.neg)
+  // Boom (Y axis=1)
+  drawOneSide(1,  1, rails.boom.pos)
+  drawOneSide(1, -1, rails.boom.neg)
+  // Dolly (Z axis=2)
+  drawOneSide(2,  1, rails.dolly.pos)
+  drawOneSide(2, -1, rails.dolly.neg)
 
   // Sphere rail — horizontal circle (XZ plane) around target
   drawSphereRail(ov, cameraPos, targetPos, rails.sphere, dpr)

@@ -23,7 +23,7 @@ import { track } from '../utils/analytics'
 import { pushSnapshot } from '../store/history'
 import { useDirectorStore } from '../store/useDirectorStore'
 import { useSceneStore } from '../store/useSceneStore'
-import { createDefaultDirectorTimeline } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, RAIL_MIN_STUB } from '../animation/directorTypes'
 import {
   hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
   hitTestDirectorCameraBody, hitTestRailHandle, computeRailHandleDrag,
@@ -202,7 +202,7 @@ export function usePointerHandlers({
           const railHit = hitTestRailHandle(
             e.clientX, e.clientY, rect, renderer.overlay,
             director.directorCameraPos, director.directorTargetPos,
-            director.directorRails, 14,
+            director.directorRails, director.railWorldAnchor, 14,
           )
           if (railHit) {
             const { axis, dir } = railHit.handleId
@@ -679,9 +679,30 @@ export function usePointerHandlers({
         if (currentT !== null) {
           const delta = currentT - axisDragStartTRef.current
           if (axisDragTargetRef.current === 'camera') {
+            const dirSt = useDirectorStore.getState()
+            const ai = AXIS_IDX_MAP[axis]
+            const rails = dirSt.directorRails
+            const railKey = axis === 'x' ? 'truck' : axis === 'y' ? 'boom' : 'dolly'
+            const railExt = rails[railKey]
+            const isExtended = railExt.neg > RAIL_MIN_STUB + 0.01 || railExt.pos > RAIL_MIN_STUB + 0.01
+            let newVal = axisDragOrigPosRef.current[ai] + delta
+
+            if (isExtended && !e.altKey) {
+              // Clamp within rail range (anchor-based)
+              const anchor = dirSt.railWorldAnchor[ai]
+              newVal = Math.max(anchor - railExt.neg, Math.min(anchor + railExt.pos, newVal))
+            }
+
             const newPos: [number, number, number] = [...axisDragOrigPosRef.current]
-            newPos[AXIS_IDX_MAP[axis]] += delta
-            useDirectorStore.getState().setDirectorCameraPos(newPos)
+            newPos[ai] = newVal
+            dirSt.setDirectorCameraPos(newPos)
+
+            if (!isExtended || e.altKey) {
+              // Rail not extended or Alt override → move anchor with camera
+              const newAnchor: [number, number, number] = [...dirSt.railWorldAnchor]
+              newAnchor[ai] = newVal
+              dirSt.setRailWorldAnchor(newAnchor)
+            }
           } else {
             // Element Z drag: convert world delta to element.z units
             const rs = useRenderSettings.getState()

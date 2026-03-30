@@ -101,8 +101,10 @@ export default function SDFCanvas() {
     const renderer = rendererRef.current
     if (!renderer) return
     const { position, target } = renderer.camera
-    useDirectorStore.getState().setDirectorCameraPos([...position] as [number, number, number])
+    const camPos = [...position] as [number, number, number]
+    useDirectorStore.getState().setDirectorCameraPos(camPos)
     useDirectorStore.getState().setDirectorTargetPos([...target] as [number, number, number])
+    useDirectorStore.getState().setRailWorldAnchor([...camPos])
   }, [directorMode])
 
   // Initialize renderer + controls

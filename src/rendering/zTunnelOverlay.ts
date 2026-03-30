@@ -24,7 +24,7 @@ const AXIS_STYLE: Record<'x'|'y'|'z', AxisColorSet> = {
   y: { line: [0.3,0.8,0.3,0.3], fill: [0.3,0.8,0.3,0.08], hover: [0.3,0.8,0.3,0.18], arrow: [0.3,0.8,0.3,0.7], section: [0.3,0.8,0.3,0.5] },
   z: { line: [0.3,0.6,1.0,0.3], fill: [0.3,0.6,1.0,0.08], hover: [0.3,0.6,1.0,0.18], arrow: [0.3,0.6,1.0,0.7], section: [0.3,0.6,1.0,0.5] },
 }
-const CAM_TUNNEL_HALF = 0.3   // camera cross-section half-size (world)
+const CAM_TUNNEL_HALF = 0.6   // camera cross-section half-size (world)
 const CAM_TUNNEL_RANGE = 4    // camera tunnel extent each direction
 const AXIS_IDX = { x: 0, y: 1, z: 2 } as const
 const ROTATION_RING_COLOR: [number, number, number, number] = [1.0, 0.6, 0.2, 0.6]

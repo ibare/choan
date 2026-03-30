@@ -36,6 +36,7 @@ interface DirectorStore {
   directorRails:          DirectorRails
   selectedRailHandle:     RailHandleId | null
   directorCameraAxisHover: AxisHover
+  railWorldAnchor:         [number, number, number]  // world-fixed anchor for extended rails
 
   // Mode controls
   setDirectorMode: (on: boolean) => void
@@ -55,6 +56,7 @@ interface DirectorStore {
   setSelectedRailHandle:     (handle: RailHandleId | null) => void
   extendRail:                (axis: RailAxis, dir: RailDir, newExtent: number) => void
   setDirectorCameraAxisHover: (hover: AxisHover) => void
+  setRailWorldAnchor:        (anchor: [number, number, number]) => void
 
   // Camera keyframe CRUD (operates on active scene)
   addCameraKeyframe: (kf: CameraViewKeyframe) => void
@@ -97,6 +99,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   directorRails:          createDefaultRails(),
   selectedRailHandle:     null,
   directorCameraAxisHover: null,
+  railWorldAnchor:         [0, 3, 8],
 
   setDirectorMode: (on) => set({
     directorMode: on,
@@ -146,6 +149,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   },
 
   setDirectorCameraAxisHover: (hover) => set({ directorCameraAxisHover: hover }),
+  setRailWorldAnchor: (anchor) => set({ railWorldAnchor: anchor }),
 
   // ── Camera keyframe CRUD ──
 

@@ -68,17 +68,25 @@ function getRailHandlePositions(
   cameraPos: [number, number, number],
   targetPos: [number, number, number],
   rails: DirectorRails,
+  railWorldAnchor: [number, number, number],
 ): Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> {
   const [cx, cy, cz] = cameraPos
+  const [ax, ay, az] = railWorldAnchor
   const [tx, , tz] = targetPos
   const o = RAIL_OFFSET
+  // Extended rails use anchor, unextended use camera pos
+  function base(axisIdx: number, ext: { neg: number; pos: number }): number {
+    const isExt = ext.neg > RAIL_MIN_STUB + 0.01 || ext.pos > RAIL_MIN_STUB + 0.01
+    return isExt ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
+  }
+  const bx = base(0, rails.truck), by = base(1, rails.boom), bz = base(2, rails.dolly)
   const handles: Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> = [
-    { handleId: { axis: 'truck', dir: 'pos' }, wx: cx + o + rails.truck.pos, wy: cy, wz: cz },
-    { handleId: { axis: 'truck', dir: 'neg' }, wx: cx - o - rails.truck.neg, wy: cy, wz: cz },
-    { handleId: { axis: 'boom',  dir: 'pos' }, wx: cx, wy: cy + o + rails.boom.pos,  wz: cz },
-    { handleId: { axis: 'boom',  dir: 'neg' }, wx: cx, wy: cy - o - rails.boom.neg,  wz: cz },
-    { handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: cz + o + rails.dolly.pos },
-    { handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: cz - o - rails.dolly.neg },
+    { handleId: { axis: 'truck', dir: 'pos' }, wx: bx + o + rails.truck.pos, wy: cy, wz: cz },
+    { handleId: { axis: 'truck', dir: 'neg' }, wx: bx - o - rails.truck.neg, wy: cy, wz: cz },
+    { handleId: { axis: 'boom',  dir: 'pos' }, wx: cx, wy: by + o + rails.boom.pos,  wz: cz },
+    { handleId: { axis: 'boom',  dir: 'neg' }, wx: cx, wy: by - o - rails.boom.neg,  wz: cz },
+    { handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: bz + o + rails.dolly.pos },
+    { handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: bz - o - rails.dolly.neg },
   ]
   // Sphere handle: point on circle toward camera (XZ projection)
   const dx = cx - tx
@@ -128,6 +136,7 @@ export function hitTestRailHandle(
   cameraPos: [number, number, number],
   targetPos: [number, number, number],
   rails: DirectorRails,
+  railWorldAnchor: [number, number, number],
   hitRadius: number,
 ): RailHandleHit | null {
   const dpr = window.devicePixelRatio || 1
@@ -137,7 +146,7 @@ export function hitTestRailHandle(
   let bestDist = hitRadius * dpr
   let bestHit:  RailHandleHit | null = null
 
-  for (const h of getRailHandlePositions(cameraPos, targetPos, rails)) {
+  for (const h of getRailHandlePositions(cameraPos, targetPos, rails, railWorldAnchor)) {
     const s = overlay.projectToScreen(h.wx, h.wy, h.wz)
     const d = Math.sqrt((mx - s.px) ** 2 + (my - s.py) ** 2)
     if (d < bestDist) {

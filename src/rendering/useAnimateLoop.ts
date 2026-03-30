@@ -361,6 +361,7 @@ export function useAnimateLoop({
           dirState.directorCameraPos,
           dirState.directorTargetPos,
           dirState.directorRails,
+          dirState.railWorldAnchor,
           dirState.directorCameraSelected,
           dirFov,
           dpr,
