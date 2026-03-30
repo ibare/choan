@@ -26,9 +26,9 @@ import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
-import { drawCameraPathOverlay } from './cameraPathOverlay'
+import { drawCameraPathOverlay, drawDirectorCameraSetup } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
-import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, type TunnelHover } from './zTunnelOverlay'
+import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
 
 export function useAnimateLoop({
   rendererRef,
@@ -67,7 +67,7 @@ export function useAnimateLoop({
   colorPickerHoverRef: MutableRefObject<number>
   animatedElementsRef: MutableRefObject<ChoanElement[]>
   splitModeRef: MutableRefObject<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>
-  tunnelHoverRef: MutableRefObject<TunnelHover>
+  tunnelHoverRef: MutableRefObject<AxisHover>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -253,17 +253,15 @@ export function useAnimateLoop({
       let dirCamStateForMask: Float32Array | null = null
       const dirForMask = useDirectorStore.getState()
       if (dirForMask.frustumSpotlightOn && dirForMask.directorMode && !dirForMask.directorPlaying) {
-        const scForMask = useSceneStore.getState()
-        const actForMask = scForMask.scenes.find((s) => s.id === scForMask.activeSceneId)
-        const dtForMask = actForMask?.directorTimeline ?? createDefaultDirectorTimeline()
-        if (dtForMask.cameraKeyframes.length >= 1) {
-          const camSt = evaluateDirectorCamera(dtForMask.cameraKeyframes, dirForMask.directorPlayheadTime)
-          if (camSt) {
+        {
+          const camPos = dirForMask.directorCameraPos
+          const camTgt = dirForMask.directorTargetPos
+          if (camPos && camTgt) {
             const focalMm = dirForMask.focalLengthMm
             const fovMask = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
             const [vfaw, vfah] = dirForMask.viewfinderAspect.split(':').map(Number)
             dirCamStateForMask = buildViewProjMatrix(
-              camSt.position, camSt.target, [0, 1, 0],
+              camPos, camTgt, [0, 1, 0],
               fovMask, vfaw / vfah, 0.1, 500,
             )
           }
@@ -343,27 +341,47 @@ export function useAnimateLoop({
           }
         }
 
-        // Camera path overlay
+        // ── Director camera object + rails overlay ──
+        const dpr = window.devicePixelRatio || 1
+        const focalMm = dirState.focalLengthMm
+        const dirFov = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
+        const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)
+
+        // Camera frustum footprint on Z=0 ground plane
+        drawCameraFootprint(
+          renderer.overlay,
+          dirState.directorCameraPos, dirState.directorTargetPos,
+          dirFov, vfaw / vfah,
+          false,
+        )
+
+        // Camera icon + target marker + rails
+        drawDirectorCameraSetup(
+          renderer.overlay,
+          dirState.directorCameraPos,
+          dirState.directorTargetPos,
+          dirState.directorRails,
+          dirState.directorCameraSelected,
+          dirFov,
+          dpr,
+        )
+
+        // Camera XYZ axis move handles (when camera is selected)
+        if (dirState.directorCameraSelected) {
+          drawCameraAxisHandles(
+            renderer.overlay,
+            dirState.directorCameraPos,
+            ['x', 'y', 'z'],
+            dirState.directorCameraAxisHover,
+          )
+        }
+
+        // Legacy keyframe path overlay (kept for playback preview)
         const scState = useSceneStore.getState()
         const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
         const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
         if (dirTl.cameraKeyframes.length >= 1) {
           const curCamState = evaluateDirectorCamera(dirTl.cameraKeyframes, dirState.directorPlayheadTime)
-          const dpr = window.devicePixelRatio || 1
-
-          // Camera frustum footprint on Z=0 ground plane
-          if (curCamState) {
-            const focalMm = dirState.focalLengthMm
-            const fovFromMm = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
-            const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)
-            drawCameraFootprint(
-              renderer.overlay,
-              curCamState.position, curCamState.target,
-              fovFromMm, vfaw / vfah,
-              false,
-            )
-          }
-
           drawCameraPathOverlay(
             renderer.overlay,
             dirTl.cameraKeyframes,

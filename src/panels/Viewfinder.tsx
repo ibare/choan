@@ -16,14 +16,17 @@ import { Section } from '../components/ui/Section'
 
 export default function Viewfinder() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { directorMode, directorPlaying, directorPlayheadTime, focalLengthMm, viewfinderAspect } = useDirectorStore()
+  const {
+    directorMode, directorPlaying, directorPlayheadTime,
+    focalLengthMm, viewfinderAspect,
+    directorCameraPos, directorTargetPos,
+  } = useDirectorStore()
   const { scenes, activeSceneId } = useSceneStore()
 
   const scene = scenes.find((s) => s.id === activeSceneId)
   const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
-  const hasCameraKfs = dt.cameraKeyframes.length > 0
 
-  const visible = directorMode && !directorPlaying && hasCameraKfs
+  const visible = directorMode && !directorPlaying
 
   const [aw, ah] = viewfinderAspect.split(':').map(Number)
   const vfAspectRatio = aw / ah
@@ -53,17 +56,14 @@ export default function Viewfinder() {
     const savedFov = cam.fov
     const savedSize = renderer.getCssSize()
 
-    // Apply director camera
+    // Apply director camera from rail UX state
     const fovFromMm = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
-    const camState = evaluateDirectorCamera(dt.cameraKeyframes, directorPlayheadTime)
-    if (camState) {
-      cam.position[0] = camState.position[0]
-      cam.position[1] = camState.position[1]
-      cam.position[2] = camState.position[2]
-      cam.target[0] = camState.target[0]
-      cam.target[1] = camState.target[1]
-      cam.target[2] = camState.target[2]
-    }
+    cam.position[0] = directorCameraPos[0]
+    cam.position[1] = directorCameraPos[1]
+    cam.position[2] = directorCameraPos[2]
+    cam.target[0] = directorTargetPos[0]
+    cam.target[1] = directorTargetPos[1]
+    cam.target[2] = directorTargetPos[2]
     cam.fov = fovFromMm
 
     // Resize renderer to viewfinder aspect — this sets camera.aspect correctly
@@ -104,7 +104,7 @@ export default function Viewfinder() {
     renderer.updateScene(state.elements, rs.extrudeDepth)
     renderer.renderPipeline(rs)
     renderer.blitAndOverlay()
-  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, hasCameraKfs, viewfinderAspect])
+  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, viewfinderAspect, directorCameraPos, directorTargetPos])
 
   if (!visible) return null
 

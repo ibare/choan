@@ -17,6 +17,7 @@ import NavigationGizmo from './NavigationGizmo'
 import SplitLabels from './SplitLabels'
 import ContextToolbar from './ContextToolbar'
 import { onExportAnimStart } from '../animation/exportAnimation'
+import { useDirectorStore } from '../store/useDirectorStore'
 // PinOverlay removed — sizing indicators rendered via WebGL overlay
 
 export default function SDFCanvas() {
@@ -92,6 +93,17 @@ export default function SDFCanvas() {
     }
     setDistanceLabels(labels)
   }, [altPressed, selectedIds, elements, pixelToWorld, worldToPixel])
+
+  // Initialize directorCameraPos/TargetPos from viewport camera when entering director mode
+  const directorMode = useDirectorStore((s) => s.directorMode)
+  useEffect(() => {
+    if (!directorMode) return
+    const renderer = rendererRef.current
+    if (!renderer) return
+    const { position, target } = renderer.camera
+    useDirectorStore.getState().setDirectorCameraPos([...position] as [number, number, number])
+    useDirectorStore.getState().setDirectorTargetPos([...target] as [number, number, number])
+  }, [directorMode])
 
   // Initialize renderer + controls
   useEffect(() => {

@@ -5,13 +5,28 @@ import type { OverlayRenderer } from '../engine/overlay'
 import type { ChoanElement } from '../store/useChoanStore'
 import { pixelToWorld } from '../coords/coordinateSystem'
 
-export type TunnelHover = { side: 'z-minus' | 'z-plus' } | null
+// ── Axis hover type (generalized for XYZ) ──
+export type AxisHover = { axis: 'x' | 'y' | 'z'; side: 'neg' | 'pos' } | null
+/** @deprecated Use AxisHover */
+export type TunnelHover = AxisHover
 
+// Z-axis tunnel colors (existing element tunnel)
 const TUNNEL_LINE_COLOR: [number, number, number, number] = [0.3, 0.6, 1.0, 0.3]
 const TUNNEL_FILL_COLOR: [number, number, number, number] = [0.3, 0.6, 1.0, 0.08]
 const TUNNEL_HOVER_COLOR: [number, number, number, number] = [0.3, 0.6, 1.0, 0.18]
 const ARROW_COLOR: [number, number, number, number] = [0.3, 0.6, 1.0, 0.7]
 const SECTION_COLOR: [number, number, number, number] = [0.3, 0.6, 1.0, 0.5]
+
+// Axis-specific colors for camera XYZ tunnels
+type AxisColorSet = { line: [number,number,number,number]; fill: [number,number,number,number]; hover: [number,number,number,number]; arrow: [number,number,number,number]; section: [number,number,number,number] }
+const AXIS_STYLE: Record<'x'|'y'|'z', AxisColorSet> = {
+  x: { line: [0.9,0.3,0.3,0.3], fill: [0.9,0.3,0.3,0.08], hover: [0.9,0.3,0.3,0.18], arrow: [0.9,0.3,0.3,0.7], section: [0.9,0.3,0.3,0.5] },
+  y: { line: [0.3,0.8,0.3,0.3], fill: [0.3,0.8,0.3,0.08], hover: [0.3,0.8,0.3,0.18], arrow: [0.3,0.8,0.3,0.7], section: [0.3,0.8,0.3,0.5] },
+  z: { line: [0.3,0.6,1.0,0.3], fill: [0.3,0.6,1.0,0.08], hover: [0.3,0.6,1.0,0.18], arrow: [0.3,0.6,1.0,0.7], section: [0.3,0.6,1.0,0.5] },
+}
+const CAM_TUNNEL_HALF = 0.3   // camera cross-section half-size (world)
+const CAM_TUNNEL_RANGE = 4    // camera tunnel extent each direction
+const AXIS_IDX = { x: 0, y: 1, z: 2 } as const
 const ROTATION_RING_COLOR: [number, number, number, number] = [1.0, 0.6, 0.2, 0.6]
 const ROTATION_HANDLE_COLOR: [number, number, number, number] = [1.0, 0.6, 0.2, 0.9]
 const TUNNEL_Z_RANGE = 20
@@ -69,13 +84,13 @@ export function drawZTunnelOverlay(
     const a = corners[i]
     const b = corners[(i + 1) % 4]
     // Z- half
-    const zMinColor = hover?.side === 'z-minus' ? TUNNEL_HOVER_COLOR : TUNNEL_FILL_COLOR
+    const zMinColor = (hover?.axis === 'z' && hover.side === 'neg') ? TUNNEL_HOVER_COLOR : TUNNEL_FILL_COLOR
     ov.drawTriangles3D(new Float32Array([
       a[0], a[1], zMin, b[0], b[1], zMin, b[0], b[1], elZMid,
       a[0], a[1], zMin, b[0], b[1], elZMid, a[0], a[1], elZMid,
     ]), zMinColor)
     // Z+ half
-    const zPlusColor = hover?.side === 'z-plus' ? TUNNEL_HOVER_COLOR : TUNNEL_FILL_COLOR
+    const zPlusColor = (hover?.axis === 'z' && hover.side === 'pos') ? TUNNEL_HOVER_COLOR : TUNNEL_FILL_COLOR
     ov.drawTriangles3D(new Float32Array([
       a[0], a[1], elZMid, b[0], b[1], elZMid, b[0], b[1], zMax,
       a[0], a[1], elZMid, b[0], b[1], zMax, a[0], a[1], zMax,
@@ -103,7 +118,7 @@ export function drawZTunnelOverlay(
     const headLen = arrowLen * 0.45
     const headW = arrowLen * 0.6
 
-    const dir = hover.side === 'z-plus' ? 1 : -1
+    const dir = hover.side === 'pos' ? 1 : -1
     const arrowZ = elZMid + dir * arrowLen * 1.5
     const tipZ = arrowZ + dir * arrowLen
     const headBaseZ = tipZ - dir * headLen
@@ -144,7 +159,7 @@ export function hitTestTunnelFace(
     if (
       ptInTri(canvasPx, canvasPy, p0.px, p0.py, p1.px, p1.py, p2.px, p2.py) ||
       ptInTri(canvasPx, canvasPy, p0.px, p0.py, p2.px, p2.py, p3.px, p3.py)
-    ) return { side: 'z-minus' }
+    ) return { axis: 'z', side: 'neg' }
 
     // Z+ half quad
     const q0 = ov.projectToScreen(a[0], a[1], elZMid)
@@ -154,7 +169,151 @@ export function hitTestTunnelFace(
     if (
       ptInTri(canvasPx, canvasPy, q0.px, q0.py, q1.px, q1.py, q2.px, q2.py) ||
       ptInTri(canvasPx, canvasPy, q0.px, q0.py, q2.px, q2.py, q3.px, q3.py)
-    ) return { side: 'z-plus' }
+    ) return { axis: 'z', side: 'pos' }
+  }
+  return null
+}
+
+// ── Camera XYZ axis move handles ──────────────────────────────────────────────
+// Same visual language as the element Z-tunnel but generalized for any axis.
+
+/** Cross-section corners for a given axis around a 3D center point. */
+function camAxisCrossSection(c: [number, number, number], axis: 'x' | 'y' | 'z'): [number, number, number][] {
+  const s = CAM_TUNNEL_HALF
+  switch (axis) {
+    case 'z': return [[c[0]-s,c[1]-s,c[2]], [c[0]+s,c[1]-s,c[2]], [c[0]+s,c[1]+s,c[2]], [c[0]-s,c[1]+s,c[2]]]
+    case 'x': return [[c[0],c[1]-s,c[2]-s], [c[0],c[1]+s,c[2]-s], [c[0],c[1]+s,c[2]+s], [c[0],c[1]-s,c[2]+s]]
+    case 'y': return [[c[0]-s,c[1],c[2]-s], [c[0]+s,c[1],c[2]-s], [c[0]+s,c[1],c[2]+s], [c[0]-s,c[1],c[2]+s]]
+  }
+}
+
+/** Draw a single axis tunnel: guide lines + faces + section wireframe + arrow. */
+function drawSingleAxisTunnel(
+  ov: OverlayRenderer,
+  corners: [number, number, number][],
+  axis: 'x' | 'y' | 'z',
+  center: number,
+  range: number,
+  hover: AxisHover,
+  style: AxisColorSet,
+): void {
+  const ai = AXIS_IDX[axis]
+  const lo = center - range
+  const hi = center + range
+
+  // Guide lines
+  const lv: number[] = []
+  for (const c of corners) {
+    const p0 = [c[0], c[1], c[2]]; p0[ai] = lo
+    const p1 = [c[0], c[1], c[2]]; p1[ai] = hi
+    lv.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
+  }
+  ov.drawLines3D(new Float32Array(lv), style.line)
+
+  // Tunnel faces
+  const isNeg = hover?.axis === axis && hover.side === 'neg'
+  const isPos = hover?.axis === axis && hover.side === 'pos'
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i], b = corners[(i + 1) % 4]
+    const aLo = [a[0],a[1],a[2]]; aLo[ai] = lo
+    const bLo = [b[0],b[1],b[2]]; bLo[ai] = lo
+    const aMid = [a[0],a[1],a[2]]; aMid[ai] = center
+    const bMid = [b[0],b[1],b[2]]; bMid[ai] = center
+    const aHi = [a[0],a[1],a[2]]; aHi[ai] = hi
+    const bHi = [b[0],b[1],b[2]]; bHi[ai] = hi
+    ov.drawTriangles3D(new Float32Array([...aLo,...bLo,...bMid, ...aLo,...bMid,...aMid]), isNeg ? style.hover : style.fill)
+    ov.drawTriangles3D(new Float32Array([...aMid,...bMid,...bHi, ...aMid,...bHi,...aHi]), isPos ? style.hover : style.fill)
+  }
+
+  // Section wireframe
+  const sv: number[] = []
+  for (let i = 0; i < 4; i++) {
+    const a = [corners[i][0], corners[i][1], corners[i][2]]; a[ai] = center
+    const b = [corners[(i+1)%4][0], corners[(i+1)%4][1], corners[(i+1)%4][2]]; b[ai] = center
+    sv.push(a[0],a[1],a[2], b[0],b[1],b[2])
+  }
+  ov.drawLines3D(new Float32Array(sv), style.section)
+
+  // Arrow on hovered side
+  if (hover?.axis === axis) {
+    let cx = 0, cy = 0, cz = 0
+    for (const c of corners) { cx += c[0]; cy += c[1]; cz += c[2] }
+    cx /= 4; cy /= 4; cz /= 4
+    const aLen = CAM_TUNNEL_HALF * 2.0
+    const aW = aLen * 0.4, hLen = aLen * 0.45, hW = aLen * 0.6
+    const d = hover.side === 'pos' ? 1 : -1
+    const shaftZ = center + d * aLen * 1.5
+    const tipZ = shaftZ + d * aLen
+    const headBase = tipZ - d * hLen
+    const pi = (ai + 1) % 3
+    const s0 = [cx,cy,cz]; s0[ai] = shaftZ; s0[pi] -= aW/2
+    const s1 = [cx,cy,cz]; s1[ai] = shaftZ; s1[pi] += aW/2
+    const s2 = [cx,cy,cz]; s2[ai] = headBase; s2[pi] += aW/2
+    const s3 = [cx,cy,cz]; s3[ai] = headBase; s3[pi] -= aW/2
+    ov.drawTriangles3D(new Float32Array([...s0,...s1,...s2, ...s0,...s2,...s3]), style.arrow)
+    const h0 = [cx,cy,cz]; h0[ai] = headBase; h0[pi] -= hW
+    const h1 = [cx,cy,cz]; h1[ai] = headBase; h1[pi] += hW
+    const h2 = [cx,cy,cz]; h2[ai] = tipZ
+    ov.drawTriangles3D(new Float32Array([...h0,...h1,...h2]), style.arrow)
+  }
+}
+
+/** Hit-test a single axis tunnel. */
+function hitTestSingleAxisTunnel(
+  cpx: number, cpy: number, ov: OverlayRenderer,
+  corners: [number, number, number][], axis: 'x'|'y'|'z',
+  center: number, range: number,
+): AxisHover {
+  const ai = AXIS_IDX[axis]
+  const lo = center - range, hi = center + range
+  for (let i = 0; i < 4; i++) {
+    const a = corners[i], b = corners[(i+1)%4]
+    const aLo = [a[0],a[1],a[2]]; aLo[ai] = lo
+    const bLo = [b[0],b[1],b[2]]; bLo[ai] = lo
+    const aMid = [a[0],a[1],a[2]]; aMid[ai] = center
+    const bMid = [b[0],b[1],b[2]]; bMid[ai] = center
+    const p0 = ov.projectToScreen(aLo[0],aLo[1],aLo[2])
+    const p1 = ov.projectToScreen(bLo[0],bLo[1],bLo[2])
+    const p2 = ov.projectToScreen(bMid[0],bMid[1],bMid[2])
+    const p3 = ov.projectToScreen(aMid[0],aMid[1],aMid[2])
+    if (ptInTri(cpx,cpy,p0.px,p0.py,p1.px,p1.py,p2.px,p2.py) ||
+        ptInTri(cpx,cpy,p0.px,p0.py,p2.px,p2.py,p3.px,p3.py)) return { axis, side: 'neg' }
+    const aHi = [a[0],a[1],a[2]]; aHi[ai] = hi
+    const bHi = [b[0],b[1],b[2]]; bHi[ai] = hi
+    const q0 = ov.projectToScreen(aMid[0],aMid[1],aMid[2])
+    const q1 = ov.projectToScreen(bMid[0],bMid[1],bMid[2])
+    const q2 = ov.projectToScreen(bHi[0],bHi[1],bHi[2])
+    const q3 = ov.projectToScreen(aHi[0],aHi[1],aHi[2])
+    if (ptInTri(cpx,cpy,q0.px,q0.py,q1.px,q1.py,q2.px,q2.py) ||
+        ptInTri(cpx,cpy,q0.px,q0.py,q2.px,q2.py,q3.px,q3.py)) return { axis, side: 'pos' }
+  }
+  return null
+}
+
+/** Draw XYZ axis move handles for the director camera. */
+export function drawCameraAxisHandles(
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  activeAxes: ('x' | 'y' | 'z')[],
+  hover: AxisHover,
+): void {
+  for (const axis of activeAxes) {
+    const corners = camAxisCrossSection(cameraPos, axis)
+    drawSingleAxisTunnel(ov, corners, axis, cameraPos[AXIS_IDX[axis]], CAM_TUNNEL_RANGE, hover, AXIS_STYLE[axis])
+  }
+}
+
+/** Hit-test camera XYZ axis handles. */
+export function hitTestCameraAxisHandle(
+  canvasPx: number, canvasPy: number,
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  activeAxes: ('x' | 'y' | 'z')[],
+): AxisHover {
+  for (const axis of activeAxes) {
+    const corners = camAxisCrossSection(cameraPos, axis)
+    const r = hitTestSingleAxisTunnel(canvasPx, canvasPy, ov, corners, axis, cameraPos[AXIS_IDX[axis]], CAM_TUNNEL_RANGE)
+    if (r) return r
   }
   return null
 }

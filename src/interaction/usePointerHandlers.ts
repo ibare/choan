@@ -24,9 +24,15 @@ import { pushSnapshot } from '../store/history'
 import { useDirectorStore } from '../store/useDirectorStore'
 import { useSceneStore } from '../store/useSceneStore'
 import { createDefaultDirectorTimeline } from '../animation/directorTypes'
-import { hitTestCameraKeyframe, computeCameraKeyframeDragPosition } from './cameraPathHandlers'
+import {
+  hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
+  hitTestDirectorCameraBody, hitTestRailHandle, computeRailHandleDrag,
+  type RailHandleHit,
+} from './cameraPathHandlers'
+
+const AXIS_IDX_MAP = { x: 0, y: 1, z: 2 } as const
 import { handleDragMove, finalizeDrag } from './dragHandlers'
-import { canShowZTunnel, hitTestRotationRing, hitTestTunnelFace, type TunnelHover } from '../rendering/zTunnelOverlay'
+import { canShowZTunnel, hitTestRotationRing, hitTestTunnelFace, hitTestCameraAxisHandle, type AxisHover } from '../rendering/zTunnelOverlay'
 import { handleResizeMove, handleRadiusDragMove } from './resizeHandlers'
 import { handleDrawMove, finalizeDrawn } from './drawHandlers'
 import { handleDragSelectMove } from './dragSelectHandlers'
@@ -41,7 +47,7 @@ export interface InteractionRefs {
   isDrawingRef: MutableRefObject<boolean>
   drawElIdRef: MutableRefObject<string | null>
   snapLinesRef: MutableRefObject<SnapLine[]>
-  tunnelHoverRef: MutableRefObject<TunnelHover>
+  tunnelHoverRef: MutableRefObject<AxisHover>
 }
 
 export interface UsePointerHandlersResult extends InteractionRefs {
@@ -109,11 +115,28 @@ export function usePointerHandlers({
   const dragCameraKfOrigPosRef = useRef<[number, number, number]>([0, 0, 0])
   const dragCameraKfTypeRef = useRef<'position' | 'target'>('position')
 
-  // Z-axis drag refs (Director mode)
-  const isZDraggingRef = useRef(false)
-  const zDragStartYRef = useRef(0)
-  const zDragOriginalZRef = useRef(0)
-  const tunnelHoverRef = useRef<TunnelHover>(null)
+  // Director camera rail drag refs
+  const isDraggingRailHandleRef  = useRef(false)
+  const dragRailHandleRef        = useRef<RailHandleHit | null>(null)
+  const dragRailOrigExtentRef    = useRef(0)
+  const dragRailOrigCanvasYRef   = useRef(0)  // for dolly (Y-drag → Z)
+  // Director camera body drag refs
+  const isDraggingDirCameraRef   = useRef(false)
+  const dragDirCameraOrigPosRef  = useRef<[number, number, number]>([0, 0, 0])
+
+  // Axis drag refs (Director mode — Z for elements, XYZ for camera)
+  const isAxisDraggingRef = useRef(false)
+  const axisDragAxisRef = useRef<'x' | 'y' | 'z'>('z')
+  const axisDragStartXRef = useRef(0)
+  const axisDragStartYRef = useRef(0)
+  const axisDragOrigValueRef = useRef(0)
+  const axisDragTargetRef = useRef<'element' | 'camera'>('element')
+
+  // Legacy aliases (kept for minimal diff)
+  const isZDraggingRef = isAxisDraggingRef
+  const zDragStartYRef = axisDragStartYRef
+  const zDragOriginalZRef = axisDragOrigValueRef
+  const tunnelHoverRef = useRef<AxisHover>(null)
 
   // Rotation drag refs (Director mode)
   const isRotationDraggingRef = useRef(false)
@@ -170,13 +193,71 @@ export function usePointerHandlers({
     if (director.directorMode && !director.directorPlaying) {
       const renderer = rendererRef.current
       if (renderer) {
+        const rect = renderer.canvas.getBoundingClientRect()
+        const { w, h } = canvasSizeRef.current
+
+        // ── Rail handle hit test (highest priority in director mode) ──
+        if (director.directorCameraSelected) {
+          const railHit = hitTestRailHandle(
+            e.clientX, e.clientY, rect, renderer.overlay,
+            director.directorCameraPos, director.directorTargetPos,
+            director.directorRails, 14,
+          )
+          if (railHit) {
+            const { axis, dir } = railHit.handleId
+            const rails = director.directorRails
+            const origExtent = axis === 'sphere'
+              ? rails.sphere
+              : rails[axis][dir]
+            isDraggingRailHandleRef.current = true
+            dragRailHandleRef.current = railHit
+            dragRailOrigExtentRef.current = origExtent
+            dragRailOrigCanvasYRef.current = e.clientY - rect.top
+            useDirectorStore.getState().setSelectedRailHandle(railHit.handleId)
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
+        }
+
+        // ── Camera axis tunnel drag (highest priority after rail handles) ──
+        if (director.directorCameraSelected) {
+          const camHover = director.directorCameraAxisHover
+          if (camHover) {
+            isAxisDraggingRef.current = true
+            axisDragAxisRef.current = camHover.axis
+            axisDragStartXRef.current = e.clientX
+            axisDragStartYRef.current = e.clientY
+            axisDragOrigValueRef.current = director.directorCameraPos[AXIS_IDX_MAP[camHover.axis]]
+            axisDragTargetRef.current = 'camera'
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
+        }
+
+        // ── Director camera body hit test ──
+        const camBodyHit = hitTestDirectorCameraBody(
+          e.clientX, e.clientY, rect, renderer.overlay,
+          director.directorCameraPos, 16,
+        )
+        if (camBodyHit) {
+          isDraggingDirCameraRef.current = true
+          dragDirCameraOrigPosRef.current = [...director.directorCameraPos]
+          useDirectorStore.getState().setDirectorCameraSelected(true)
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+          return
+        }
+
+        // No camera hit → deselect
+        useDirectorStore.getState().setDirectorCameraSelected(false)
+        useDirectorStore.getState().setSelectedRailHandle(null)
+
         const scState = useSceneStore.getState()
         const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
         const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
         if (dirTl.cameraKeyframes.length > 0) {
           const hit = hitTestCameraKeyframe(
             e.clientX, e.clientY,
-            renderer.canvas.getBoundingClientRect(),
+            rect,
             renderer.overlay,
             dirTl.cameraKeyframes,
             16,
@@ -195,15 +276,17 @@ export function usePointerHandlers({
         }
       }
 
-      // ── Z-axis drag (Director mode + tunnel face click) ──
+      // ── Element Z-axis drag (Director mode + tunnel face click) ──
       if (tunnelHoverRef.current) {
         const { selectedIds, elements: els } = useChoanStore.getState()
         if (selectedIds.length === 1) {
           const selEl = els.find((el) => el.id === selectedIds[0])
           if (selEl) {
-            isZDraggingRef.current = true
-            zDragStartYRef.current = e.clientY
-            zDragOriginalZRef.current = selEl.z
+            isAxisDraggingRef.current = true
+            axisDragAxisRef.current = 'z'
+            axisDragStartYRef.current = e.clientY
+            axisDragOrigValueRef.current = selEl.z
+            axisDragTargetRef.current = 'element'
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -480,6 +563,42 @@ export function usePointerHandlers({
   // ── handlePointerMove ──
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // ── Rail handle drag ──
+    if (isDraggingRailHandleRef.current && dragRailHandleRef.current) {
+      const renderer = rendererRef.current
+      const rect = renderer?.canvas.getBoundingClientRect()
+      const { w, h } = canvasSizeRef.current
+      const canvasX = rect ? e.clientX - rect.left : e.clientX
+      const canvasY = rect ? e.clientY - rect.top  : e.clientY
+      const director = useDirectorStore.getState()
+      const newExtent = computeRailHandleDrag(
+        canvasX, canvasY, w, h,
+        director.directorCameraPos,
+        director.directorTargetPos,
+        dragRailHandleRef.current.handleId,
+        dragRailOrigExtentRef.current,
+        dragRailOrigCanvasYRef.current,
+      )
+      const { axis, dir } = dragRailHandleRef.current.handleId
+      useDirectorStore.getState().extendRail(axis, dir, newExtent)
+      return
+    }
+
+    // ── Director camera body drag ──
+    if (isDraggingDirCameraRef.current) {
+      const renderer = rendererRef.current
+      const rect = renderer?.canvas.getBoundingClientRect()
+      const { w, h } = canvasSizeRef.current
+      const canvasX = rect ? e.clientX - rect.left : e.clientX
+      const canvasY = rect ? e.clientY - rect.top  : e.clientY
+      const newPos = computeCameraKeyframeDragPosition(
+        canvasX, canvasY, w, h,
+        dragDirCameraOrigPosRef.current, e.shiftKey,
+      )
+      useDirectorStore.getState().setDirectorCameraPos(newPos)
+      return
+    }
+
     // ── Camera keyframe drag ──
     if (isDraggingCameraKfRef.current && dragCameraKfIdRef.current) {
       const { w, h } = canvasSizeRef.current
@@ -498,14 +617,31 @@ export function usePointerHandlers({
       return
     }
 
-    // ── Z-axis drag ──
-    if (isZDraggingRef.current) {
-      const dy = e.clientY - zDragStartYRef.current
-      const zSpeed = 0.30
-      const zDelta = dy * zSpeed  // drag down = Z+ (forward), drag up = Z- (backward)
-      const { selectedIds, updateElement } = useChoanStore.getState()
-      if (selectedIds.length === 1) {
-        updateElement(selectedIds[0], { z: zDragOriginalZRef.current + zDelta })
+    // ── Axis drag (element Z / camera XYZ) ──
+    if (isAxisDraggingRef.current) {
+      const speed = 0.30
+      if (axisDragTargetRef.current === 'camera') {
+        const axis = axisDragAxisRef.current
+        let delta: number
+        if (axis === 'x') {
+          delta = (e.clientX - axisDragStartXRef.current) * speed
+        } else if (axis === 'y') {
+          delta = -(e.clientY - axisDragStartYRef.current) * speed  // up = Y+
+        } else {
+          delta = (e.clientY - axisDragStartYRef.current) * speed   // down = Z+
+        }
+        const dirSt = useDirectorStore.getState()
+        const newPos: [number, number, number] = [...dirSt.directorCameraPos]
+        newPos[AXIS_IDX_MAP[axis]] = axisDragOrigValueRef.current + delta
+        dirSt.setDirectorCameraPos(newPos)
+      } else {
+        // Element Z drag (existing behavior)
+        const dy = e.clientY - axisDragStartYRef.current
+        const zDelta = dy * speed
+        const { selectedIds, updateElement } = useChoanStore.getState()
+        if (selectedIds.length === 1) {
+          updateElement(selectedIds[0], { z: axisDragOrigValueRef.current + zDelta })
+        }
       }
       return
     }
@@ -630,8 +766,23 @@ export function usePointerHandlers({
       return
     }
 
-    // ── Tunnel face hover (Director mode) ──
+    // ── Camera axis tunnel hover (Director mode) ──
     const dirMoveState = useDirectorStore.getState()
+    if (dirMoveState.directorMode && !dirMoveState.directorPlaying && dirMoveState.directorCameraSelected) {
+      const renderer = rendererRef.current
+      if (renderer) {
+        const dpr = window.devicePixelRatio || 1
+        const rect = renderer.canvas.getBoundingClientRect()
+        const cpx = (e.clientX - rect.left) * dpr
+        const cpy = (e.clientY - rect.top) * dpr
+        const camHover = hitTestCameraAxisHandle(cpx, cpy, renderer.overlay, dirMoveState.directorCameraPos, ['x', 'y', 'z'])
+        useDirectorStore.getState().setDirectorCameraAxisHover(camHover)
+      }
+    } else {
+      if (dirMoveState.directorCameraAxisHover) useDirectorStore.getState().setDirectorCameraAxisHover(null)
+    }
+
+    // ── Element tunnel face hover (Director mode) ──
     if (dirMoveState.directorMode && !dirMoveState.directorPlaying && selIds.length === 1 && selId) {
       const renderer = rendererRef.current
       const selEl = els.find((el) => el.id === selId)
@@ -679,6 +830,20 @@ export function usePointerHandlers({
   // ── handlePointerUp ──
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    // ── Rail handle drag cleanup ──
+    if (isDraggingRailHandleRef.current) {
+      isDraggingRailHandleRef.current = false
+      dragRailHandleRef.current = null
+      useDirectorStore.getState().setSelectedRailHandle(null)
+      return
+    }
+
+    // ── Director camera body drag cleanup ──
+    if (isDraggingDirCameraRef.current) {
+      isDraggingDirCameraRef.current = false
+      return
+    }
+
     // ── Camera keyframe drag cleanup ──
     if (isDraggingCameraKfRef.current) {
       isDraggingCameraKfRef.current = false

@@ -1,8 +1,10 @@
 // Camera path overlay — draws the Catmull-Rom spline path, keyframe markers,
 // FOV frustums, and target lines on the main canvas in Director mode.
+// Also draws the new rail UX (director camera object + rails + target marker).
 
 import type { OverlayRenderer } from '../engine/overlay'
-import type { CameraViewKeyframe } from '../animation/directorTypes'
+import type { CameraViewKeyframe, DirectorRails } from '../animation/directorTypes'
+import { RAIL_MIN_STUB } from '../animation/directorTypes'
 import type { DirectorCameraState } from '../animation/directorCameraEvaluator'
 import { sampleCatmullRomPath3D } from '../engine/catmullRom'
 
@@ -13,6 +15,15 @@ const KF_SELECTED_COLOR: [number, number, number, number] = [1.0, 0.85, 0.1, 1.0
 const TARGET_LINE_COLOR: [number, number, number, number] = [1.0, 0.5, 0.1, 0.7]
 const FRUSTUM_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 0.5]
 const CURRENT_POS_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
+
+// Rail UX colors
+const RAIL_STUB_COLOR:   [number, number, number, number] = [0.9, 0.2, 0.2, 0.9]  // red — locked
+const RAIL_ACTIVE_COLOR: [number, number, number, number] = [0.2, 0.5, 1.0, 1.0]  // blue — active
+const TARGET_MARKER_COLOR: [number, number, number, number] = [1.0, 0.7, 0.2, 1.0] // amber
+const HANDLE_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]        // white handle
+
+const TARGET_CROSS_LEN = 0.4  // world units for target cross arms
+const SPHERE_SEGMENTS  = 36   // line segments for sphere circle
 
 const FRUSTUM_DEPTH = 4  // world units forward from camera position
 
@@ -67,6 +78,141 @@ export function drawCameraPathOverlay(
     ov.drawDiscScreen(screen.px, screen.py, 6 * dpr, CURRENT_POS_COLOR)
   }
 }
+
+// ── Rail UX — director camera setup rendering ────────────────────────────────
+
+/**
+ * Draws the director camera object (frustum icon + rails + target marker).
+ * Called every frame in director mode while NOT playing.
+ */
+export function drawDirectorCameraSetup(
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  targetPos: [number, number, number],
+  rails: DirectorRails,
+  isSelected: boolean,
+  fov: number,
+  dpr: number,
+): void {
+  // Target marker (always visible in director mode)
+  drawTargetMarker(ov, targetPos, dpr)
+
+  // Camera frustum icon (reuses drawFrustum helper below)
+  drawFrustum(ov, cameraPos, targetPos, fov)
+
+  // Rails (only when camera is selected)
+  if (isSelected) {
+    drawRailAxes(ov, cameraPos, targetPos, rails, dpr)
+  }
+}
+
+function drawTargetMarker(
+  ov: OverlayRenderer,
+  pos: [number, number, number],
+  dpr: number,
+): void {
+  const [x, y, z] = pos
+  const h = TARGET_CROSS_LEN
+  // 3-axis cross in world space
+  const verts = new Float32Array([
+    x - h, y, z,  x + h, y, z,  // X arm
+    x, y - h, z,  x, y + h, z,  // Y arm
+    x, y, z - h,  x, y, z + h,  // Z arm
+  ])
+  ov.drawLines3D(verts, TARGET_MARKER_COLOR)
+  // Screen-space disc at center
+  const s = ov.projectToScreen(x, y, z)
+  ov.drawDiscScreen(s.px, s.py, 6 * dpr, TARGET_MARKER_COLOR)
+}
+
+function drawRailAxes(
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  targetPos: [number, number, number],
+  rails: DirectorRails,
+  dpr: number,
+): void {
+  const [cx, cy, cz] = cameraPos
+
+  // Helper: draw one sided rail segment (stub=red, extension=blue) + handle disc
+  function drawOneSide(
+    dx: number, dy: number, dz: number,
+    extent: number,
+  ): void {
+    const stub = RAIL_MIN_STUB
+    const stubEndX = cx + dx * stub
+    const stubEndY = cy + dy * stub
+    const stubEndZ = cz + dz * stub
+
+    // Red stub (always present)
+    ov.drawLines3D(new Float32Array([cx, cy, cz, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR)
+
+    if (extent > stub + 0.001) {
+      // Blue extension beyond the stub
+      const tipX = cx + dx * extent
+      const tipY = cy + dy * extent
+      const tipZ = cz + dz * extent
+      ov.drawLines3D(new Float32Array([stubEndX, stubEndY, stubEndZ, tipX, tipY, tipZ]), RAIL_ACTIVE_COLOR)
+      // White handle at tip
+      const s = ov.projectToScreen(tipX, tipY, tipZ)
+      ov.drawDiscScreen(s.px, s.py, 8 * dpr, HANDLE_COLOR)
+    } else {
+      // Red handle at stub tip
+      const s = ov.projectToScreen(stubEndX, stubEndY, stubEndZ)
+      ov.drawDiscScreen(s.px, s.py, 8 * dpr, RAIL_STUB_COLOR)
+    }
+  }
+
+  // Truck (X axis)
+  drawOneSide( 1, 0, 0, rails.truck.pos)
+  drawOneSide(-1, 0, 0, rails.truck.neg)
+  // Boom (Y axis)
+  drawOneSide(0,  1, 0, rails.boom.pos)
+  drawOneSide(0, -1, 0, rails.boom.neg)
+  // Dolly (Z axis)
+  drawOneSide(0, 0,  1, rails.dolly.pos)
+  drawOneSide(0, 0, -1, rails.dolly.neg)
+
+  // Sphere rail — horizontal circle (XZ plane) around target
+  drawSphereRail(ov, cameraPos, targetPos, rails.sphere, dpr)
+}
+
+function drawSphereRail(
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  targetPos: [number, number, number],
+  radius: number,
+  dpr: number,
+): void {
+  const [tx, ty, tz] = targetPos
+  const isActive = radius > RAIL_MIN_STUB + 0.001
+  const color = isActive ? RAIL_ACTIVE_COLOR : RAIL_STUB_COLOR
+
+  // Draw horizontal circle at target's Y height
+  const verts: number[] = []
+  for (let i = 0; i < SPHERE_SEGMENTS; i++) {
+    const a0 = (i / SPHERE_SEGMENTS) * Math.PI * 2
+    const a1 = ((i + 1) / SPHERE_SEGMENTS) * Math.PI * 2
+    verts.push(
+      tx + Math.cos(a0) * radius, ty, tz + Math.sin(a0) * radius,
+      tx + Math.cos(a1) * radius, ty, tz + Math.sin(a1) * radius,
+    )
+  }
+  ov.drawLines3D(new Float32Array(verts), color)
+
+  // Handle: point on the circle closest to the camera (in XZ projection)
+  const dx = cameraPos[0] - tx
+  const dz = cameraPos[2] - tz
+  const dist = Math.sqrt(dx * dx + dz * dz)
+  if (dist > 0.001) {
+    const hx = tx + (dx / dist) * radius
+    const hz = tz + (dz / dist) * radius
+    const s = ov.projectToScreen(hx, ty, hz)
+    ov.drawDiscScreen(s.px, s.py, 8 * dpr, isActive ? HANDLE_COLOR : RAIL_STUB_COLOR)
+  }
+}
+
+// ── Frustum wireframe helper (shared by keyframe rendering + rail UX) ────────
 
 function drawFrustum(
   ov: OverlayRenderer,
