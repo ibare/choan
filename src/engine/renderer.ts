@@ -390,14 +390,13 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.bindTexture(gl.TEXTURE_2D, resolveTex)
     gl.uniform1i(gl.getUniformLocation(fmProgram!, 'uColorTex'), 0)
 
-    const cdx = camera.position[0] - camera.target[0]
-    const cdy = camera.position[1] - camera.target[1]
-    const cdz = camera.position[2] - camera.target[2]
-    const camDist = Math.sqrt(cdx * cdx + cdy * cdy + cdz * cdz)
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, gbuffer.depthTex)
+    gl.uniform1i(gl.getUniformLocation(fmProgram!, 'uDepthTex'), 1)
 
     gl.uniform2f(gl.getUniformLocation(fmProgram!, 'uResolution'), ssW, ssH)
     gl.uniform1f(gl.getUniformLocation(fmProgram!, 'uDarken'), darken)
-    gl.uniform1f(gl.getUniformLocation(fmProgram!, 'uCamDist'), camDist)
+    gl.uniform1f(gl.getUniformLocation(fmProgram!, 'uMaxDist'), 500.0)
 
     gl.uniform3f(gl.getUniformLocation(fmProgram!, 'uMainCamPos'), ray.ro[0], ray.ro[1], ray.ro[2])
     gl.uniform3f(gl.getUniformLocation(fmProgram!, 'uMainCamForward'), ray.forward[0], ray.forward[1], ray.forward[2])
