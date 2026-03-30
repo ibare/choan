@@ -61,6 +61,8 @@ export function hitTestCameraKeyframe(
  */
 // ── Rail UX hit testing ───────────────────────────────────────────────────────
 
+const RAIL_OFFSET = 4.5  // must match cameraPathOverlay.ts RAIL_OFFSET
+
 /** Returns the 3D world positions of all rail handles for a given camera setup. */
 function getRailHandlePositions(
   cameraPos: [number, number, number],
@@ -69,13 +71,14 @@ function getRailHandlePositions(
 ): Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> {
   const [cx, cy, cz] = cameraPos
   const [tx, , tz] = targetPos
+  const o = RAIL_OFFSET
   const handles: Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> = [
-    { handleId: { axis: 'truck', dir: 'pos' }, wx: cx + rails.truck.pos, wy: cy, wz: cz },
-    { handleId: { axis: 'truck', dir: 'neg' }, wx: cx - rails.truck.neg, wy: cy, wz: cz },
-    { handleId: { axis: 'boom',  dir: 'pos' }, wx: cx, wy: cy + rails.boom.pos,  wz: cz },
-    { handleId: { axis: 'boom',  dir: 'neg' }, wx: cx, wy: cy - rails.boom.neg,  wz: cz },
-    { handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: cz + rails.dolly.pos },
-    { handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: cz - rails.dolly.neg },
+    { handleId: { axis: 'truck', dir: 'pos' }, wx: cx + o + rails.truck.pos, wy: cy, wz: cz },
+    { handleId: { axis: 'truck', dir: 'neg' }, wx: cx - o - rails.truck.neg, wy: cy, wz: cz },
+    { handleId: { axis: 'boom',  dir: 'pos' }, wx: cx, wy: cy + o + rails.boom.pos,  wz: cz },
+    { handleId: { axis: 'boom',  dir: 'neg' }, wx: cx, wy: cy - o - rails.boom.neg,  wz: cz },
+    { handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: cz + o + rails.dolly.pos },
+    { handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: cz - o - rails.dolly.neg },
   ]
   // Sphere handle: point on circle toward camera (XZ projection)
   const dx = cx - tx
@@ -164,11 +167,12 @@ export function computeRailHandleDrag(
   const [tx, , tz] = targetPos
   const [wx, wy] = pixelToWorld(canvasX, canvasY, canvasW, canvasH)
 
+  const o = RAIL_OFFSET
   switch (handle.axis) {
     case 'truck':
-      return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wx - cx : cx - wx)
+      return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wx - cx - o : cx - o - wx)
     case 'boom':
-      return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wy - cy : cy - wy)
+      return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wy - cy - o : cy - o - wy)
     case 'dolly': {
       // Dolly (Z) — map vertical mouse delta to Z extent change
       const [, origWy] = pixelToWorld(canvasX, origCanvasY, canvasW, canvasH)

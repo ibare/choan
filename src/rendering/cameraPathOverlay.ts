@@ -125,6 +125,8 @@ function drawTargetMarker(
   ov.drawDiscScreen(s.px, s.py, 6 * dpr, TARGET_MARKER_COLOR)
 }
 
+const RAIL_OFFSET = 4.5  // push rail handles beyond the axis tunnel range (CAM_TUNNEL_RANGE=4)
+
 function drawRailAxes(
   ov: OverlayRenderer,
   cameraPos: [number, number, number],
@@ -134,32 +136,36 @@ function drawRailAxes(
 ): void {
   const [cx, cy, cz] = cameraPos
 
-  // Helper: draw one sided rail segment (stub=red, extension=blue) + handle disc
+  // Helper: draw one sided rail segment offset beyond axis tunnels
   function drawOneSide(
     dx: number, dy: number, dz: number,
     extent: number,
   ): void {
+    // Start at the offset point (beyond axis tunnel)
+    const baseX = cx + dx * RAIL_OFFSET
+    const baseY = cy + dy * RAIL_OFFSET
+    const baseZ = cz + dz * RAIL_OFFSET
     const stub = RAIL_MIN_STUB
-    const stubEndX = cx + dx * stub
-    const stubEndY = cy + dy * stub
-    const stubEndZ = cz + dz * stub
+    const stubEndX = baseX + dx * stub
+    const stubEndY = baseY + dy * stub
+    const stubEndZ = baseZ + dz * stub
 
     // Red stub (always present)
-    ov.drawLines3D(new Float32Array([cx, cy, cz, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR)
+    ov.drawLines3D(new Float32Array([baseX, baseY, baseZ, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR)
 
     if (extent > stub + 0.001) {
       // Blue extension beyond the stub
-      const tipX = cx + dx * extent
-      const tipY = cy + dy * extent
-      const tipZ = cz + dz * extent
+      const tipX = baseX + dx * extent
+      const tipY = baseY + dy * extent
+      const tipZ = baseZ + dz * extent
       ov.drawLines3D(new Float32Array([stubEndX, stubEndY, stubEndZ, tipX, tipY, tipZ]), RAIL_ACTIVE_COLOR)
       // White handle at tip
       const s = ov.projectToScreen(tipX, tipY, tipZ)
-      ov.drawDiscScreen(s.px, s.py, 8 * dpr, HANDLE_COLOR)
+      ov.drawDiscScreen(s.px, s.py, 10 * dpr, HANDLE_COLOR)
     } else {
       // Red handle at stub tip
       const s = ov.projectToScreen(stubEndX, stubEndY, stubEndZ)
-      ov.drawDiscScreen(s.px, s.py, 8 * dpr, RAIL_STUB_COLOR)
+      ov.drawDiscScreen(s.px, s.py, 10 * dpr, RAIL_STUB_COLOR)
     }
   }
 
