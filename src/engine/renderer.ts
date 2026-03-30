@@ -49,6 +49,14 @@ export interface SDFRenderer {
   getResolveFB(): WebGLFramebuffer
   /** Get supersampled dimensions. */
   getSuperSampledSize(): [number, number]
+  /** Get current CSS canvas dimensions (used for save/restore during off-screen renders). */
+  getCssSize(): { w: number, h: number }
+  /**
+   * Resize framebuffers and camera.aspect for off-screen rendering WITHOUT changing
+   * cssWidth/cssHeight. Use this instead of resize() when the scene coordinate system
+   * (pixelToWorld) must remain tied to the main canvas dimensions.
+   */
+  resizeViewport(cssW: number, cssH: number): void
   /** Get the shared fullscreen quad VAO (for scene transitions). */
   getQuad(): WebGLVertexArrayObject
   /** Apply bokeh DoF post-process. Call between renderPipeline() and blitAndOverlay(). */
@@ -462,6 +470,20 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     getResolveTex() { return resolveTex },
     getResolveFB() { return resolveFB },
     getSuperSampledSize(): [number, number] { return [ssW, ssH] },
+    getCssSize() { return { w: cssWidth, h: cssHeight } },
+    resizeViewport(width: number, height: number) {
+      if (width < 1 || height < 1) return
+      camera.aspect = width / height
+      const dpr = window.devicePixelRatio || 1
+      const cw = Math.round(width * dpr)
+      const ch = Math.round(height * dpr)
+      pendingCanvasW = cw
+      pendingCanvasH = ch
+      const ss = dpr >= 2 ? 1 : 2
+      gbuffer.resize(gl, cw * ss, ch * ss)
+      resizeResolve(cw * ss, ch * ss)
+      // cssWidth / cssHeight intentionally unchanged — preserves pixelToWorld coordinate system
+    },
     getQuad() { return quad },
     dispose,
   }

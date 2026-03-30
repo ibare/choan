@@ -261,10 +261,10 @@ export function useAnimateLoop({
           if (camSt) {
             const focalMm = dirForMask.focalLengthMm
             const fovMask = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
-            const { w: cw, h: ch } = canvasSizeRef.current
+            const [vfaw, vfah] = dirForMask.viewfinderAspect.split(':').map(Number)
             dirCamStateForMask = buildViewProjMatrix(
               camSt.position, camSt.target, [0, 1, 0],
-              fovMask, cw / ch, 0.1, 500,
+              fovMask, vfaw / vfah, 0.1, 500,
             )
           }
         }
@@ -353,13 +353,13 @@ export function useAnimateLoop({
 
           // Camera frustum footprint on Z=0 ground plane
           if (curCamState) {
-            const { w: cw, h: ch } = canvasSizeRef.current
             const focalMm = dirState.focalLengthMm
             const fovFromMm = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
+            const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)
             drawCameraFootprint(
               renderer.overlay,
               curCamState.position, curCamState.target,
-              fovFromMm, cw / ch,
+              fovFromMm, vfaw / vfah,
               false,
             )
           }

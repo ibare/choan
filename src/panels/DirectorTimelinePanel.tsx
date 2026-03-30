@@ -25,6 +25,14 @@ import { createVideoExporter } from '../engine/videoExporter'
 import { applyMultiSelectTint } from '../rendering/multiSelectTint'
 import VideoExportDialog, { type VideoExportSettings } from './VideoExportDialog'
 
+const VIEWFINDER_ASPECT_OPTIONS = [
+  { value: '16:9',   label: '16:9' },
+  { value: '4:3',    label: '4:3' },
+  { value: '1:1',    label: '1:1' },
+  { value: '9:16',   label: '9:16' },
+  { value: '2.35:1', label: '2.35:1' },
+]
+
 const PX_PER_MS = 0.15
 const TRACK_H = 32
 const RULER_H = 35  // Match bundle timeline ruler height
@@ -47,8 +55,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const { scenes, activeSceneId } = useSceneStore()
   const { animationBundles } = useChoanStore()
   const {
-    directorPlayheadTime, directorPlaying, focalLengthMm, frustumSpotlightOn,
-    setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm, toggleFrustumSpotlight,
+    directorPlayheadTime, directorPlaying, focalLengthMm, frustumSpotlightOn, viewfinderAspect,
+    setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm, toggleFrustumSpotlight, setViewfinderAspect,
     addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
     addEventMarker, updateEventMarker, removeEventMarker,
   } = useDirectorStore()
@@ -541,6 +549,12 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           size="sm"
         />
         <div className="timeline-separator" />
+        <Select
+          options={VIEWFINDER_ASPECT_OPTIONS}
+          value={viewfinderAspect}
+          onChange={setViewfinderAspect}
+          size="sm"
+        />
         <div className="ui-director-focal">
           <input
             type="range"

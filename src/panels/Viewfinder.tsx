@@ -16,7 +16,7 @@ import { Section } from '../components/ui/Section'
 
 export default function Viewfinder() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { directorMode, directorPlaying, directorPlayheadTime, focalLengthMm } = useDirectorStore()
+  const { directorMode, directorPlaying, directorPlayheadTime, focalLengthMm, viewfinderAspect } = useDirectorStore()
   const { scenes, activeSceneId } = useSceneStore()
 
   const scene = scenes.find((s) => s.id === activeSceneId)
@@ -24,6 +24,9 @@ export default function Viewfinder() {
   const hasCameraKfs = dt.cameraKeyframes.length > 0
 
   const visible = directorMode && !directorPlaying && hasCameraKfs
+
+  const [aw, ah] = viewfinderAspect.split(':').map(Number)
+  const vfAspectRatio = aw / ah
 
   useEffect(() => {
     if (!visible) return
@@ -36,17 +39,21 @@ export default function Viewfinder() {
 
     const dpr = window.devicePixelRatio || 1
     const cssW = vfCanvas.clientWidth
-    const cssH = Math.round(cssW * 9 / 16) // 16:9 aspect
+    const cssH = Math.round(cssW / vfAspectRatio)
+
+    // Viewfinder canvas pixel dimensions must match render dimensions exactly
+    // so ctx.drawImage copies without any stretching
     vfCanvas.width = Math.round(cssW * dpr)
     vfCanvas.height = Math.round(cssH * dpr)
 
-    // Save current camera state
+    // Save camera + renderer CSS size
     const cam = renderer.camera
     const savedPos: [number, number, number] = [...cam.position]
     const savedTarget: [number, number, number] = [...cam.target]
     const savedFov = cam.fov
+    const savedSize = renderer.getCssSize()
 
-    // Apply director camera at current playhead time
+    // Apply director camera
     const fovFromMm = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
     const camState = evaluateDirectorCamera(dt.cameraKeyframes, directorPlayheadTime)
     if (camState) {
@@ -59,6 +66,11 @@ export default function Viewfinder() {
     }
     cam.fov = fovFromMm
 
+    // Resize renderer to viewfinder aspect — this sets camera.aspect correctly
+    // and resizes the framebuffers so the rendered image matches the viewfinder canvas
+    renderer.resizeViewport(cssW, cssH)
+    renderer.applyPendingResize()
+
     // Evaluate events at this time
     const state = useChoanStore.getState()
     const activeEvents = evaluateDirectorEvents(dt.eventMarkers, directorPlayheadTime, state.animationBundles)
@@ -66,28 +78,20 @@ export default function Viewfinder() {
       ? evaluateDirectorFrame(state.elements, activeEvents)
       : state.elements
 
-    // Render one frame with the director camera + DoF
+    // Render one frame with the director camera
     const rs = useRenderSettings.getState()
     renderer.updateScene(animated, rs.extrudeDepth)
     renderer.renderPipeline(rs)
-
-    const dx = cam.position[0] - cam.target[0]
-    const dy = cam.position[1] - cam.target[1]
-    const dz = cam.position[2] - cam.target[2]
-    const focusDist = Math.sqrt(dx * dx + dy * dy + dz * dz)
-    renderer.applyDoF({
-      focusDist,
-      aperture: (focalLengthMm / 50) * 25.0,
-      maxBlurPx: 40,
-    })
-
     renderer.blitAndOverlay()
 
-    // Copy to viewfinder canvas
+    // Copy to viewfinder — no stretching since canvas and vfCanvas are the same size
     ctx.clearRect(0, 0, vfCanvas.width, vfCanvas.height)
     ctx.drawImage(renderer.canvas, 0, 0, vfCanvas.width, vfCanvas.height)
 
-    // Restore camera
+    // Restore renderer size and camera
+    renderer.resize(savedSize.w, savedSize.h)
+    renderer.applyPendingResize()
+
     cam.position[0] = savedPos[0]
     cam.position[1] = savedPos[1]
     cam.position[2] = savedPos[2]
@@ -96,11 +100,11 @@ export default function Viewfinder() {
     cam.target[2] = savedTarget[2]
     cam.fov = savedFov
 
-    // Re-render with the restored camera
+    // Re-render main view with restored camera
     renderer.updateScene(state.elements, rs.extrudeDepth)
     renderer.renderPipeline(rs)
     renderer.blitAndOverlay()
-  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, hasCameraKfs])
+  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, hasCameraKfs, viewfinderAspect])
 
   if (!visible) return null
 
@@ -108,7 +112,7 @@ export default function Viewfinder() {
     <Section title="Viewfinder">
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', aspectRatio: '16/9', borderRadius: 6, display: 'block' }}
+        style={{ width: '100%', aspectRatio: String(vfAspectRatio), borderRadius: 6, display: 'block' }}
       />
     </Section>
   )
