@@ -255,3 +255,51 @@ export function computeCameraKeyframeDragPosition(
 
   return [wx, wy, originalPosition[2]]
 }
+
+// ── Rail slider hit testing ──────────────────────────────────────────────────
+
+export type RailSliderHit = { axis: 'x' | 'y' | 'z' }
+
+const SLIDER_OFFSET = 2.4  // must match cameraPathOverlay.ts
+
+/**
+ * Hit test rail slider handles — each extended axis has its own handle
+ * offset along its axis from the camera position.
+ */
+export function hitTestRailSlider(
+  clientX: number,
+  clientY: number,
+  canvasRect: DOMRect,
+  overlay: OverlayRenderer,
+  cameraPos: [number, number, number],
+  rails: DirectorRails,
+  hitRadius: number,
+): RailSliderHit | null {
+  const dpr = window.devicePixelRatio || 1
+  const mx = (clientX - canvasRect.left) * dpr
+  const my = (clientY - canvasRect.top) * dpr
+  const stub = RAIL_MIN_STUB + 0.01
+
+  const axes: Array<{ axis: 'x' | 'y' | 'z'; idx: number; ext: { neg: number; pos: number } }> = [
+    { axis: 'x', idx: 0, ext: rails.truck },
+    { axis: 'y', idx: 1, ext: rails.boom },
+    { axis: 'z', idx: 2, ext: rails.dolly },
+  ]
+
+  let bestDist = hitRadius * dpr
+  let bestHit: RailSliderHit | null = null
+
+  for (const { axis, idx, ext } of axes) {
+    if (ext.neg < stub && ext.pos < stub) continue  // not extended
+    // Handle position: camera pos + offset toward the more-extended side
+    const hPos: [number, number, number] = [...cameraPos]
+    hPos[idx] += SLIDER_OFFSET * (ext.pos >= ext.neg ? 1 : -1)
+    const s = overlay.projectToScreen(hPos[0], hPos[1], hPos[2])
+    const d = Math.sqrt((mx - s.px) ** 2 + (my - s.py) ** 2)
+    if (d < bestDist) {
+      bestDist = d
+      bestHit = { axis }
+    }
+  }
+  return bestHit
+}

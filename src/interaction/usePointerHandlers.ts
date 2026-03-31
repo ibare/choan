@@ -31,7 +31,8 @@ import {
 import {
   hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
   hitTestDirectorCameraBody, hitTestRailHandle, computeRailHandleDrag,
-  type RailHandleHit,
+  hitTestRailSlider,
+  type RailHandleHit, type RailSliderHit,
 } from './cameraPathHandlers'
 
 const AXIS_IDX_MAP = { x: 0, y: 1, z: 2 } as const
@@ -125,6 +126,9 @@ export function usePointerHandlers({
   const dragRailHandleRef        = useRef<RailHandleHit | null>(null)
   const dragRailOrigExtentRef    = useRef(0)
   const dragRailStartTRef        = useRef(0)  // ray-axis T at drag start
+  // Rail slider drag refs
+  const isDraggingRailSliderRef  = useRef(false)
+  const dragSliderAxisRef        = useRef<'x' | 'y' | 'z'>('x')
   // Double-click detection for rail mode toggle
   const lastRailClickTimeRef     = useRef(0)
   const lastRailClickAxisRef     = useRef<string>('')
@@ -250,7 +254,32 @@ export function usePointerHandlers({
           }
         }
 
-        // ── Camera axis tunnel drag (highest priority after rail handles) ──
+        // ── Rail slider drag (camera position on extended rails) ──
+        if (director.directorCameraSelected) {
+          const sliderHit = hitTestRailSlider(
+            e.clientX, e.clientY, rect, renderer.overlay,
+            director.directorCameraPos, director.directorRails, 16,
+          )
+          if (sliderHit) {
+            const rayP = getCameraRayParams(renderer.camera)
+            const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+            const axisDir: [number, number, number] = [0, 0, 0]; axisDir[AXIS_IDX_MAP[sliderHit.axis]] = 1
+            const startT = rayAxisClosestT(ro, rd, director.directorCameraPos, axisDir)
+            isDraggingRailSliderRef.current = true
+            dragSliderAxisRef.current = sliderHit.axis
+            isAxisDraggingRef.current = true
+            axisDragAxisRef.current = sliderHit.axis
+            axisDragOrigValueRef.current = director.directorCameraPos[AXIS_IDX_MAP[sliderHit.axis]]
+            axisDragStartTRef.current = startT ?? 0
+            axisDragOriginRef.current = [...director.directorCameraPos]
+            axisDragOrigPosRef.current = [...director.directorCameraPos]
+            axisDragTargetRef.current = 'camera'
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
+        }
+
+        // ── Camera axis tunnel drag (non-extended axes only) ──
         if (director.directorCameraSelected) {
           const camHover = director.directorCameraAxisHover
           if (camHover) {
@@ -915,7 +944,16 @@ export function usePointerHandlers({
         const rect = renderer.canvas.getBoundingClientRect()
         const cpx = (e.clientX - rect.left) * dpr
         const cpy = (e.clientY - rect.top) * dpr
-        const camHover = hitTestCameraAxisHandle(cpx, cpy, renderer.overlay, dirMoveState.directorCameraPos, ['x', 'y', 'z'])
+        // Only check tunnels for non-extended axes (extended use rail slider)
+        const r = dirMoveState.directorRails
+        const stub = 0.501
+        const hoverAxes: ('x' | 'y' | 'z')[] = []
+        if (r.truck.neg < stub && r.truck.pos < stub) hoverAxes.push('x')
+        if (r.boom.neg  < stub && r.boom.pos  < stub) hoverAxes.push('y')
+        if (r.dolly.neg < stub && r.dolly.pos < stub) hoverAxes.push('z')
+        const camHover = hoverAxes.length > 0
+          ? hitTestCameraAxisHandle(cpx, cpy, renderer.overlay, dirMoveState.directorCameraPos, hoverAxes)
+          : null
         useDirectorStore.getState().setDirectorCameraAxisHover(camHover)
       }
     } else {
@@ -970,6 +1008,13 @@ export function usePointerHandlers({
   // ── handlePointerUp ──
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    // ── Rail slider drag cleanup ──
+    if (isDraggingRailSliderRef.current) {
+      isDraggingRailSliderRef.current = false
+      isAxisDraggingRef.current = false
+      return
+    }
+
     // ── Rail handle drag cleanup ──
     if (isDraggingRailHandleRef.current) {
       isDraggingRailHandleRef.current = false

@@ -367,14 +367,23 @@ export function useAnimateLoop({
           dpr,
         )
 
-        // Camera XYZ axis move handles (when camera is selected)
+        // Camera axis move handles — only for non-extended axes
+        // Extended axes use the rail slider instead of tunnels
         if (dirState.directorCameraSelected) {
-          drawCameraAxisHandles(
-            renderer.overlay,
-            dirState.directorCameraPos,
-            ['x', 'y', 'z'],
-            dirState.directorCameraAxisHover,
-          )
+          const r = dirState.directorRails
+          const stub = 0.501  // RAIL_MIN_STUB + epsilon
+          const tunnelAxes: ('x' | 'y' | 'z')[] = []
+          if (r.truck.neg < stub && r.truck.pos < stub) tunnelAxes.push('x')
+          if (r.boom.neg  < stub && r.boom.pos  < stub) tunnelAxes.push('y')
+          if (r.dolly.neg < stub && r.dolly.pos < stub) tunnelAxes.push('z')
+          if (tunnelAxes.length > 0) {
+            drawCameraAxisHandles(
+              renderer.overlay,
+              dirState.directorCameraPos,
+              tunnelAxes,
+              dirState.directorCameraAxisHover,
+            )
+          }
         }
 
         // Legacy keyframe path overlay (kept for playback preview)

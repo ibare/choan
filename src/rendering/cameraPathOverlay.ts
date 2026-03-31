@@ -25,6 +25,12 @@ const HANDLE_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]     
 const TARGET_CROSS_LEN = 0.4  // world units for target cross arms
 const SPHERE_SEGMENTS  = 36   // line segments for sphere circle
 
+// Slider handle colors per axis (matching 3D convention: X=red, Y=green, Z=blue)
+const SLIDER_RING_X: [number, number, number, number] = [0.9, 0.3, 0.3, 1.0]
+const SLIDER_RING_Y: [number, number, number, number] = [0.3, 0.8, 0.3, 1.0]
+const SLIDER_RING_Z: [number, number, number, number] = [0.2, 0.5, 1.0, 1.0]
+const SLIDER_FILL:   [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
+const SLIDER_OFFSET = 2.4  // world units offset from camera along each axis
 const FRUSTUM_DEPTH = 8  // world units forward from camera position
 
 export function drawCameraPathOverlay(
@@ -210,6 +216,48 @@ function drawRailAxes(
 
   // Sphere rail — horizontal circle (XZ plane) around target
   drawSphereRail(ov, cameraPos, targetPos, rails.sphere, dpr)
+
+  // ── Slider handles on extended rails (camera position on the rail) ──
+  // These replace the axis tunnels for extended axes.
+  drawRailSliderHandles(ov, cameraPos, rails, dpr)
+}
+
+/** Compute the sign (+1 or -1) for the slider offset: toward the more-extended side. */
+function sliderSign(ext: { neg: number; pos: number }): number {
+  return ext.pos >= ext.neg ? 1 : -1
+}
+
+/** Compute the 3D position of a slider handle for a given axis. */
+export function getSliderHandlePos(
+  cameraPos: [number, number, number],
+  axisIdx: number,
+  ext: { neg: number; pos: number },
+): [number, number, number] {
+  const pos: [number, number, number] = [...cameraPos]
+  pos[axisIdx] += SLIDER_OFFSET * sliderSign(ext)
+  return pos
+}
+
+function drawRailSliderHandles(
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  rails: DirectorRails,
+  dpr: number,
+): void {
+  const stub = RAIL_MIN_STUB + 0.001
+  const rings = [SLIDER_RING_X, SLIDER_RING_Y, SLIDER_RING_Z]
+  const exts = [rails.truck, rails.boom, rails.dolly]
+
+  function drawSlider(axisIdx: number): void {
+    const pos = getSliderHandlePos(cameraPos, axisIdx, exts[axisIdx])
+    const s = ov.projectToScreen(pos[0], pos[1], pos[2])
+    ov.drawDiscScreen(s.px, s.py, 12 * dpr, rings[axisIdx])
+    ov.drawDiscScreen(s.px, s.py, 8 * dpr, SLIDER_FILL)
+  }
+
+  if (rails.truck.neg > stub || rails.truck.pos > stub) drawSlider(0)
+  if (rails.boom.neg  > stub || rails.boom.pos  > stub) drawSlider(1)
+  if (rails.dolly.neg > stub || rails.dolly.pos > stub) drawSlider(2)
 }
 
 const ARC_SEGMENTS = 48  // line segments per arc side
