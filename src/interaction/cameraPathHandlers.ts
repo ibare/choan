@@ -139,6 +139,25 @@ function getRailHandlePositions(
 }
 
 /**
+ * Hit test the director target marker.
+ * Returns true if the click is within hitRadius px of the projected target position.
+ */
+export function hitTestDirectorTarget(
+  clientX: number,
+  clientY: number,
+  canvasRect: DOMRect,
+  overlay: OverlayRenderer,
+  targetPos: [number, number, number],
+  hitRadius: number,
+): boolean {
+  const dpr = window.devicePixelRatio || 1
+  const mx = (clientX - canvasRect.left) * dpr
+  const my = (clientY - canvasRect.top)  * dpr
+  const s  = overlay.projectToScreen(targetPos[0], targetPos[1], targetPos[2])
+  return Math.sqrt((mx - s.px) ** 2 + (my - s.py) ** 2) < hitRadius * dpr
+}
+
+/**
  * Hit test the director camera body (frustum icon).
  * Returns true if the click is within hitRadius px of the projected camera position.
  */

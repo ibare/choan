@@ -37,6 +37,7 @@ interface DirectorStore {
   selectedRailHandle:     RailHandleId | null
   directorCameraAxisHover: AxisHover
   railWorldAnchor:         [number, number, number]  // world-fixed anchor for extended rails
+  directorTargetAttachedTo: string | null             // element ID the target is attached to (null = free)
 
   // Mode controls
   setDirectorMode: (on: boolean) => void
@@ -58,6 +59,7 @@ interface DirectorStore {
   toggleRailMode:            (axis: 'truck' | 'boom') => void
   setDirectorCameraAxisHover: (hover: AxisHover) => void
   setRailWorldAnchor:        (anchor: [number, number, number]) => void
+  setDirectorTargetAttachedTo: (id: string | null) => void
 
   // Camera keyframe CRUD (operates on active scene)
   addCameraKeyframe: (kf: CameraViewKeyframe) => void
@@ -101,6 +103,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   selectedRailHandle:     null,
   directorCameraAxisHover: null,
   railWorldAnchor:         [0, 3, 8],
+  directorTargetAttachedTo: null,
 
   setDirectorMode: (on) => set({
     directorMode: on,
@@ -151,6 +154,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
 
   setDirectorCameraAxisHover: (hover) => set({ directorCameraAxisHover: hover }),
   setRailWorldAnchor: (anchor) => set({ railWorldAnchor: anchor }),
+  setDirectorTargetAttachedTo: (id) => set({ directorTargetAttachedTo: id }),
 
   toggleRailMode: (axis) => {
     const { directorRails } = get()

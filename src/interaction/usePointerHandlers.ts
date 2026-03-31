@@ -30,7 +30,7 @@ import {
 } from '../animation/directorTypes'
 import {
   hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
-  hitTestDirectorCameraBody, hitTestRailHandle, computeRailHandleDrag,
+  hitTestDirectorCameraBody, hitTestDirectorTarget, hitTestRailHandle, computeRailHandleDrag,
   hitTestRailSlider,
   type RailHandleHit, type RailSliderHit,
 } from './cameraPathHandlers'
@@ -135,6 +135,11 @@ export function usePointerHandlers({
   // Director camera body drag refs
   const isDraggingDirCameraRef   = useRef(false)
   const dragDirCameraOrigPosRef  = useRef<[number, number, number]>([0, 0, 0])
+  // Director target drag refs
+  const isDraggingDirTargetRef   = useRef(false)
+  const dragDirTargetOrigPosRef  = useRef<[number, number, number]>([0, 0, 0])
+  const dragTargetPlaneNormalRef = useRef<[number, number, number]>([0, 0, 1])
+  const dragTargetStartWorldRef  = useRef<[number, number, number]>([0, 0, 0])
 
   // Axis drag refs (Director mode — Z for elements, XYZ for camera)
   const isAxisDraggingRef = useRef(false)
@@ -254,6 +259,26 @@ export function usePointerHandlers({
           }
         }
 
+        // ── Director target hit test (before sliders/tunnels to avoid interception) ──
+        const targetHit = hitTestDirectorTarget(
+          e.clientX, e.clientY, rect, renderer.overlay,
+          director.directorTargetPos, 14,
+        )
+        if (targetHit) {
+          // Drag on Z-fixed plane (XY movement only, no depth change)
+          const rayP = getCameraRayParams(renderer.camera)
+          const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+          const planeN: [number, number, number] = [0, 0, 1]  // Z=const plane
+          dragTargetPlaneNormalRef.current = planeN
+          const startHit = rayPlaneIntersect(ro, rd, planeN, director.directorTargetPos)
+          dragTargetStartWorldRef.current = startHit ?? [...director.directorTargetPos]
+          isDraggingDirTargetRef.current = true
+          dragDirTargetOrigPosRef.current = [...director.directorTargetPos]
+          useDirectorStore.getState().setDirectorTargetAttachedTo(null)
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+          return
+        }
+
         // ── Rail slider drag (camera position on extended rails) ──
         if (director.directorCameraSelected) {
           const sliderHit = hitTestRailSlider(
@@ -305,7 +330,6 @@ export function usePointerHandlers({
           director.directorCameraPos, 16,
         )
         if (camBodyHit) {
-          // Compute plane for drag: perpendicular to view camera forward, through director camera
           const rayP = getCameraRayParams(renderer.camera)
           const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
           dragPlaneNormalRef.current = [...rayP.forward]
@@ -673,6 +697,29 @@ export function usePointerHandlers({
       return
     }
 
+    // ── Director target drag (ray-plane) ──
+    if (isDraggingDirTargetRef.current) {
+      const renderer = rendererRef.current
+      if (renderer) {
+        const rect = renderer.canvas.getBoundingClientRect()
+        const { w, h } = canvasSizeRef.current
+        const rayP = getCameraRayParams(renderer.camera)
+        const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+        const hit = rayPlaneIntersect(ro, rd, dragTargetPlaneNormalRef.current, dragDirTargetOrigPosRef.current)
+        if (hit) {
+          const dx = hit[0] - dragTargetStartWorldRef.current[0]
+          const dy = hit[1] - dragTargetStartWorldRef.current[1]
+          const newPos: [number, number, number] = [
+            dragDirTargetOrigPosRef.current[0] + dx,
+            dragDirTargetOrigPosRef.current[1] + dy,
+            dragDirTargetOrigPosRef.current[2],  // Z fixed
+          ]
+          useDirectorStore.getState().setDirectorTargetPos(newPos)
+        }
+      }
+      return
+    }
+
     // ── Director camera body drag (ray-plane) ──
     if (isDraggingDirCameraRef.current) {
       const renderer = rendererRef.current
@@ -1020,6 +1067,24 @@ export function usePointerHandlers({
       isDraggingRailHandleRef.current = false
       dragRailHandleRef.current = null
       useDirectorStore.getState().setSelectedRailHandle(null)
+      return
+    }
+
+    // ── Director target drag cleanup — attach to element if dropped on one ──
+    if (isDraggingDirTargetRef.current) {
+      isDraggingDirTargetRef.current = false
+      // Check if target was dropped on a scene element → attach
+      const renderer = rendererRef.current
+      if (renderer) {
+        const pixel = screenToPixel(e.clientX, e.clientY)
+        if (pixel) {
+          const { elements } = useChoanStore.getState()
+          const hitEl = raycastElement(pixel.x, pixel.y, elements)
+          if (hitEl) {
+            useDirectorStore.getState().setDirectorTargetAttachedTo(hitEl.id)
+          }
+        }
+      }
       return
     }
 

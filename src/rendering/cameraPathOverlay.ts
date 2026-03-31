@@ -19,7 +19,8 @@ const CURRENT_POS_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
 // Rail UX colors
 const RAIL_STUB_COLOR:   [number, number, number, number] = [0.9, 0.2, 0.2, 0.9]  // red — locked
 const RAIL_ACTIVE_COLOR: [number, number, number, number] = [0.2, 0.5, 1.0, 1.0]  // blue — active
-const TARGET_MARKER_COLOR: [number, number, number, number] = [1.0, 0.7, 0.2, 1.0] // amber
+const TARGET_MARKER_COLOR:    [number, number, number, number] = [1.0, 0.7, 0.2, 1.0] // amber (free)
+const TARGET_ATTACHED_COLOR:  [number, number, number, number] = [0.2, 0.9, 0.4, 1.0] // green (attached)
 const HANDLE_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]        // white handle
 
 const TARGET_CROSS_LEN = 0.4  // world units for target cross arms
@@ -98,11 +99,12 @@ export function drawDirectorCameraSetup(
   rails: DirectorRails,
   railWorldAnchor: [number, number, number],
   isSelected: boolean,
+  isTargetAttached: boolean,
   fov: number,
   dpr: number,
 ): void {
   // Target marker (always visible in director mode)
-  drawTargetMarker(ov, targetPos, dpr)
+  drawTargetMarker(ov, targetPos, isTargetAttached, dpr)
 
   // Camera frustum icon (reuses drawFrustum helper below)
   drawFrustum(ov, cameraPos, targetPos, fov)
@@ -116,20 +118,22 @@ export function drawDirectorCameraSetup(
 function drawTargetMarker(
   ov: OverlayRenderer,
   pos: [number, number, number],
+  isAttached: boolean,
   dpr: number,
 ): void {
   const [x, y, z] = pos
+  const color = isAttached ? TARGET_ATTACHED_COLOR : TARGET_MARKER_COLOR
   const h = TARGET_CROSS_LEN
   // 3-axis cross in world space
   const verts = new Float32Array([
-    x - h, y, z,  x + h, y, z,  // X arm
-    x, y - h, z,  x, y + h, z,  // Y arm
-    x, y, z - h,  x, y, z + h,  // Z arm
+    x - h, y, z,  x + h, y, z,
+    x, y - h, z,  x, y + h, z,
+    x, y, z - h,  x, y, z + h,
   ])
-  ov.drawLines3D(verts, TARGET_MARKER_COLOR)
+  ov.drawLines3D(verts, color)
   // Screen-space disc at center
   const s = ov.projectToScreen(x, y, z)
-  ov.drawDiscScreen(s.px, s.py, 6 * dpr, TARGET_MARKER_COLOR)
+  ov.drawDiscScreen(s.px, s.py, isAttached ? 10 * dpr : 6 * dpr, color)
 }
 
 const RAIL_OFFSET = 4.5  // push rail handles beyond the axis tunnel range (CAM_TUNNEL_RANGE=4)
