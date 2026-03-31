@@ -142,6 +142,86 @@ Flexbox-inspired auto-layout for containers:
 - **Ghost preview**: Onion-skin overlay of intermediate frames
 - **Triggers**: Bind click/hover events to animation bundles
 
+### Director Mode — Camera System
+
+A cinematic camera system for creating animated camera sequences without traditional keyframe editing.
+
+#### Design Principles
+
+- **No keyframe UI** — keyframes exist internally but are never exposed to the user
+- **Rail metaphor** — camera movement is defined by physical rails, not abstract time-position pairs
+- **Single target** — one target object per scene that the camera always looks at
+- **Minimal concepts** — only two things to think about: "where the camera is" and "what it looks at"
+
+#### Camera Object
+
+- Exists as a 3D scene object (separate from the viewport camera)
+- Always points at the **Target Object** (amber cross marker in 3D view)
+- Selected by clicking its frustum icon in the 3D viewport
+- Draggable via **ray-plane intersection** on the view-perpendicular plane
+
+#### Rail System
+
+Each axis has a rail that defines the camera's range of movement:
+
+| Rail | Axis | Modes | Description |
+|------|------|-------|-------------|
+| **Truck** | X | Linear / Circular | Left-right movement |
+| **Boom** | Y | Linear / Circular | Up-down movement |
+| **Dolly** | Z | Linear only | Forward-backward movement |
+
+**Rail states:**
+- **Red stub** (minimum) — rail exists but no movement range
+- **Blue extension** — active movement range, camera can slide within
+
+**Rail interaction:**
+- Pull anchor handle outward → extend rail range
+- Double-click anchor → toggle Linear ↔ Circular mode (Truck/Boom only)
+- Camera automatically constrained within extended rail range
+- Alt + drag → override constraint, move camera + rail together
+
+#### Circular Rails
+
+- **X circular**: horizontal orbit in XZ plane, center on Y-axis at Z=0
+- **Y circular**: vertical orbit in the camera's heading plane, center at origin
+- Radius = distance from camera to orbit center (implicit, no extra control)
+- Rail extent maps to arc length on the circle
+
+#### XYZ Axis Move Tunnels
+
+Generalized from the element Z-tunnel system:
+- Color-coded: X=red, Y=green, Z=blue (3D conventions)
+- Hover highlights the tunnel face, shows directional arrow
+- Drag on tunnel face → camera moves along that axis
+- All drag handlers use **ray-based projection** (ray-plane / ray-axis intersection)
+
+#### Frustum Spotlight (Q key)
+
+- Hybrid frustum mask: surface pixels get crisp boundary, background gets volumetric cone
+- Warm amber face colors with per-face brightness levels
+- Entry-face detection via Liang-Barsky algorithm
+
+#### Viewfinder
+
+- Inspector panel showing the director camera's live view
+- Uses `directorCameraPos` / `directorTargetPos` directly
+- Aspect ratio options: 16:9, 4:3, 1:1, 9:16, 2.35:1
+- Focal length slider: 10–200mm
+
+#### Target Object
+
+- Single world-space object (amber cross + disc) visible only in Director mode
+- Camera always looks at it
+- Can be attached to a scene object for follow shots (planned)
+
+#### Keyboard Shortcuts (Director Mode)
+
+| Key | Action |
+|-----|--------|
+| Q | Toggle frustum spotlight |
+| Double-click rail handle | Toggle Linear ↔ Circular rail mode |
+| Alt + axis drag | Override rail constraint |
+
 ### Export
 
 - **Markdown**: Structured UI spec with component tree, layout hints, animations
@@ -271,8 +351,9 @@ src/
 │   └── SplitLabels.tsx     # Split mode count indicator
 │
 ├── interaction/            # Input handling
-│   ├── usePointerHandlers.ts  # Pointer event router (select, drag, resize, draw, color picker)
+│   ├── usePointerHandlers.ts  # Pointer event router (select, drag, resize, draw, color picker, rail/axis drag)
 │   ├── useKeyboardHandlers.ts # Keyboard shortcuts
+│   ├── cameraPathHandlers.ts  # Camera/rail hit testing, rail handle positions
 │   ├── hotkeyRegistry.ts     # Hotkey → action mapping
 │   ├── dragHandlers.ts       # Drag move logic + snap
 │   ├── resizeHandlers.ts     # Corner resize logic + snap
@@ -290,11 +371,17 @@ src/
 │
 ├── rendering/              # rAF loop & animation evaluation
 │   ├── useAnimateLoop.ts   # RequestAnimationFrame loop
+│   ├── cameraPathOverlay.ts # Camera frustum, rail, target rendering
+│   ├── zTunnelOverlay.ts   # XYZ axis tunnels, ground grid, camera footprint
 │   ├── kfAnimator.ts       # Keyframe animator
 │   └── ghostPreview.ts     # Onion-skin preview
 │
 ├── animation/              # Animation system
 │   ├── types.ts            # Keyframe, AnimationClip, AnimationBundle
+│   ├── directorTypes.ts    # Rail system types, circular rail math utilities
+│   ├── directorCameraEvaluator.ts  # Catmull-Rom camera interpolation
+│   ├── directorEventEvaluator.ts   # Event marker evaluation
+│   ├── cameraPresets.ts    # Camera presets (Orbit, Dolly, Crane, Pan, Fly-through)
 │   ├── animationEvaluator.ts
 │   ├── interpolate.ts
 │   └── buildLayerTree.ts
@@ -303,6 +390,8 @@ src/
 │   ├── PropertiesPanel.tsx    # Right panel (element, skin, geometry, triggers)
 │   ├── LayerPanel.tsx         # Layer tree with rename-all
 │   ├── TimelinePanel.tsx      # Animation timeline
+│   ├── DirectorTimelinePanel.tsx # Director mode timeline (camera tracks, events, export)
+│   ├── Viewfinder.tsx         # Director camera live preview
 │   ├── TimelineSidebar.tsx    # Timeline sidebar (bundles, playback)
 │   ├── ElementSection.tsx     # Label, type, frame
 │   ├── SkinSection.tsx        # Skin picker + options
@@ -316,6 +405,7 @@ src/
 │   ├── useChoanStore.ts       # Unified facade store
 │   ├── useElementStore.ts     # Elements + selection + layout
 │   ├── useAnimationStore.ts   # Bundles, clips, keyframes
+│   ├── useDirectorStore.ts    # Director mode (camera pos/target, rails, axis hover, anchor)
 │   ├── usePreviewStore.ts     # Timeline preview state
 │   ├── useUIStore.ts          # Tool, draw color, pending skin/frame
 │   └── useRenderSettings.ts   # Render settings (extrude, outline, toon)
@@ -334,7 +424,7 @@ src/
 │   ├── Button.tsx, Input.tsx, Select.tsx, Slider.tsx,
 │   ├── Dialog.tsx, Tooltip.tsx, Section.tsx, PropRow.tsx, ...
 │
-├── coords/                 # Coordinate transforms (pixel ↔ world)
+├── coords/                 # Coordinate transforms (pixel ↔ world, ray-plane/axis intersection)
 ├── constants/              # Shared constants
 ├── hooks/                  # Custom React hooks
 ├── utils/                  # Utilities (element naming)
