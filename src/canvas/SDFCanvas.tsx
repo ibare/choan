@@ -18,6 +18,7 @@ import SplitLabels from './SplitLabels'
 import ContextToolbar from './ContextToolbar'
 import { onExportAnimStart } from '../animation/exportAnimation'
 import { useDirectorStore } from '../store/useDirectorStore'
+import { useSceneStore } from '../store/useSceneStore'
 // PinOverlay removed — sizing indicators rendered via WebGL overlay
 
 export default function SDFCanvas() {
@@ -94,17 +95,34 @@ export default function SDFCanvas() {
     setDistanceLabels(labels)
   }, [altPressed, selectedIds, elements, pixelToWorld, worldToPixel])
 
-  // Initialize directorCameraPos/TargetPos from viewport camera when entering director mode
+  // Initialize or restore director camera when entering director mode
   const directorMode = useDirectorStore((s) => s.directorMode)
   useEffect(() => {
     if (!directorMode) return
     const renderer = rendererRef.current
     if (!renderer) return
-    const { position, target } = renderer.camera
-    const camPos = [...position] as [number, number, number]
-    useDirectorStore.getState().setDirectorCameraPos(camPos)
-    useDirectorStore.getState().setDirectorTargetPos([...target] as [number, number, number])
-    useDirectorStore.getState().setRailWorldAnchor([...camPos])
+
+    // Check if scene has a saved camera setup
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((s) => s.id === activeSceneId)
+    const setup = scene?.directorTimeline?.cameraSetup
+
+    if (setup) {
+      // Restore from saved setup
+      const ds = useDirectorStore.getState()
+      ds.setDirectorCameraPos([...setup.cameraPos])
+      ds.setDirectorTargetPos([...setup.targetPos])
+      ds.setDirectorRails({ ...setup.rails })
+      ds.setRailWorldAnchor([...setup.railWorldAnchor])
+      ds.setDirectorTargetAttachedTo(setup.targetAttachedTo)
+    } else {
+      // First time — initialize from viewport camera
+      const { position, target } = renderer.camera
+      const camPos = [...position] as [number, number, number]
+      useDirectorStore.getState().setDirectorCameraPos(camPos)
+      useDirectorStore.getState().setDirectorTargetPos([...target] as [number, number, number])
+      useDirectorStore.getState().setRailWorldAnchor([...camPos])
+    }
   }, [directorMode])
 
   // Initialize renderer + controls

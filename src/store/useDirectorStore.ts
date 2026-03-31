@@ -6,9 +6,11 @@ import { useSceneStore } from './useSceneStore'
 import {
   createDefaultDirectorTimeline,
   createDefaultRails,
+  type CameraMark,
   type CameraViewKeyframe,
   type EventMarker,
   type DirectorRails,
+  type DirectorCameraSetup,
   type RailAxis,
   type RailDir,
   type RailHandleId,
@@ -60,8 +62,16 @@ interface DirectorStore {
   setDirectorCameraAxisHover: (hover: AxisHover) => void
   setRailWorldAnchor:        (anchor: [number, number, number]) => void
   setDirectorTargetAttachedTo: (id: string | null) => void
+  saveCameraSetup: () => void  // persist current camera rig to scene
 
-  // Camera keyframe CRUD (operates on active scene)
+  // Camera mark CRUD (operates on active scene)
+  selectedCameraMarkId: string | null
+  setSelectedCameraMarkId: (id: string | null) => void
+  addCameraMark: (mark: CameraMark) => void
+  updateCameraMark: (markId: string, patch: Partial<CameraMark>) => void
+  removeCameraMark: (markId: string) => void
+
+  // Camera keyframe CRUD (legacy, operates on active scene)
   addCameraKeyframe: (kf: CameraViewKeyframe) => void
   updateCameraKeyframe: (kfId: string, patch: Partial<CameraViewKeyframe>) => void
   removeCameraKeyframe: (kfId: string) => void
@@ -156,6 +166,46 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   setRailWorldAnchor: (anchor) => set({ railWorldAnchor: anchor }),
   setDirectorTargetAttachedTo: (id) => set({ directorTargetAttachedTo: id }),
 
+  saveCameraSetup: () => {
+    const s = get()
+    const setup: DirectorCameraSetup = {
+      cameraPos: [...s.directorCameraPos],
+      targetPos: [...s.directorTargetPos],
+      rails: { ...s.directorRails },
+      railWorldAnchor: [...s.railWorldAnchor],
+      targetAttachedTo: s.directorTargetAttachedTo,
+    }
+    updateActiveSceneDirectorTimeline((dt) => ({ ...dt, cameraSetup: setup }))
+  },
+
+  // ── Camera mark CRUD ──
+
+  selectedCameraMarkId: null,
+  setSelectedCameraMarkId: (id) => set({ selectedCameraMarkId: id }),
+
+  addCameraMark: (mark) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraMarks: [...(dt.cameraMarks ?? []), mark].sort((a, b) => a.time - b.time),
+    }))
+  },
+
+  updateCameraMark: (markId, patch) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraMarks: (dt.cameraMarks ?? [])
+        .map((m) => (m.id === markId ? { ...m, ...patch } : m))
+        .sort((a, b) => a.time - b.time),
+    }))
+  },
+
+  removeCameraMark: (markId) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraMarks: (dt.cameraMarks ?? []).filter((m) => m.id !== markId),
+    }))
+  },
+
   toggleRailMode: (axis) => {
     const { directorRails } = get()
     const key = axis === 'truck' ? 'truckMode' : 'boomMode'
@@ -218,3 +268,15 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     }))
   },
 }))
+
+// Auto-persist camera setup to scene when rig state changes (debounced)
+let _saveTimer: ReturnType<typeof setTimeout> | null = null
+let _prevKey = ''
+useDirectorStore.subscribe((s) => {
+  if (!s.directorMode) return
+  const key = `${s.directorCameraPos}|${s.directorTargetPos}|${s.directorRails.truck.neg},${s.directorRails.truck.pos},${s.directorRails.boom.neg},${s.directorRails.boom.pos},${s.directorRails.dolly.neg},${s.directorRails.dolly.pos}|${s.railWorldAnchor}|${s.directorTargetAttachedTo}`
+  if (key === _prevKey) return
+  _prevKey = key
+  if (_saveTimer) clearTimeout(_saveTimer)
+  _saveTimer = setTimeout(() => useDirectorStore.getState().saveCameraSetup(), 300)
+})

@@ -72,7 +72,18 @@ export function pointOnBoomCircle(
   return [Math.sin(hAngle) * h, y, Math.cos(hAngle) * h]
 }
 
-// ── Camera keyframes (used for playback in step 2) ────────────────────────
+// ── Camera marks (rail-based animation) ───────────────────────────────────
+
+export interface CameraMark {
+  id: string
+  time: number                        // absolute ms within scene
+  position: [number, number, number]  // 3D world position (on rail)
+  target: [number, number, number]    // target position
+  focalLengthMm: number              // focal length in mm
+  easing?: EasingType                // curve from this mark to next
+}
+
+// ── Camera keyframes (legacy, kept for backward compat) ──────────────────
 
 export interface CameraViewKeyframe {
   id: string
@@ -91,11 +102,21 @@ export interface EventMarker {
   durationOverride?: number  // optional: override bundle's natural duration
 }
 
+export interface DirectorCameraSetup {
+  cameraPos: [number, number, number]
+  targetPos: [number, number, number]
+  rails: DirectorRails
+  railWorldAnchor: [number, number, number]
+  targetAttachedTo: string | null
+}
+
 export interface DirectorTimeline {
-  cameraKeyframes: CameraViewKeyframe[]
+  cameraMarks: CameraMark[]
+  cameraKeyframes: CameraViewKeyframe[]  // legacy
   eventMarkers: EventMarker[]
+  cameraSetup?: DirectorCameraSetup      // persisted camera rig state
 }
 
 export function createDefaultDirectorTimeline(): DirectorTimeline {
-  return { cameraKeyframes: [], eventMarkers: [] }
+  return { cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
 }

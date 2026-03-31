@@ -25,8 +25,10 @@ import { useDirectorStore } from '../store/useDirectorStore'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
-import { createDefaultDirectorTimeline } from '../animation/directorTypes'
-import { drawCameraPathOverlay, drawDirectorCameraSetup } from './cameraPathOverlay'
+import { createDefaultDirectorTimeline, type CameraMark } from '../animation/directorTypes'
+import { evaluateCameraMarks } from '../animation/cameraMarkEvaluator'
+import { nanoid } from '../utils/nanoid'
+import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
@@ -85,6 +87,25 @@ export function useAnimateLoop({
     }
     window.addEventListener('keydown', onQDown)
 
+    // M key: capture camera mark at current playhead time
+    const onMDown = (e: KeyboardEvent) => {
+      if (e.code === 'KeyM' && !e.repeat) {
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return
+        const dir = useDirectorStore.getState()
+        if (!dir.directorMode || dir.directorPlaying) return
+        const mark: CameraMark = {
+          id: nanoid(),
+          time: Math.round(dir.directorPlayheadTime),
+          position: [...dir.directorCameraPos] as [number, number, number],
+          target: [...dir.directorTargetPos] as [number, number, number],
+          focalLengthMm: dir.focalLengthMm,
+        }
+        dir.addCameraMark(mark)
+      }
+    }
+    window.addEventListener('keydown', onMDown)
+
     const animate = () => {
       frameId = requestAnimationFrame(animate)
       const renderer = rendererRef.current
@@ -112,8 +133,11 @@ export function useAnimateLoop({
         } else {
           useDirectorStore.getState().setDirectorPlayheadTime(elapsed)
 
-          // Camera interpolation
-          const camState = evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
+          // Camera interpolation — marks take priority over legacy keyframes
+          const hasMarks = (dt.cameraMarks?.length ?? 0) > 0
+          const camState = hasMarks
+            ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
+            : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
           if (camState) {
             cam.position[0] = camState.position[0]
             cam.position[1] = camState.position[1]
@@ -400,10 +424,22 @@ export function useAnimateLoop({
           }
         }
 
-        // Legacy keyframe path overlay (kept for playback preview)
+        // Camera marks on rails
         const scState = useSceneStore.getState()
         const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
         const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
+        const marks = dirTl.cameraMarks ?? []
+        if (marks.length > 0) {
+          drawCameraMarks(
+            renderer.overlay,
+            marks,
+            dirState.directorRails,
+            dirState.railWorldAnchor,
+            dirState.directorCameraPos,
+          )
+        }
+
+        // Legacy keyframe path overlay (kept for playback preview)
         if (dirTl.cameraKeyframes.length >= 1) {
           const curCamState = evaluateDirectorCamera(dirTl.cameraKeyframes, dirState.directorPlayheadTime)
           drawCameraPathOverlay(
@@ -423,6 +459,7 @@ export function useAnimateLoop({
       cancelAnimationFrame(frameId)
       kfAnimator.stopAll()
       window.removeEventListener('keydown', onQDown)
+      window.removeEventListener('keydown', onMDown)
     }
   }, [])
 }

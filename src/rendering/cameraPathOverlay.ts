@@ -3,7 +3,8 @@
 // Also draws the new rail UX (director camera object + rails + target marker).
 
 import type { OverlayRenderer } from '../engine/overlay'
-import type { CameraViewKeyframe, DirectorRails } from '../animation/directorTypes'
+import type { CameraMark, CameraViewKeyframe, DirectorRails } from '../animation/directorTypes'
+import { evaluateCameraMarks } from '../animation/cameraMarkEvaluator'
 import { RAIL_MIN_STUB, truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from '../animation/directorTypes'
 import type { DirectorCameraState } from '../animation/directorCameraEvaluator'
 import { sampleCatmullRomPath3D } from '../engine/catmullRom'
@@ -84,6 +85,172 @@ export function drawCameraPathOverlay(
     )
     ov.drawDiscScreen(screen.px, screen.py, 6 * dpr, CURRENT_POS_COLOR)
   }
+}
+
+// ── Camera mark visualization — path-following cylinder pipe ─────────────────
+
+const PIPE_BODY_COLOR:  [number, number, number, number] = [0.2, 0.75, 0.3, 0.25]
+const PIPE_EDGE_COLOR:  [number, number, number, number] = [0.2, 0.75, 0.3, 0.6]
+const PIPE_HATCH_COLOR: [number, number, number, number] = [0.2, 0.75, 0.3, 0.35]
+const PIPE_RADIUS = 0.3
+const PIPE_CROSS_SEGMENTS = 10  // cross-section circle resolution
+const PIPE_PATH_SAMPLES = 40   // samples along the path for smooth curves
+const PIPE_RING_INTERVAL = 4   // draw a hatch ring every N path samples
+
+/**
+ * Build a cross-section circle perpendicular to a tangent direction.
+ * Returns PIPE_CROSS_SEGMENTS+1 points forming the circle ring.
+ */
+function buildCrossSection(
+  center: [number, number, number],
+  tangent: [number, number, number],
+  radius: number,
+  seg: number,
+): [number, number, number][] {
+  // Find an arbitrary perpendicular vector
+  const [tx, ty, tz] = tangent
+  let ux: number, uy: number, uz: number
+  if (Math.abs(ty) < 0.9) {
+    // cross(tangent, [0,1,0])
+    ux = tz; uy = 0; uz = -tx
+  } else {
+    // cross(tangent, [1,0,0])
+    ux = 0; uy = -tz; uz = ty
+  }
+  const ul = Math.sqrt(ux * ux + uy * uy + uz * uz)
+  if (ul < 1e-6) return []
+  ux /= ul; uy /= ul; uz /= ul
+  // v = tangent × u
+  const vx = ty * uz - tz * uy
+  const vy = tz * ux - tx * uz
+  const vz = tx * uy - ty * ux
+
+  const points: [number, number, number][] = []
+  for (let i = 0; i <= seg; i++) {
+    const angle = (i / seg) * Math.PI * 2
+    const c = Math.cos(angle) * radius
+    const s = Math.sin(angle) * radius
+    points.push([
+      center[0] + ux * c + vx * s,
+      center[1] + uy * c + vy * s,
+      center[2] + uz * c + vz * s,
+    ])
+  }
+  return points
+}
+
+/**
+ * Draw a tube mesh along a 3D path (array of points).
+ * Generates cross-section circles at each path point, connects them with triangles.
+ */
+function drawTubeAlongPath(
+  ov: OverlayRenderer,
+  path: [number, number, number][],
+) {
+  if (path.length < 2) return
+  const seg = PIPE_CROSS_SEGMENTS
+  const r = PIPE_RADIUS
+
+  // Build cross-sections for each path point
+  const sections: [number, number, number][][] = []
+  for (let i = 0; i < path.length; i++) {
+    // Compute tangent
+    let tx: number, ty: number, tz: number
+    if (i === 0) {
+      tx = path[1][0] - path[0][0]; ty = path[1][1] - path[0][1]; tz = path[1][2] - path[0][2]
+    } else if (i === path.length - 1) {
+      tx = path[i][0] - path[i - 1][0]; ty = path[i][1] - path[i - 1][1]; tz = path[i][2] - path[i - 1][2]
+    } else {
+      tx = path[i + 1][0] - path[i - 1][0]; ty = path[i + 1][1] - path[i - 1][1]; tz = path[i + 1][2] - path[i - 1][2]
+    }
+    const tl = Math.sqrt(tx * tx + ty * ty + tz * tz)
+    if (tl < 1e-6) continue
+    tx /= tl; ty /= tl; tz /= tl
+
+    const cs = buildCrossSection(path[i], [tx, ty, tz], r, seg)
+    if (cs.length > 0) sections.push(cs)
+  }
+
+  if (sections.length < 2) return
+
+  // Body triangles
+  const tris: number[] = []
+  for (let si = 0; si < sections.length - 1; si++) {
+    const ringA = sections[si]
+    const ringB = sections[si + 1]
+    for (let j = 0; j < seg; j++) {
+      const a0 = ringA[j], a1 = ringA[j + 1]
+      const b0 = ringB[j], b1 = ringB[j + 1]
+      tris.push(a0[0], a0[1], a0[2], b0[0], b0[1], b0[2], a1[0], a1[1], a1[2])
+      tris.push(a1[0], a1[1], a1[2], b0[0], b0[1], b0[2], b1[0], b1[1], b1[2])
+    }
+  }
+  ov.drawTriangles3D(new Float32Array(tris), PIPE_BODY_COLOR)
+
+  // End cap discs
+  const capTris: number[] = []
+  const firstCenter = path[0]
+  const lastCenter = path[path.length - 1]
+  const firstRing = sections[0]
+  const lastRing = sections[sections.length - 1]
+  for (let j = 0; j < seg; j++) {
+    capTris.push(firstCenter[0], firstCenter[1], firstCenter[2], firstRing[j + 1][0], firstRing[j + 1][1], firstRing[j + 1][2], firstRing[j][0], firstRing[j][1], firstRing[j][2])
+    capTris.push(lastCenter[0], lastCenter[1], lastCenter[2], lastRing[j][0], lastRing[j][1], lastRing[j][2], lastRing[j + 1][0], lastRing[j + 1][1], lastRing[j + 1][2])
+  }
+  ov.drawTriangles3D(new Float32Array(capTris), PIPE_BODY_COLOR)
+
+  // Edge rings at ends + periodic hatch rings
+  for (let si = 0; si < sections.length; si++) {
+    const isEnd = si === 0 || si === sections.length - 1
+    const isHatch = si % PIPE_RING_INTERVAL === 0
+    if (!isEnd && !isHatch) continue
+    const ring = sections[si]
+    const color = isEnd ? PIPE_EDGE_COLOR : PIPE_HATCH_COLOR
+    const verts: number[] = []
+    for (let j = 0; j < seg; j++) {
+      verts.push(ring[j][0], ring[j][1], ring[j][2], ring[j + 1][0], ring[j + 1][1], ring[j + 1][2])
+    }
+    ov.drawLines3D(new Float32Array(verts), color)
+  }
+}
+
+/**
+ * Sample the camera path between marks, respecting rail geometry.
+ * Uses evaluateCameraMarks to get positions along the actual interpolation path.
+ */
+function sampleMarkPath(
+  marks: CameraMark[],
+  rails: DirectorRails,
+  samples: number,
+): [number, number, number][] {
+  const firstTime = marks[0].time
+  const lastTime = marks[marks.length - 1].time
+  if (lastTime <= firstTime) return [marks[0].position]
+
+  const path: [number, number, number][] = []
+  for (let i = 0; i <= samples; i++) {
+    const t = firstTime + (i / samples) * (lastTime - firstTime)
+    const state = evaluateCameraMarks(marks, t, rails)
+    if (state) path.push([...state.position])
+  }
+  return path
+}
+
+/**
+ * Draws the camera mark range as a 3D cylinder pipe following the actual path.
+ * Works for both linear and circular rails.
+ */
+export function drawCameraMarks(
+  ov: OverlayRenderer,
+  marks: CameraMark[],
+  rails: DirectorRails,
+  railWorldAnchor: [number, number, number],
+  cameraPos: [number, number, number],
+): void {
+  if (marks.length < 2) return
+  const path = sampleMarkPath(marks, rails, PIPE_PATH_SAMPLES)
+  if (path.length < 2) return
+  drawTubeAlongPath(ov, path)
 }
 
 // ── Rail UX — director camera setup rendering ────────────────────────────────
@@ -404,6 +571,7 @@ function drawFrustum(
   pos: [number, number, number],
   target: [number, number, number],
   fov: number,
+  color?: [number, number, number, number],
 ) {
   // Compute camera basis vectors
   let fx = target[0] - pos[0]
@@ -459,5 +627,5 @@ function drawFrustum(
     verts.push(a[0], a[1], a[2], b[0], b[1], b[2])
   }
 
-  ov.drawLines3D(new Float32Array(verts), FRUSTUM_COLOR)
+  ov.drawLines3D(new Float32Array(verts), color ?? FRUSTUM_COLOR)
 }

@@ -13,7 +13,8 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
-import { createDefaultDirectorTimeline, type CameraViewKeyframe, type EventMarker } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, type CameraMark, type CameraViewKeyframe, type EventMarker } from '../animation/directorTypes'
+import { evaluateCameraMarks } from '../animation/cameraMarkEvaluator'
 import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
 import type { RenderOptions } from '../engine/timeline2dTypes'
@@ -56,7 +57,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const { animationBundles } = useChoanStore()
   const {
     directorPlayheadTime, directorPlaying, focalLengthMm, frustumSpotlightOn, viewfinderAspect,
+    directorCameraPos, directorTargetPos, directorRails,
     setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm, toggleFrustumSpotlight, setViewfinderAspect,
+    selectedCameraMarkId, setSelectedCameraMarkId,
+    addCameraMark, updateCameraMark, removeCameraMark,
     addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
     addEventMarker, updateEventMarker, removeEventMarker,
   } = useDirectorStore()
@@ -71,7 +75,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
   const dragRef = useRef<{
-    type: 'event' | 'camera-kf'
+    type: 'event' | 'camera-kf' | 'camera-mark'
     id: string; mode: 'move' | 'resize'
     startX: number; startTime: number; startDuration: number
   } | null>(null)
@@ -129,6 +133,34 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.lineTo(w, Math.round(RULER_H + TRACK_H) - 0.5)
     ctx.stroke()
 
+    // Camera marks — circles with connecting lines
+    const marks = dt.cameraMarks ?? []
+    if (marks.length > 1) {
+      ctx.strokeStyle = '#5b4fcf55'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      for (let i = 0; i < marks.length; i++) {
+        const x = msToX(marks[i].time)
+        if (i === 0) ctx.moveTo(x, camY)
+        else ctx.lineTo(x, camY)
+      }
+      ctx.stroke()
+    }
+    for (const mark of marks) {
+      const x = msToX(mark.time)
+      if (x >= SIDEBAR_W - 10 && x <= w + 10) {
+        const isSelected = mark.id === selectedCameraMarkId
+        ctx.beginPath()
+        ctx.arc(x, camY, isSelected ? 8 : 6, 0, Math.PI * 2)
+        ctx.fillStyle = isSelected ? '#ffd633' : '#5b4fcf'
+        ctx.fill()
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 1.5
+        ctx.stroke()
+      }
+    }
+
+    // Legacy camera keyframes — diamonds
     for (const kf of dt.cameraKeyframes) {
       const x = msToX(kf.time)
       if (x >= SIDEBAR_W - 10 && x <= w + 10) {
@@ -207,7 +239,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.textAlign = 'left'
     ctx.fillText('🎥 Camera', 8, RULER_H + TRACK_H / 2 + 4)
     ctx.fillText('⚡ Events', 8, RULER_H + TRACK_H + TRACK_H / 2 + 4)
-  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId])
+  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId])
 
   useEffect(() => { draw() }, [draw])
 
@@ -226,7 +258,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const tag = (e.target as HTMLElement).tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA') return
-        if (selectedCameraKfId) {
+        if (selectedCameraMarkId) {
+          removeCameraMark(selectedCameraMarkId)
+          setSelectedCameraMarkId(null)
+          e.preventDefault()
+        } else if (selectedCameraKfId) {
           removeCameraKeyframe(selectedCameraKfId)
           setSelectedCameraKfId(null)
           e.preventDefault()
@@ -239,7 +275,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selectedCameraKfId, selectedMarkerId, removeCameraKeyframe, removeEventMarker])
+  }, [selectedCameraMarkId, selectedCameraKfId, selectedMarkerId, removeCameraMark, removeCameraKeyframe, removeEventMarker, setSelectedCameraMarkId])
 
   // ── Pointer handlers ──
   const xToMs = (clientX: number) => {
@@ -268,6 +304,16 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     return null
   }
 
+  const hitTestCameraMark = (localX: number, localY: number): CameraMark | null => {
+    const camY = RULER_H + TRACK_H / 2
+    if (localY < RULER_H || localY >= RULER_H + TRACK_H) return null
+    for (const mark of (dt.cameraMarks ?? [])) {
+      const mx = SIDEBAR_W + LEFT_PAD + mark.time * PX_PER_MS
+      if (Math.sqrt((localX - mx) ** 2 + (localY - camY) ** 2) < 10) return mark
+    }
+    return null
+  }
+
   const hitTestCameraKf = (localX: number, localY: number): CameraViewKeyframe | null => {
     const camY = RULER_H
     if (localY < camY || localY >= camY + TRACK_H) return null
@@ -286,10 +332,29 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
     if (localX < SIDEBAR_W) return
 
-    // Check camera keyframe hit
+    // Check camera mark hit (new system)
+    const markHit = hitTestCameraMark(localX, localY)
+    if (markHit) {
+      setSelectedCameraMarkId(markHit.id)
+      setSelectedCameraKfId(null)
+      setSelectedMarkerId(null)
+      dragRef.current = {
+        type: 'camera-mark',
+        id: markHit.id,
+        mode: 'move',
+        startX: e.clientX,
+        startTime: markHit.time,
+        startDuration: 0,
+      }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
+
+    // Check legacy camera keyframe hit
     const camHit = hitTestCameraKf(localX, localY)
     if (camHit) {
       setSelectedCameraKfId(camHit.id)
+      setSelectedCameraMarkId(null)
       setSelectedMarkerId(null)
       dragRef.current = {
         type: 'camera-kf',
@@ -312,6 +377,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       const effectiveDur = marker.durationOverride ?? bundleDur
       setSelectedMarkerId(marker.id)
       setSelectedCameraKfId(null)
+      setSelectedCameraMarkId(null)
       dragRef.current = {
         type: 'event',
         id: marker.id,
@@ -327,6 +393,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     // Click on empty area deselects
     setSelectedMarkerId(null)
     setSelectedCameraKfId(null)
+    setSelectedCameraMarkId(null)
 
     // Ruler/playhead scrub
     scrubRef.current = true
@@ -338,7 +405,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
-      if (dragRef.current.type === 'camera-kf') {
+      if (dragRef.current.type === 'camera-mark') {
+        const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
+        updateCameraMark(dragRef.current.id, { time: Math.round(newTime) })
+      } else if (dragRef.current.type === 'camera-kf') {
         const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
         updateCameraKeyframe(dragRef.current.id, { time: Math.round(newTime) })
       } else if (dragRef.current.mode === 'move') {
@@ -361,9 +431,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     const rect = canvas.getBoundingClientRect()
     const localX = e.clientX - rect.left
     const localY = e.clientY - rect.top
+    const markHover = hitTestCameraMark(localX, localY)
     const camHit = hitTestCameraKf(localX, localY)
     const evtHit = hitTestEventBar(localX, localY)
-    if (camHit) {
+    if (markHover || camHit) {
       canvas.style.cursor = 'grab'
     } else if (evtHit?.isEdge) {
       canvas.style.cursor = 'ew-resize'
@@ -409,16 +480,14 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   const handleSaveView = () => {
-    const cam = rendererSingleton.renderer?.camera
-    if (!cam) return
-    const kf: CameraViewKeyframe = {
+    const mark: CameraMark = {
       id: nanoid(),
       time: Math.round(directorPlayheadTime),
-      position: [...cam.position] as [number, number, number],
-      target: [...cam.target] as [number, number, number],
-      fov: mmToFov(focalLengthMm),
+      position: [...directorCameraPos] as [number, number, number],
+      target: [...directorTargetPos] as [number, number, number],
+      focalLengthMm,
     }
-    addCameraKeyframe(kf)
+    addCameraMark(mark)
   }
 
   const handleApplyPreset = (presetType: string) => {
@@ -477,8 +546,12 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       (timeMs) => {
         const state = useChoanStore.getState()
 
-        // Camera
-        const camState = evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
+        // Camera — marks take priority over legacy keyframes
+        const dirState = useDirectorStore.getState()
+        const exportHasMarks = (dt.cameraMarks?.length ?? 0) > 0
+        const camState = exportHasMarks
+          ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
+          : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
         if (camState) {
           renderer.camera.position[0] = camState.position[0]
           renderer.camera.position[1] = camState.position[1]
@@ -538,8 +611,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           <Button className="btn-small" onClick={handleStop}><Stop size={14} weight="fill" /></Button>
         </Tooltip>
         <div className="timeline-separator" />
-        <Tooltip content="Save Current View as Keyframe">
-          <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Save View</Button>
+        <Tooltip content="Mark current camera position (M)">
+          <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Mark</Button>
         </Tooltip>
         <Select
           options={CAMERA_PRESET_OPTIONS}
