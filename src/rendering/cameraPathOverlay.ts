@@ -4,7 +4,7 @@
 
 import type { OverlayRenderer } from '../engine/overlay'
 import type { CameraViewKeyframe, DirectorRails } from '../animation/directorTypes'
-import { RAIL_MIN_STUB } from '../animation/directorTypes'
+import { RAIL_MIN_STUB, truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from '../animation/directorTypes'
 import type { DirectorCameraState } from '../animation/directorCameraEvaluator'
 import { sampleCatmullRomPath3D } from '../engine/catmullRom'
 
@@ -137,15 +137,16 @@ function drawRailAxes(
   dpr: number,
 ): void {
   // Helper: draw one sided rail segment.
-  // Extended rails are anchored in world space; unextended rails follow cameraPos.
+  // If EITHER side of the axis is extended, both sides anchor in world space.
   function drawOneSide(
     axisIdx: number,  // 0=x, 1=y, 2=z
     sign: number,     // +1 or -1
     extent: number,
+    axisAnchored: boolean,  // true if either neg or pos of this axis is extended
   ): void {
     const isExtended = extent > RAIL_MIN_STUB + 0.001
-    // Anchor: extended rails use world anchor, otherwise camera position
-    const anchorVal = isExtended ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
+    // Anchor: use world anchor if the axis has any extension, otherwise camera pos
+    const anchorVal = axisAnchored ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
     const dx = axisIdx === 0 ? sign : 0
     const dy = axisIdx === 1 ? sign : 0
     const dz = axisIdx === 2 ? sign : 0
@@ -157,8 +158,8 @@ function drawRailAxes(
     const stubEndY = baseY + dy * stub
     const stubEndZ = baseZ + dz * stub
 
-    // Connecting line: camera → rail base (fills the gap for extended rails)
-    if (isExtended) {
+    // Connecting line: camera → rail base (fills the gap when anchored)
+    if (axisAnchored) {
       ov.drawLines3D(new Float32Array([
         cameraPos[0], cameraPos[1], cameraPos[2],
         baseX, baseY, baseZ,
@@ -184,18 +185,129 @@ function drawRailAxes(
     }
   }
 
-  // Truck (X axis=0)
-  drawOneSide(0,  1, rails.truck.pos)
-  drawOneSide(0, -1, rails.truck.neg)
-  // Boom (Y axis=1)
-  drawOneSide(1,  1, rails.boom.pos)
-  drawOneSide(1, -1, rails.boom.neg)
-  // Dolly (Z axis=2)
-  drawOneSide(2,  1, rails.dolly.pos)
-  drawOneSide(2, -1, rails.dolly.neg)
+  // Per-axis "anchored" flag: true if either neg or pos is extended
+  const truckAnchored = rails.truck.neg > RAIL_MIN_STUB + 0.001 || rails.truck.pos > RAIL_MIN_STUB + 0.001
+  const boomAnchored  = rails.boom.neg  > RAIL_MIN_STUB + 0.001 || rails.boom.pos  > RAIL_MIN_STUB + 0.001
+  const dollyAnchored = rails.dolly.neg > RAIL_MIN_STUB + 0.001 || rails.dolly.pos > RAIL_MIN_STUB + 0.001
+
+  // Truck (X axis=0) — linear or circular
+  if (rails.truckMode === 'circular') {
+    drawCircularRail(ov, cameraPos, railWorldAnchor, 'truck', rails.truck, dpr)
+  } else {
+    drawOneSide(0,  1, rails.truck.pos, truckAnchored)
+    drawOneSide(0, -1, rails.truck.neg, truckAnchored)
+  }
+  // Boom (Y axis=1) — linear or circular
+  if (rails.boomMode === 'circular') {
+    drawCircularRail(ov, cameraPos, railWorldAnchor, 'boom', rails.boom, dpr)
+  } else {
+    drawOneSide(1,  1, rails.boom.pos, boomAnchored)
+    drawOneSide(1, -1, rails.boom.neg, boomAnchored)
+  }
+  // Dolly (Z axis=2) — always linear
+  drawOneSide(2,  1, rails.dolly.pos, dollyAnchored)
+  drawOneSide(2, -1, rails.dolly.neg, dollyAnchored)
 
   // Sphere rail — horizontal circle (XZ plane) around target
   drawSphereRail(ov, cameraPos, targetPos, rails.sphere, dpr)
+}
+
+const ARC_SEGMENTS = 48  // line segments per arc side
+
+function drawCircularRail(
+  ov: OverlayRenderer,
+  cameraPos: [number, number, number],
+  railWorldAnchor: [number, number, number],
+  axis: 'truck' | 'boom',
+  ext: { neg: number; pos: number },
+  dpr: number,
+): void {
+  const isExtended = ext.neg > RAIL_MIN_STUB + 0.001 || ext.pos > RAIL_MIN_STUB + 0.001
+
+  if (axis === 'truck') {
+    // Horizontal orbit in XZ plane
+    const { center, radius, angle: camAngle } = truckCircularParams(cameraPos)
+    if (radius < 0.01) return
+    const anchorAngle = isExtended
+      ? Math.atan2(railWorldAnchor[0], railWorldAnchor[2])
+      : camAngle
+    const negAngle = ext.neg / radius  // arc length → angle
+    const posAngle = ext.pos / radius
+
+    // Draw neg arc (stub + extension)
+    drawArcSide(ov, center, radius, anchorAngle, -1, negAngle, dpr,
+      (a) => pointOnTruckCircle(center, radius, a))
+
+    // Draw pos arc
+    drawArcSide(ov, center, radius, anchorAngle, +1, posAngle, dpr,
+      (a) => pointOnTruckCircle(center, radius, a))
+
+  } else {
+    // Vertical orbit in camera heading plane
+    const { radius, elevAngle: camElev, hAngle } = boomCircularParams(cameraPos)
+    if (radius < 0.01) return
+    const anchorElev = isExtended
+      ? boomCircularParams(railWorldAnchor).elevAngle
+      : camElev
+    const negAngle = ext.neg / radius
+    const posAngle = ext.pos / radius
+
+    drawArcSide(ov, [0, 0, 0], radius, anchorElev, -1, negAngle, dpr,
+      (a) => pointOnBoomCircle(radius, a, hAngle))
+
+    drawArcSide(ov, [0, 0, 0], radius, anchorElev, +1, posAngle, dpr,
+      (a) => pointOnBoomCircle(radius, a, hAngle))
+  }
+}
+
+/** Draw one side (neg or pos) of a circular rail arc. */
+function drawArcSide(
+  ov: OverlayRenderer,
+  _center: [number, number, number],
+  _radius: number,
+  baseAngle: number,
+  sign: number,    // -1 for neg, +1 for pos
+  totalAngle: number,
+  dpr: number,
+  pointFn: (angle: number) => [number, number, number],
+): void {
+  const isExtended = totalAngle > RAIL_MIN_STUB / Math.max(_radius, 0.01) + 0.001
+  const stubAngle = RAIL_MIN_STUB / Math.max(_radius, 0.01)
+
+  // Red stub arc
+  const stubSegs = Math.max(4, Math.round(ARC_SEGMENTS * stubAngle / (Math.PI * 2)))
+  const stubVerts: number[] = []
+  for (let i = 0; i < stubSegs; i++) {
+    const a0 = baseAngle + sign * (i / stubSegs) * stubAngle
+    const a1 = baseAngle + sign * ((i + 1) / stubSegs) * stubAngle
+    const p0 = pointFn(a0), p1 = pointFn(a1)
+    stubVerts.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
+  }
+  ov.drawLines3D(new Float32Array(stubVerts), RAIL_STUB_COLOR)
+
+  if (isExtended) {
+    // Blue extension arc
+    const extSegs = Math.max(4, Math.round(ARC_SEGMENTS * totalAngle / (Math.PI * 2)))
+    const extVerts: number[] = []
+    for (let i = 0; i < extSegs; i++) {
+      const t0 = stubAngle + (i / extSegs) * (totalAngle - stubAngle)
+      const t1 = stubAngle + ((i + 1) / extSegs) * (totalAngle - stubAngle)
+      const a0 = baseAngle + sign * t0
+      const a1 = baseAngle + sign * t1
+      const p0 = pointFn(a0), p1 = pointFn(a1)
+      extVerts.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
+    }
+    ov.drawLines3D(new Float32Array(extVerts), RAIL_ACTIVE_COLOR)
+    // White handle at tip
+    const tipPt = pointFn(baseAngle + sign * totalAngle)
+    const s = ov.projectToScreen(tipPt[0], tipPt[1], tipPt[2])
+    ov.drawDiscScreen(s.px, s.py, 10 * dpr, HANDLE_COLOR)
+  } else {
+    // Red handle at stub tip
+    const stubTip = pointFn(baseAngle + sign * stubAngle)
+    const s = ov.projectToScreen(stubTip[0], stubTip[1], stubTip[2])
+    ov.drawDiscScreen(s.px, s.py, 10 * dpr, RAIL_STUB_COLOR)
+  }
 }
 
 function drawSphereRail(

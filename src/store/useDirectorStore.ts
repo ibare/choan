@@ -55,6 +55,7 @@ interface DirectorStore {
   setDirectorRails:          (rails: DirectorRails) => void
   setSelectedRailHandle:     (handle: RailHandleId | null) => void
   extendRail:                (axis: RailAxis, dir: RailDir, newExtent: number) => void
+  toggleRailMode:            (axis: 'truck' | 'boom') => void
   setDirectorCameraAxisHover: (hover: AxisHover) => void
   setRailWorldAnchor:        (anchor: [number, number, number]) => void
 
@@ -150,6 +151,18 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
 
   setDirectorCameraAxisHover: (hover) => set({ directorCameraAxisHover: hover }),
   setRailWorldAnchor: (anchor) => set({ railWorldAnchor: anchor }),
+
+  toggleRailMode: (axis) => {
+    const { directorRails } = get()
+    const key = axis === 'truck' ? 'truckMode' : 'boomMode'
+    const current = directorRails[key]
+    set({
+      directorRails: {
+        ...directorRails,
+        [key]: current === 'linear' ? 'circular' : 'linear',
+      },
+    })
+  },
 
   // ── Camera keyframe CRUD ──
 

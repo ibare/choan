@@ -23,7 +23,11 @@ import { track } from '../utils/analytics'
 import { pushSnapshot } from '../store/history'
 import { useDirectorStore } from '../store/useDirectorStore'
 import { useSceneStore } from '../store/useSceneStore'
-import { createDefaultDirectorTimeline, RAIL_MIN_STUB } from '../animation/directorTypes'
+import {
+  createDefaultDirectorTimeline, RAIL_MIN_STUB,
+  truckCircularParams, boomCircularParams,
+  pointOnTruckCircle, pointOnBoomCircle,
+} from '../animation/directorTypes'
 import {
   hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
   hitTestDirectorCameraBody, hitTestRailHandle, computeRailHandleDrag,
@@ -121,6 +125,9 @@ export function usePointerHandlers({
   const dragRailHandleRef        = useRef<RailHandleHit | null>(null)
   const dragRailOrigExtentRef    = useRef(0)
   const dragRailStartTRef        = useRef(0)  // ray-axis T at drag start
+  // Double-click detection for rail mode toggle
+  const lastRailClickTimeRef     = useRef(0)
+  const lastRailClickAxisRef     = useRef<string>('')
   // Director camera body drag refs
   const isDraggingDirCameraRef   = useRef(false)
   const dragDirCameraOrigPosRef  = useRef<[number, number, number]>([0, 0, 0])
@@ -206,6 +213,20 @@ export function usePointerHandlers({
           )
           if (railHit) {
             const { axis, dir } = railHit.handleId
+
+            // Double-click detection → toggle rail mode (linear ↔ circular)
+            const now = performance.now()
+            const axisKey = `${axis}-${dir}`
+            if (now - lastRailClickTimeRef.current < 350 && lastRailClickAxisRef.current === axisKey) {
+              if (axis === 'truck' || axis === 'boom') {
+                useDirectorStore.getState().toggleRailMode(axis)
+                lastRailClickTimeRef.current = 0
+                return
+              }
+            }
+            lastRailClickTimeRef.current = now
+            lastRailClickAxisRef.current = axisKey
+
             const rails = director.directorRails
             const origExtent = axis === 'sphere'
               ? rails.sphere
@@ -685,23 +706,71 @@ export function usePointerHandlers({
             const railKey = axis === 'x' ? 'truck' : axis === 'y' ? 'boom' : 'dolly'
             const railExt = rails[railKey]
             const isExtended = railExt.neg > RAIL_MIN_STUB + 0.01 || railExt.pos > RAIL_MIN_STUB + 0.01
-            let newVal = axisDragOrigPosRef.current[ai] + delta
+            const railMode = railKey === 'truck' ? rails.truckMode
+                           : railKey === 'boom'  ? rails.boomMode
+                           : 'linear'
 
-            if (isExtended && !e.altKey) {
-              // Clamp within rail range (anchor-based)
-              const anchor = dirSt.railWorldAnchor[ai]
-              newVal = Math.max(anchor - railExt.neg, Math.min(anchor + railExt.pos, newVal))
-            }
+            if (railMode === 'circular' && (axis === 'x' || axis === 'y')) {
+              // ── Circular movement: ray-plane → angle → point on arc ──
+              const origPos = axisDragOrigPosRef.current
+              let newPos: [number, number, number] | null = null
 
-            const newPos: [number, number, number] = [...axisDragOrigPosRef.current]
-            newPos[ai] = newVal
-            dirSt.setDirectorCameraPos(newPos)
+              if (axis === 'x') {
+                // X circular: intersect ray with Y=camY horizontal plane
+                const hit = rayPlaneIntersect(ro, rd, [0, 1, 0], [0, origPos[1], 0])
+                if (hit) {
+                  const { center, radius } = truckCircularParams(origPos)
+                  if (radius > 0.01) {
+                    let newAngle = Math.atan2(hit[0] - center[0], hit[2] - center[2])
+                    if (isExtended && !e.altKey) {
+                      const anchorAngle = Math.atan2(dirSt.railWorldAnchor[0], dirSt.railWorldAnchor[2])
+                      const negA = railExt.neg / radius, posA = railExt.pos / radius
+                      newAngle = Math.max(anchorAngle - negA, Math.min(anchorAngle + posA, newAngle))
+                    }
+                    newPos = pointOnTruckCircle(center, radius, newAngle)
+                  }
+                }
+              } else {
+                // Y circular: intersect ray with the vertical orbit plane
+                const { radius, hAngle } = boomCircularParams(origPos)
+                const planeN: [number, number, number] = [Math.cos(hAngle), 0, -Math.sin(hAngle)]
+                const hit = rayPlaneIntersect(ro, rd, planeN, [0, 0, 0])
+                if (hit && radius > 0.01) {
+                  const hitH = Math.sin(hAngle) * hit[0] + Math.cos(hAngle) * hit[2]
+                  let newElev = Math.atan2(hit[1], hitH)
+                  if (isExtended && !e.altKey) {
+                    const anchorElev = boomCircularParams(dirSt.railWorldAnchor).elevAngle
+                    const negA = railExt.neg / radius, posA = railExt.pos / radius
+                    newElev = Math.max(anchorElev - negA, Math.min(anchorElev + posA, newElev))
+                  }
+                  newPos = pointOnBoomCircle(radius, newElev, hAngle)
+                }
+              }
 
-            if (!isExtended || e.altKey) {
-              // Rail not extended or Alt override → move anchor with camera
-              const newAnchor: [number, number, number] = [...dirSt.railWorldAnchor]
-              newAnchor[ai] = newVal
-              dirSt.setRailWorldAnchor(newAnchor)
+              if (newPos) {
+                dirSt.setDirectorCameraPos(newPos)
+                if (!isExtended || e.altKey) {
+                  dirSt.setRailWorldAnchor([...newPos])
+                }
+              }
+            } else {
+              // ── Linear movement (existing) ──
+              let newVal = axisDragOrigPosRef.current[ai] + delta
+
+              if (isExtended && !e.altKey) {
+                const anchor = dirSt.railWorldAnchor[ai]
+                newVal = Math.max(anchor - railExt.neg, Math.min(anchor + railExt.pos, newVal))
+              }
+
+              const newPos: [number, number, number] = [...axisDragOrigPosRef.current]
+              newPos[ai] = newVal
+              dirSt.setDirectorCameraPos(newPos)
+
+              if (!isExtended || e.altKey) {
+                const newAnchor: [number, number, number] = [...dirSt.railWorldAnchor]
+                newAnchor[ai] = newVal
+                dirSt.setRailWorldAnchor(newAnchor)
+              }
             }
           } else {
             // Element Z drag: convert world delta to element.z units

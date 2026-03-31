@@ -3,7 +3,7 @@
 
 import type { OverlayRenderer } from '../engine/overlay'
 import type { CameraViewKeyframe, DirectorRails, RailHandleId } from '../animation/directorTypes'
-import { RAIL_MIN_STUB } from '../animation/directorTypes'
+import { RAIL_MIN_STUB, truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from '../animation/directorTypes'
 import { pixelToWorld } from '../coords/coordinateSystem'
 
 export interface CameraKeyframeHit {
@@ -80,14 +80,49 @@ function getRailHandlePositions(
     return isExt ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
   }
   const bx = base(0, rails.truck), by = base(1, rails.boom), bz = base(2, rails.dolly)
-  const handles: Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> = [
-    { handleId: { axis: 'truck', dir: 'pos' }, wx: bx + o + rails.truck.pos, wy: cy, wz: cz },
-    { handleId: { axis: 'truck', dir: 'neg' }, wx: bx - o - rails.truck.neg, wy: cy, wz: cz },
-    { handleId: { axis: 'boom',  dir: 'pos' }, wx: cx, wy: by + o + rails.boom.pos,  wz: cz },
-    { handleId: { axis: 'boom',  dir: 'neg' }, wx: cx, wy: by - o - rails.boom.neg,  wz: cz },
-    { handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: bz + o + rails.dolly.pos },
-    { handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: bz - o - rails.dolly.neg },
-  ]
+  const handles: Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> = []
+
+  // Truck (X) handles — linear or circular
+  if (rails.truckMode === 'circular') {
+    const { center, radius, angle: camAngle } = truckCircularParams(cameraPos)
+    const isExt = rails.truck.neg > RAIL_MIN_STUB + 0.01 || rails.truck.pos > RAIL_MIN_STUB + 0.01
+    const anchorAngle = isExt ? Math.atan2(railWorldAnchor[0], railWorldAnchor[2]) : camAngle
+    if (radius > 0.01) {
+      const stubAngle = RAIL_MIN_STUB / radius
+      const posA = anchorAngle + (isExt ? rails.truck.pos / radius : stubAngle)
+      const negA = anchorAngle - (isExt ? rails.truck.neg / radius : stubAngle)
+      const posP = pointOnTruckCircle(center, radius, posA)
+      const negP = pointOnTruckCircle(center, radius, negA)
+      handles.push({ handleId: { axis: 'truck', dir: 'pos' }, wx: posP[0], wy: posP[1], wz: posP[2] })
+      handles.push({ handleId: { axis: 'truck', dir: 'neg' }, wx: negP[0], wy: negP[1], wz: negP[2] })
+    }
+  } else {
+    handles.push({ handleId: { axis: 'truck', dir: 'pos' }, wx: bx + o + rails.truck.pos, wy: cy, wz: cz })
+    handles.push({ handleId: { axis: 'truck', dir: 'neg' }, wx: bx - o - rails.truck.neg, wy: cy, wz: cz })
+  }
+
+  // Boom (Y) handles — linear or circular
+  if (rails.boomMode === 'circular') {
+    const { radius, elevAngle: camElev, hAngle } = boomCircularParams(cameraPos)
+    const isExt = rails.boom.neg > RAIL_MIN_STUB + 0.01 || rails.boom.pos > RAIL_MIN_STUB + 0.01
+    const anchorElev = isExt ? boomCircularParams(railWorldAnchor).elevAngle : camElev
+    if (radius > 0.01) {
+      const stubAngle = RAIL_MIN_STUB / radius
+      const posA = anchorElev + (isExt ? rails.boom.pos / radius : stubAngle)
+      const negA = anchorElev - (isExt ? rails.boom.neg / radius : stubAngle)
+      const posP = pointOnBoomCircle(radius, posA, hAngle)
+      const negP = pointOnBoomCircle(radius, negA, hAngle)
+      handles.push({ handleId: { axis: 'boom', dir: 'pos' }, wx: posP[0], wy: posP[1], wz: posP[2] })
+      handles.push({ handleId: { axis: 'boom', dir: 'neg' }, wx: negP[0], wy: negP[1], wz: negP[2] })
+    }
+  } else {
+    handles.push({ handleId: { axis: 'boom', dir: 'pos' }, wx: cx, wy: by + o + rails.boom.pos, wz: cz })
+    handles.push({ handleId: { axis: 'boom', dir: 'neg' }, wx: cx, wy: by - o - rails.boom.neg, wz: cz })
+  }
+
+  // Dolly (Z) handles — always linear
+  handles.push({ handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: bz + o + rails.dolly.pos })
+  handles.push({ handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: bz - o - rails.dolly.neg })
   // Sphere handle: point on circle toward camera (XZ projection)
   const dx = cx - tx
   const dz = cz - tz
