@@ -13,8 +13,8 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
-import { createDefaultDirectorTimeline, type CameraMark, type CameraViewKeyframe, type EventMarker } from '../animation/directorTypes'
-import { evaluateCameraMarks } from '../animation/cameraMarkEvaluator'
+import { createDefaultDirectorTimeline, ensureAxisMarks, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark } from '../animation/directorTypes'
+import { evaluateCameraMarks, evaluateAxisMarks } from '../animation/cameraMarkEvaluator'
 import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
 import type { RenderOptions } from '../engine/timeline2dTypes'
@@ -36,9 +36,14 @@ const VIEWFINDER_ASPECT_OPTIONS = [
 
 const PX_PER_MS = 0.15
 const TRACK_H = 32
+const AXIS_TRACK_H = 24
 const RULER_H = 35  // Match bundle timeline ruler height
 const SIDEBAR_W = 120
 const LEFT_PAD = 24  // Match bundle timeline left padding
+
+const AXIS_CHANNELS: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
+const AXIS_COLORS: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55c055', dolly: '#5588dd' }
+const AXIS_LABELS: Record<AxisMarkChannel, string> = { truck: 'X Truck', boom: 'Y Boom', dolly: 'Z Dolly' }
 
 // 35mm full-frame sensor: width = 36mm
 const SENSOR_W = 36
@@ -64,6 +69,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
     addEventMarker, updateEventMarker, removeEventMarker,
     resetDirector,
+    selectedAxisMarkId, selectedAxisMarkChannel,
+    setSelectedAxisMark, updateAxisMark, removeAxisMark, markActiveAxis, activeRailAxis,
   } = useDirectorStore()
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -76,14 +83,17 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
   const dragRef = useRef<{
-    type: 'event' | 'camera-kf' | 'camera-mark'
+    type: 'event' | 'camera-kf' | 'camera-mark' | 'axis-mark'
     id: string; mode: 'move' | 'resize'
+    channel?: AxisMarkChannel
     startX: number; startTime: number; startDuration: number
   } | null>(null)
 
   const scene = scenes.find((s) => s.id === activeSceneId)
   const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
   const sceneDuration = scene?.duration ?? 3000
+  const axisMarksData = ensureAxisMarks(dt).axisMarks
+  const hasAxisMarks = Object.values(axisMarksData).some((arr) => arr.length > 0)
 
   // ── Canvas rendering ──
   const draw = useCallback(() => {
@@ -123,55 +133,103 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     renderRuler(ctx, w - SIDEBAR_W, renderOpts, (_ms, _o) => LEFT_PAD + _ms * PX_PER_MS)
     ctx.restore()
 
-    // ── Camera track ──
-    const camY = RULER_H + TRACK_H / 2
-    ctx.fillStyle = 'var(--surface-2)'
-    ctx.fillRect(SIDEBAR_W, RULER_H, w - SIDEBAR_W, TRACK_H)
-    ctx.strokeStyle = 'var(--border)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(SIDEBAR_W, Math.round(RULER_H + TRACK_H) - 0.5)
-    ctx.lineTo(w, Math.round(RULER_H + TRACK_H) - 0.5)
-    ctx.stroke()
+    // ── Camera track (axis sub-tracks or unified) ──
+    const camAreaH = hasAxisMarks ? AXIS_TRACK_H * 3 : TRACK_H
 
-    // Camera marks — circles with connecting lines
-    const marks = dt.cameraMarks ?? []
-    if (marks.length > 1) {
-      ctx.strokeStyle = '#5b4fcf55'
-      ctx.lineWidth = 2
-      ctx.beginPath()
-      for (let i = 0; i < marks.length; i++) {
-        const x = msToX(marks[i].time)
-        if (i === 0) ctx.moveTo(x, camY)
-        else ctx.lineTo(x, camY)
+    if (hasAxisMarks) {
+      // Per-axis sub-tracks
+      for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
+        const ch = AXIS_CHANNELS[ci]
+        const trackY = RULER_H + ci * AXIS_TRACK_H
+        const centerY = trackY + AXIS_TRACK_H / 2
+        const color = AXIS_COLORS[ch]
+
+        // Track background
+        ctx.fillStyle = ci % 2 === 0 ? 'var(--surface-2)' : 'var(--bg)'
+        ctx.fillRect(SIDEBAR_W, trackY, w - SIDEBAR_W, AXIS_TRACK_H)
+
+        // Axis marks — circles with connecting lines
+        const chMarks = axisMarksData[ch]
+        if (chMarks.length > 1) {
+          ctx.strokeStyle = color + '55'
+          ctx.lineWidth = 2
+          ctx.beginPath()
+          for (let i = 0; i < chMarks.length; i++) {
+            const x = msToX(chMarks[i].time)
+            if (i === 0) ctx.moveTo(x, centerY)
+            else ctx.lineTo(x, centerY)
+          }
+          ctx.stroke()
+        }
+        for (const mark of chMarks) {
+          const x = msToX(mark.time)
+          if (x >= SIDEBAR_W - 10 && x <= w + 10) {
+            const isSelected = mark.id === selectedAxisMarkId && ch === selectedAxisMarkChannel
+            ctx.beginPath()
+            ctx.arc(x, centerY, isSelected ? 7 : 5, 0, Math.PI * 2)
+            ctx.fillStyle = isSelected ? '#ffd633' : color
+            ctx.fill()
+            ctx.strokeStyle = '#fff'
+            ctx.lineWidth = 1.5
+            ctx.stroke()
+          }
+        }
       }
+      // Bottom border
+      ctx.strokeStyle = 'var(--border)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(SIDEBAR_W, Math.round(RULER_H + camAreaH) - 0.5)
+      ctx.lineTo(w, Math.round(RULER_H + camAreaH) - 0.5)
       ctx.stroke()
-    }
-    for (const mark of marks) {
-      const x = msToX(mark.time)
-      if (x >= SIDEBAR_W - 10 && x <= w + 10) {
-        const isSelected = mark.id === selectedCameraMarkId
+    } else {
+      // Unified camera track (legacy)
+      const camY = RULER_H + TRACK_H / 2
+      ctx.fillStyle = 'var(--surface-2)'
+      ctx.fillRect(SIDEBAR_W, RULER_H, w - SIDEBAR_W, TRACK_H)
+      ctx.strokeStyle = 'var(--border)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(SIDEBAR_W, Math.round(RULER_H + TRACK_H) - 0.5)
+      ctx.lineTo(w, Math.round(RULER_H + TRACK_H) - 0.5)
+      ctx.stroke()
+
+      const marks = dt.cameraMarks ?? []
+      if (marks.length > 1) {
+        ctx.strokeStyle = '#5b4fcf55'
+        ctx.lineWidth = 2
         ctx.beginPath()
-        ctx.arc(x, camY, isSelected ? 8 : 6, 0, Math.PI * 2)
-        ctx.fillStyle = isSelected ? '#ffd633' : '#5b4fcf'
-        ctx.fill()
-        ctx.strokeStyle = '#fff'
-        ctx.lineWidth = 1.5
+        for (let i = 0; i < marks.length; i++) {
+          const x = msToX(marks[i].time)
+          if (i === 0) ctx.moveTo(x, camY)
+          else ctx.lineTo(x, camY)
+        }
         ctx.stroke()
       }
-    }
-
-    // Legacy camera keyframes — diamonds
-    for (const kf of dt.cameraKeyframes) {
-      const x = msToX(kf.time)
-      if (x >= SIDEBAR_W - 10 && x <= w + 10) {
-        const isSelected = kf.id === selectedCameraKfId
-        drawDiamond(ctx, x, camY, isSelected)
+      for (const mark of marks) {
+        const x = msToX(mark.time)
+        if (x >= SIDEBAR_W - 10 && x <= w + 10) {
+          const isSelected = mark.id === selectedCameraMarkId
+          ctx.beginPath()
+          ctx.arc(x, camY, isSelected ? 8 : 6, 0, Math.PI * 2)
+          ctx.fillStyle = isSelected ? '#ffd633' : '#5b4fcf'
+          ctx.fill()
+          ctx.strokeStyle = '#fff'
+          ctx.lineWidth = 1.5
+          ctx.stroke()
+        }
+      }
+      for (const kf of dt.cameraKeyframes) {
+        const x = msToX(kf.time)
+        if (x >= SIDEBAR_W - 10 && x <= w + 10) {
+          const isSelected = kf.id === selectedCameraKfId
+          drawDiamond(ctx, x, camY, isSelected)
+        }
       }
     }
 
     // ── Events track ──
-    const evtY = RULER_H + TRACK_H
+    const evtY = RULER_H + camAreaH
     ctx.fillStyle = 'var(--bg)'
     ctx.fillRect(SIDEBAR_W, evtY, w - SIDEBAR_W, TRACK_H)
 
@@ -238,9 +296,20 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
     ctx.font = '500 11px Inter, system-ui, sans-serif'
     ctx.textAlign = 'left'
-    ctx.fillText('🎥 Camera', 8, RULER_H + TRACK_H / 2 + 4)
-    ctx.fillText('⚡ Events', 8, RULER_H + TRACK_H + TRACK_H / 2 + 4)
-  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId])
+    if (hasAxisMarks) {
+      ctx.font = '500 10px Inter, system-ui, sans-serif'
+      for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
+        const ch = AXIS_CHANNELS[ci]
+        ctx.fillStyle = AXIS_COLORS[ch]
+        ctx.fillText(AXIS_LABELS[ch], 8, RULER_H + ci * AXIS_TRACK_H + AXIS_TRACK_H / 2 + 4)
+      }
+    } else {
+      ctx.fillText('🎥 Camera', 8, RULER_H + TRACK_H / 2 + 4)
+    }
+    ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
+    ctx.font = '500 11px Inter, system-ui, sans-serif'
+    ctx.fillText('⚡ Events', 8, RULER_H + camAreaH + TRACK_H / 2 + 4)
+  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId, axisMarksData, hasAxisMarks, selectedAxisMarkId, selectedAxisMarkChannel])
 
   useEffect(() => { draw() }, [draw])
 
@@ -259,7 +328,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       if (e.key === 'Delete' || e.key === 'Backspace') {
         const tag = (e.target as HTMLElement).tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA') return
-        if (selectedCameraMarkId) {
+        if (selectedAxisMarkId && selectedAxisMarkChannel) {
+          removeAxisMark(selectedAxisMarkChannel, selectedAxisMarkId)
+          setSelectedAxisMark(null, null)
+          e.preventDefault()
+        } else if (selectedCameraMarkId) {
           removeCameraMark(selectedCameraMarkId)
           setSelectedCameraMarkId(null)
           e.preventDefault()
@@ -276,7 +349,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selectedCameraMarkId, selectedCameraKfId, selectedMarkerId, removeCameraMark, removeCameraKeyframe, removeEventMarker, setSelectedCameraMarkId])
+  }, [selectedCameraMarkId, selectedCameraKfId, selectedMarkerId, selectedAxisMarkId, selectedAxisMarkChannel, removeCameraMark, removeCameraKeyframe, removeEventMarker, removeAxisMark, setSelectedCameraMarkId, setSelectedAxisMark])
 
   // ── Pointer handlers ──
   const xToMs = (clientX: number) => {
@@ -287,8 +360,26 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   const EDGE_ZONE = 8  // px from right edge for resize handle
 
+  const hitTestAxisMark = (localX: number, localY: number): { channel: AxisMarkChannel; mark: AxisMark } | null => {
+    if (!hasAxisMarks) return null
+    for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
+      const ch = AXIS_CHANNELS[ci]
+      const trackY = RULER_H + ci * AXIS_TRACK_H
+      const centerY = trackY + AXIS_TRACK_H / 2
+      if (localY < trackY || localY >= trackY + AXIS_TRACK_H) continue
+      for (const mark of axisMarksData[ch]) {
+        const mx = SIDEBAR_W + LEFT_PAD + mark.time * PX_PER_MS
+        if (Math.abs(localX - mx) < 10 && Math.abs(localY - centerY) < 12) {
+          return { channel: ch, mark }
+        }
+      }
+    }
+    return null
+  }
+
   const hitTestEventBar = (localX: number, localY: number): { marker: EventMarker; isEdge: boolean } | null => {
-    const evtY = RULER_H + TRACK_H
+    const camAreaH = hasAxisMarks ? AXIS_TRACK_H * 3 : TRACK_H
+    const evtY = RULER_H + camAreaH
     if (localY < evtY || localY >= evtY + TRACK_H) return null
     for (const marker of dt.eventMarkers) {
       const bundle = animationBundles.find((b) => b.id === marker.bundleId)
@@ -333,10 +424,31 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
     if (localX < SIDEBAR_W) return
 
-    // Check camera mark hit (new system)
+    // Check axis mark hit (per-axis system)
+    const axisHit = hitTestAxisMark(localX, localY)
+    if (axisHit) {
+      setSelectedAxisMark(axisHit.channel, axisHit.mark.id)
+      setSelectedCameraMarkId(null)
+      setSelectedCameraKfId(null)
+      setSelectedMarkerId(null)
+      dragRef.current = {
+        type: 'axis-mark',
+        id: axisHit.mark.id,
+        channel: axisHit.channel,
+        mode: 'move',
+        startX: e.clientX,
+        startTime: axisHit.mark.time,
+        startDuration: 0,
+      }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
+
+    // Check camera mark hit (unified system)
     const markHit = hitTestCameraMark(localX, localY)
     if (markHit) {
       setSelectedCameraMarkId(markHit.id)
+      setSelectedAxisMark(null, null)
       setSelectedCameraKfId(null)
       setSelectedMarkerId(null)
       dragRef.current = {
@@ -395,6 +507,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     setSelectedMarkerId(null)
     setSelectedCameraKfId(null)
     setSelectedCameraMarkId(null)
+    setSelectedAxisMark(null, null)
 
     // Ruler/playhead scrub
     scrubRef.current = true
@@ -406,7 +519,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
-      if (dragRef.current.type === 'camera-mark') {
+      if (dragRef.current.type === 'axis-mark' && dragRef.current.channel) {
+        const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
+        updateAxisMark(dragRef.current.channel, dragRef.current.id, { time: Math.round(newTime) })
+      } else if (dragRef.current.type === 'camera-mark') {
         const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
         updateCameraMark(dragRef.current.id, { time: Math.round(newTime) })
       } else if (dragRef.current.type === 'camera-kf') {
@@ -481,14 +597,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   const handleSaveView = () => {
-    const mark: CameraMark = {
-      id: nanoid(),
-      time: Math.round(directorPlayheadTime),
-      position: [...directorCameraPos] as [number, number, number],
-      target: [...directorTargetPos] as [number, number, number],
-      focalLengthMm,
-    }
-    addCameraMark(mark)
+    markActiveAxis()
   }
 
   const handleApplyPreset = (presetType: string) => {
@@ -547,12 +656,16 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       (timeMs) => {
         const state = useChoanStore.getState()
 
-        // Camera — marks take priority over legacy keyframes
+        // Camera — axisMarks > cameraMarks > legacy keyframes
         const dirState = useDirectorStore.getState()
+        const exportAxisData = ensureAxisMarks(dt).axisMarks
+        const exportHasAxis = Object.values(exportAxisData).some((arr) => arr.length > 0)
         const exportHasMarks = (dt.cameraMarks?.length ?? 0) > 0
-        const camState = exportHasMarks
-          ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
-          : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
+        const camState = exportHasAxis
+          ? evaluateAxisMarks(exportAxisData, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorRails)
+          : exportHasMarks
+            ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
+            : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
         if (camState) {
           renderer.camera.position[0] = camState.position[0]
           renderer.camera.position[1] = camState.position[1]

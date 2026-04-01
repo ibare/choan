@@ -6,6 +6,9 @@ import { useSceneStore } from './useSceneStore'
 import {
   createDefaultDirectorTimeline,
   createDefaultRails,
+  createDefaultAxisMarks,
+  ensureAxisMarks,
+  AXIS_MARK_IDX,
   type CameraMark,
   type CameraViewKeyframe,
   type EventMarker,
@@ -14,8 +17,11 @@ import {
   type RailAxis,
   type RailDir,
   type RailHandleId,
+  type AxisMark,
+  type AxisMarkChannel,
   RAIL_MIN_STUB,
 } from '../animation/directorTypes'
+import { nanoid } from '../utils/nanoid'
 import type { AxisHover } from '../rendering/zTunnelOverlay'
 
 interface DirectorStore {
@@ -40,6 +46,7 @@ interface DirectorStore {
   directorCameraAxisHover: AxisHover
   railWorldAnchor:         [number, number, number]  // world-fixed anchor for extended rails
   directorTargetAttachedTo: string | null             // element ID the target is attached to (null = free)
+  activeRailAxis: AxisMarkChannel | null               // currently selected rail axis for marking
 
   // Mode controls
   setDirectorMode: (on: boolean) => void
@@ -62,6 +69,7 @@ interface DirectorStore {
   setDirectorCameraAxisHover: (hover: AxisHover) => void
   setRailWorldAnchor:        (anchor: [number, number, number]) => void
   setDirectorTargetAttachedTo: (id: string | null) => void
+  setActiveRailAxis: (axis: AxisMarkChannel | null) => void
   saveCameraSetup: () => void  // persist current camera rig to scene
 
   // Camera mark CRUD (operates on active scene)
@@ -80,6 +88,19 @@ interface DirectorStore {
   addEventMarker: (marker: EventMarker) => void
   updateEventMarker: (markerId: string, patch: Partial<EventMarker>) => void
   removeEventMarker: (markerId: string) => void
+
+  // Per-axis mark CRUD
+  selectedAxisMarkId: string | null
+  selectedAxisMarkChannel: AxisMarkChannel | null
+  addAxisMark: (mark: AxisMark) => void
+  updateAxisMark: (channel: AxisMarkChannel, markId: string, patch: Partial<AxisMark>) => void
+  removeAxisMark: (channel: AxisMarkChannel, markId: string) => void
+  setSelectedAxisMark: (channel: AxisMarkChannel | null, id: string | null) => void
+  markAxis: (channel: AxisMarkChannel) => void
+  markActiveAxis: () => void
+
+  // Shift all marks by a world-space delta (for rig movement)
+  shiftAllMarks: (delta: [number, number, number]) => void
 
   // Full reset
   resetDirector: () => void
@@ -117,6 +138,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   directorCameraAxisHover: null,
   railWorldAnchor:         [0, 0, 18],
   directorTargetAttachedTo: null,
+  activeRailAxis: null,
 
   setDirectorMode: (on) => set({
     directorMode: on,
@@ -168,6 +190,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   setDirectorCameraAxisHover: (hover) => set({ directorCameraAxisHover: hover }),
   setRailWorldAnchor: (anchor) => set({ railWorldAnchor: anchor }),
   setDirectorTargetAttachedTo: (id) => set({ directorTargetAttachedTo: id }),
+  setActiveRailAxis: (axis) => set({ activeRailAxis: axis }),
 
   saveCameraSetup: () => {
     const s = get()
@@ -271,6 +294,88 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     }))
   },
 
+  // ── Per-axis mark CRUD ──
+
+  selectedAxisMarkId: null,
+  selectedAxisMarkChannel: null,
+  setSelectedAxisMark: (channel, id) => set({ selectedAxisMarkChannel: channel, selectedAxisMarkId: id }),
+
+  addAxisMark: (mark) => {
+    updateActiveSceneDirectorTimeline((dt) => {
+      const e = ensureAxisMarks(dt)
+      return {
+        ...e,
+        axisMarks: {
+          ...e.axisMarks,
+          [mark.channel]: [...e.axisMarks[mark.channel], mark].sort((a, b) => a.time - b.time),
+        },
+      }
+    })
+  },
+
+  updateAxisMark: (channel, markId, patch) => {
+    updateActiveSceneDirectorTimeline((dt) => {
+      const e = ensureAxisMarks(dt)
+      return {
+        ...e,
+        axisMarks: {
+          ...e.axisMarks,
+          [channel]: e.axisMarks[channel]
+            .map((m) => (m.id === markId ? { ...m, ...patch } : m))
+            .sort((a, b) => a.time - b.time),
+        },
+      }
+    })
+  },
+
+  removeAxisMark: (channel, markId) => {
+    updateActiveSceneDirectorTimeline((dt) => {
+      const e = ensureAxisMarks(dt)
+      return {
+        ...e,
+        axisMarks: {
+          ...e.axisMarks,
+          [channel]: e.axisMarks[channel].filter((m) => m.id !== markId),
+        },
+      }
+    })
+  },
+
+  markAxis: (channel) => {
+    const s = get()
+    const idx = AXIS_MARK_IDX[channel]
+    const value = s.directorCameraPos[idx] - s.railWorldAnchor[idx]
+    const mark: AxisMark = {
+      id: nanoid(),
+      channel,
+      time: Math.round(s.directorPlayheadTime),
+      value,
+    }
+    get().addAxisMark(mark)
+  },
+
+  markActiveAxis: () => {
+    const s = get()
+    if (!s.activeRailAxis) return
+    get().markAxis(s.activeRailAxis)
+  },
+
+  shiftAllMarks: (delta) => {
+    const [dx, dy, dz] = delta
+    if (dx === 0 && dy === 0 && dz === 0) return
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      // cameraMarks store absolute positions — shift them
+      cameraMarks: (dt.cameraMarks ?? []).map((m) => ({
+        ...m,
+        position: [m.position[0] + dx, m.position[1] + dy, m.position[2] + dz] as [number, number, number],
+        target: [m.target[0] + dx, m.target[1] + dy, m.target[2] + dz] as [number, number, number],
+      })),
+      // axisMarks store offsets relative to railWorldAnchor — do NOT shift
+      // (anchor itself moves, so playback auto-adjusts via basePos + offset)
+    }))
+  },
+
   resetDirector: () => {
     set({
       directorPlayheadTime: 0,
@@ -289,6 +394,9 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       railWorldAnchor: [0, 0, 18],
       directorTargetAttachedTo: null,
       selectedCameraMarkId: null,
+      selectedAxisMarkId: null,
+      selectedAxisMarkChannel: null,
+      activeRailAxis: null,
     })
     updateActiveSceneDirectorTimeline(() => createDefaultDirectorTimeline())
   },

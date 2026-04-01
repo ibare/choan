@@ -3,8 +3,9 @@
 // Also draws the new rail UX (director camera object + rails + target marker).
 
 import type { OverlayRenderer } from '../engine/overlay'
-import type { CameraMark, CameraViewKeyframe, DirectorRails } from '../animation/directorTypes'
+import type { CameraMark, CameraViewKeyframe, DirectorRails, AxisMark, AxisMarkChannel } from '../animation/directorTypes'
 import { evaluateCameraMarks } from '../animation/cameraMarkEvaluator'
+import { evaluateSingleChannel } from '../animation/cameraMarkEvaluator'
 import { RAIL_MIN_STUB, truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from '../animation/directorTypes'
 import type { DirectorCameraState } from '../animation/directorCameraEvaluator'
 import { sampleCatmullRomPath3D } from '../engine/catmullRom'
@@ -269,6 +270,7 @@ export function drawDirectorCameraSetup(
   isTargetAttached: boolean,
   fov: number,
   dpr: number,
+  activeRailAxis?: AxisMarkChannel | null,
 ): void {
   // Target marker (always visible in director mode)
   drawTargetMarker(ov, targetPos, isTargetAttached, dpr)
@@ -278,7 +280,7 @@ export function drawDirectorCameraSetup(
 
   // Rails (only when camera is selected)
   if (isSelected) {
-    drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr)
+    drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr, activeRailAxis ?? null)
   }
 }
 
@@ -312,7 +314,11 @@ function drawRailAxes(
   rails: DirectorRails,
   railWorldAnchor: [number, number, number],
   dpr: number,
+  activeRailAxis: AxisMarkChannel | null,
 ): void {
+  // Map axis index to channel for active comparison
+  const AXIS_TO_CHANNEL: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
+
   // Helper: draw one sided rail segment.
   // If EITHER side of the axis is extended, both sides anchor in world space.
   function drawOneSide(
@@ -321,6 +327,8 @@ function drawRailAxes(
     extent: number,
     axisAnchored: boolean,  // true if either neg or pos of this axis is extended
   ): void {
+    const isActive = activeRailAxis === AXIS_TO_CHANNEL[axisIdx]
+    const lw = isActive ? 6 : 2  // 3x thicker for selected axis
     const isExtended = extent > RAIL_MIN_STUB + 0.001
     // Anchor: use world anchor if the axis has any extension, otherwise camera pos
     const anchorVal = axisAnchored ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
@@ -340,18 +348,18 @@ function drawRailAxes(
       ov.drawLines3D(new Float32Array([
         cameraPos[0], cameraPos[1], cameraPos[2],
         baseX, baseY, baseZ,
-      ]), RAIL_ACTIVE_COLOR)
+      ]), RAIL_ACTIVE_COLOR, lw)
     }
 
     // Red stub (always present)
-    ov.drawLines3D(new Float32Array([baseX, baseY, baseZ, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR)
+    ov.drawLines3D(new Float32Array([baseX, baseY, baseZ, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR, lw)
 
     if (isExtended) {
       // Blue extension beyond the stub
       const tipX = baseX + dx * extent
       const tipY = baseY + dy * extent
       const tipZ = baseZ + dz * extent
-      ov.drawLines3D(new Float32Array([stubEndX, stubEndY, stubEndZ, tipX, tipY, tipZ]), RAIL_ACTIVE_COLOR)
+      ov.drawLines3D(new Float32Array([stubEndX, stubEndY, stubEndZ, tipX, tipY, tipZ]), RAIL_ACTIVE_COLOR, lw)
       // White handle at tip
       const s = ov.projectToScreen(tipX, tipY, tipZ)
       ov.drawDiscScreen(s.px, s.py, 10 * dpr, HANDLE_COLOR)
@@ -628,4 +636,159 @@ function drawFrustum(
   }
 
   ov.drawLines3D(new Float32Array(verts), color ?? FRUSTUM_COLOR)
+}
+
+// ── Per-axis mark pipe rendering ────────────────────────────────────────────
+
+const AXIS_PIPE_COLORS: Record<AxisMarkChannel, {
+  body: [number, number, number, number]
+  edge: [number, number, number, number]
+}> = {
+  truck: { body: [0.9, 0.3, 0.3, 0.2], edge: [0.9, 0.3, 0.3, 0.6] },
+  boom:  { body: [0.3, 0.8, 0.3, 0.2], edge: [0.3, 0.8, 0.3, 0.6] },
+  dolly: { body: [0.2, 0.5, 1.0, 0.2], edge: [0.2, 0.5, 1.0, 0.6] },
+}
+
+const AXIS_PIPE_SAMPLES = 30
+
+/**
+ * Sample a per-axis path: positions along one axis, other axes held at basePos.
+ */
+function sampleAxisPath(
+  marks: AxisMark[],
+  channel: AxisMarkChannel,
+  basePos: [number, number, number],
+  rails: DirectorRails,
+  samples: number,
+): [number, number, number][] {
+  if (marks.length < 2) return []
+  const firstTime = marks[0].time
+  const lastTime = marks[marks.length - 1].time
+  if (lastTime <= firstTime) return []
+
+  const path: [number, number, number][] = []
+  for (let i = 0; i <= samples; i++) {
+    const t = firstTime + (i / samples) * (lastTime - firstTime)
+    const val = evaluateSingleChannel(marks, t)
+    if (val === null) continue
+
+    const pos: [number, number, number] = [...basePos]
+
+    if (channel === 'truck' && rails.truckMode === 'circular') {
+      const params = truckCircularParams(basePos)
+      if (params.radius > 0.01) {
+        const angle = params.angle + val / params.radius
+        const pt = pointOnTruckCircle(params.center, params.radius, angle)
+        pos[0] = pt[0]; pos[2] = pt[2]
+      } else {
+        pos[0] += val
+      }
+    } else if (channel === 'boom' && rails.boomMode === 'circular') {
+      const params = boomCircularParams(basePos)
+      if (params.radius > 0.01) {
+        const elev = params.elevAngle + val / params.radius
+        const pt = pointOnBoomCircle(params.radius, elev, params.hAngle)
+        pos[0] = pt[0]; pos[1] = pt[1]; pos[2] = pt[2]
+      } else {
+        pos[1] += val
+      }
+    } else {
+      const idx = channel === 'truck' ? 0 : channel === 'boom' ? 1 : 2
+      pos[idx] += val
+    }
+
+    path.push(pos)
+  }
+  return path
+}
+
+/**
+ * Draws per-axis mark pipes — one colored pipe per axis that has 2+ marks.
+ */
+export function drawAxisMarkPipes(
+  ov: OverlayRenderer,
+  axisMarks: Record<AxisMarkChannel, AxisMark[]>,
+  basePos: [number, number, number],
+  rails: DirectorRails,
+): void {
+  const channels: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
+  for (const ch of channels) {
+    const marks = axisMarks[ch]
+    if (marks.length < 2) continue
+    const path = sampleAxisPath(marks, ch, basePos, rails, AXIS_PIPE_SAMPLES)
+    if (path.length < 2) continue
+
+    // Reuse drawTubeAlongPath but with per-axis colors
+    const colors = AXIS_PIPE_COLORS[ch]
+    drawTubeAlongPathColored(ov, path, colors.body, colors.edge)
+  }
+}
+
+/**
+ * Draw a tube mesh along a 3D path with custom body/edge colors.
+ */
+function drawTubeAlongPathColored(
+  ov: OverlayRenderer,
+  path: [number, number, number][],
+  bodyColor: [number, number, number, number],
+  edgeColor: [number, number, number, number],
+) {
+  if (path.length < 2) return
+  const seg = PIPE_CROSS_SEGMENTS
+  const r = PIPE_RADIUS
+
+  const sections: [number, number, number][][] = []
+  for (let i = 0; i < path.length; i++) {
+    let tx: number, ty: number, tz: number
+    if (i === 0) {
+      tx = path[1][0] - path[0][0]; ty = path[1][1] - path[0][1]; tz = path[1][2] - path[0][2]
+    } else if (i === path.length - 1) {
+      tx = path[i][0] - path[i - 1][0]; ty = path[i][1] - path[i - 1][1]; tz = path[i][2] - path[i - 1][2]
+    } else {
+      tx = path[i + 1][0] - path[i - 1][0]; ty = path[i + 1][1] - path[i - 1][1]; tz = path[i + 1][2] - path[i - 1][2]
+    }
+    const tl = Math.sqrt(tx * tx + ty * ty + tz * tz)
+    if (tl < 1e-6) continue
+    tx /= tl; ty /= tl; tz /= tl
+
+    const cs = buildCrossSection(path[i], [tx, ty, tz], r, seg)
+    if (cs.length > 0) sections.push(cs)
+  }
+
+  if (sections.length < 2) return
+
+  // Body triangles
+  const tris: number[] = []
+  for (let si = 0; si < sections.length - 1; si++) {
+    const ringA = sections[si]
+    const ringB = sections[si + 1]
+    for (let j = 0; j < seg; j++) {
+      const a0 = ringA[j], a1 = ringA[j + 1]
+      const b0 = ringB[j], b1 = ringB[j + 1]
+      tris.push(a0[0], a0[1], a0[2], b0[0], b0[1], b0[2], a1[0], a1[1], a1[2])
+      tris.push(a1[0], a1[1], a1[2], b0[0], b0[1], b0[2], b1[0], b1[1], b1[2])
+    }
+  }
+  ov.drawTriangles3D(new Float32Array(tris), bodyColor)
+
+  // End cap discs
+  const capTris: number[] = []
+  const firstCenter = path[0]
+  const lastCenter = path[path.length - 1]
+  const firstRing = sections[0]
+  const lastRing = sections[sections.length - 1]
+  for (let j = 0; j < seg; j++) {
+    capTris.push(firstCenter[0], firstCenter[1], firstCenter[2], firstRing[j + 1][0], firstRing[j + 1][1], firstRing[j + 1][2], firstRing[j][0], firstRing[j][1], firstRing[j][2])
+    capTris.push(lastCenter[0], lastCenter[1], lastCenter[2], lastRing[j][0], lastRing[j][1], lastRing[j][2], lastRing[j + 1][0], lastRing[j + 1][1], lastRing[j + 1][2])
+  }
+  ov.drawTriangles3D(new Float32Array(capTris), bodyColor)
+
+  // Edge rings at ends
+  for (const ring of [sections[0], sections[sections.length - 1]]) {
+    const verts: number[] = []
+    for (let j = 0; j < seg; j++) {
+      verts.push(ring[j][0], ring[j][1], ring[j][2], ring[j + 1][0], ring[j + 1][1], ring[j + 1][2])
+    }
+    ov.drawLines3D(new Float32Array(verts), edgeColor)
+  }
 }

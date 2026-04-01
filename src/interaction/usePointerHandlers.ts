@@ -299,6 +299,8 @@ export function usePointerHandlers({
             axisDragOriginRef.current = [...director.directorCameraPos]
             axisDragOrigPosRef.current = [...director.directorCameraPos]
             axisDragTargetRef.current = 'camera'
+            const sliderChannel = sliderHit.axis === 'x' ? 'truck' : sliderHit.axis === 'y' ? 'boom' : 'dolly' as const
+            useDirectorStore.getState().setActiveRailAxis(sliderChannel)
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -319,6 +321,8 @@ export function usePointerHandlers({
             axisDragOriginRef.current = [...director.directorCameraPos]
             axisDragOrigPosRef.current = [...director.directorCameraPos]
             axisDragTargetRef.current = 'camera'
+            const tunnelChannel = camHover.axis === 'x' ? 'truck' : camHover.axis === 'y' ? 'boom' : 'dolly' as const
+            useDirectorStore.getState().setActiveRailAxis(tunnelChannel)
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -738,7 +742,10 @@ export function usePointerHandlers({
             dragDirCameraOrigPosRef.current[1] + dy,
             dragDirCameraOrigPosRef.current[2] + dz,
           ]
-          useDirectorStore.getState().setDirectorCameraPos(newPos)
+          const dirSt = useDirectorStore.getState()
+          const prev = dirSt.directorCameraPos
+          dirSt.setDirectorCameraPos(newPos)
+          dirSt.shiftAllMarks([newPos[0] - prev[0], newPos[1] - prev[1], newPos[2] - prev[2]])
         }
       }
       return
@@ -824,9 +831,11 @@ export function usePointerHandlers({
               }
 
               if (newPos) {
+                const prev = dirSt.directorCameraPos
                 dirSt.setDirectorCameraPos(newPos)
                 if (!isExtended || e.altKey) {
                   dirSt.setRailWorldAnchor([...newPos])
+                  dirSt.shiftAllMarks([newPos[0] - prev[0], newPos[1] - prev[1], newPos[2] - prev[2]])
                 }
               }
             } else {
@@ -838,6 +847,7 @@ export function usePointerHandlers({
                 newVal = Math.max(anchor - railExt.neg, Math.min(anchor + railExt.pos, newVal))
               }
 
+              const prev = dirSt.directorCameraPos
               const newPos: [number, number, number] = [...axisDragOrigPosRef.current]
               newPos[ai] = newVal
               dirSt.setDirectorCameraPos(newPos)
@@ -846,6 +856,7 @@ export function usePointerHandlers({
                 const newAnchor: [number, number, number] = [...dirSt.railWorldAnchor]
                 newAnchor[ai] = newVal
                 dirSt.setRailWorldAnchor(newAnchor)
+                dirSt.shiftAllMarks([newPos[0] - prev[0], newPos[1] - prev[1], newPos[2] - prev[2]])
               }
             }
           } else {

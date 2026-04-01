@@ -72,7 +72,29 @@ export function pointOnBoomCircle(
   return [Math.sin(hAngle) * h, y, Math.cos(hAngle) * h]
 }
 
-// ── Camera marks (rail-based animation) ───────────────────────────────────
+// ── Per-axis camera marks ────────────────────────────────────────────────
+
+/** Which axis channel an AxisMark belongs to. */
+export type AxisMarkChannel = 'truck' | 'boom' | 'dolly'
+
+/** Axis index lookup: truck→0(X), boom→1(Y), dolly→2(Z). */
+export const AXIS_MARK_IDX: Record<AxisMarkChannel, number> = { truck: 0, boom: 1, dolly: 2 }
+
+/** A single mark on one axis. Stores an offset value relative to railWorldAnchor. */
+export interface AxisMark {
+  id: string
+  channel: AxisMarkChannel
+  time: number        // absolute ms within scene
+  value: number       // offset along axis from railWorldAnchor (world units)
+  easing?: EasingType // curve from this mark to the next mark on same channel
+}
+
+/** Default empty axis marks record. */
+export function createDefaultAxisMarks(): Record<AxisMarkChannel, AxisMark[]> {
+  return { truck: [], boom: [], dolly: [] }
+}
+
+// ── Camera marks (unified, kept for backward compat) ─────────────────────
 
 export interface CameraMark {
   id: string
@@ -115,8 +137,15 @@ export interface DirectorTimeline {
   cameraKeyframes: CameraViewKeyframe[]  // legacy
   eventMarkers: EventMarker[]
   cameraSetup?: DirectorCameraSetup      // persisted camera rig state
+  axisMarks?: Record<AxisMarkChannel, AxisMark[]>  // per-axis marks
 }
 
 export function createDefaultDirectorTimeline(): DirectorTimeline {
-  return { cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
+  return { cameraMarks: [], cameraKeyframes: [], eventMarkers: [], axisMarks: createDefaultAxisMarks() }
+}
+
+/** Ensure axisMarks exists on a loaded timeline (backward compat). */
+export function ensureAxisMarks(dt: DirectorTimeline): DirectorTimeline & { axisMarks: Record<AxisMarkChannel, AxisMark[]> } {
+  if (dt.axisMarks) return dt as DirectorTimeline & { axisMarks: Record<AxisMarkChannel, AxisMark[]> }
+  return { ...dt, axisMarks: createDefaultAxisMarks() }
 }

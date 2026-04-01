@@ -1,7 +1,7 @@
 // Camera mark evaluator — rail-following interpolation between marks.
 // Pure function, no React/Zustand imports.
 
-import type { CameraMark, DirectorRails } from './directorTypes'
+import type { CameraMark, DirectorRails, AxisMark, AxisMarkChannel } from './directorTypes'
 import { truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from './directorTypes'
 import type { DirectorCameraState } from './directorCameraEvaluator'
 import { resolveEasing } from './easing'
@@ -147,4 +147,79 @@ export function evaluateCameraMarks(
   }
 
   return { position: [...last.position], target: [...last.target], fov: mmToFov(last.focalLengthMm) }
+}
+
+// ── Per-axis mark evaluation ────────────────────────────────────────────────
+
+/** Evaluate a single axis channel at a given time. Returns interpolated offset value, or null if no marks. */
+export function evaluateSingleChannel(marks: AxisMark[], time: number): number | null {
+  if (marks.length === 0) return null
+  if (marks.length === 1) return marks[0].value
+  if (time <= marks[0].time) return marks[0].value
+  const last = marks[marks.length - 1]
+  if (time >= last.time) return last.value
+
+  for (let i = 0; i < marks.length - 1; i++) {
+    const a = marks[i], b = marks[i + 1]
+    if (time >= a.time && time <= b.time) {
+      const segDur = b.time - a.time
+      if (segDur <= 0) return b.value
+      let t = (time - a.time) / segDur
+      if (a.easing) t = resolveEasing(a.easing)(t)
+      return lerp(a.value, b.value, t)
+    }
+  }
+  return last.value
+}
+
+/**
+ * Evaluate per-axis marks at a given time.
+ * Composes camera position as basePos + per-axis offsets.
+ * Returns null if no axis has any marks.
+ */
+export function evaluateAxisMarks(
+  axisMarks: Record<AxisMarkChannel, AxisMark[]>,
+  time: number,
+  basePos: [number, number, number],
+  baseTarget: [number, number, number],
+  baseFocalMm: number,
+  rails: DirectorRails,
+): DirectorCameraState | null {
+  const truckVal = evaluateSingleChannel(axisMarks.truck, time)
+  const boomVal  = evaluateSingleChannel(axisMarks.boom, time)
+  const dollyVal = evaluateSingleChannel(axisMarks.dolly, time)
+
+  if (truckVal === null && boomVal === null && dollyVal === null) return null
+
+  // Linear composition: base + offset per axis
+  const position: [number, number, number] = [
+    basePos[0] + (truckVal ?? 0),
+    basePos[1] + (boomVal ?? 0),
+    basePos[2] + (dollyVal ?? 0),
+  ]
+
+  // Circular rail overrides: convert arc-length offset to 3D position
+  if (rails.truckMode === 'circular' && truckVal !== null) {
+    const params = truckCircularParams(basePos)
+    if (params.radius > 0.01) {
+      const angle = params.angle + truckVal / params.radius
+      const pt = pointOnTruckCircle(params.center, params.radius, angle)
+      position[0] = pt[0]
+      position[2] = pt[2]
+    }
+  }
+  if (rails.boomMode === 'circular' && boomVal !== null) {
+    const params = boomCircularParams(basePos)
+    if (params.radius > 0.01) {
+      const elev = params.elevAngle + boomVal / params.radius
+      const pt = pointOnBoomCircle(params.radius, elev, params.hAngle)
+      position[0] = pt[0]; position[1] = pt[1]; position[2] = pt[2]
+    }
+  }
+
+  return {
+    position,
+    target: [...baseTarget],
+    fov: mmToFov(baseFocalMm),
+  }
 }

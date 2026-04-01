@@ -25,10 +25,10 @@ import { useDirectorStore } from '../store/useDirectorStore'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
-import { createDefaultDirectorTimeline, type CameraMark } from '../animation/directorTypes'
-import { evaluateCameraMarks } from '../animation/cameraMarkEvaluator'
+import { createDefaultDirectorTimeline, ensureAxisMarks, type CameraMark, type AxisMarkChannel } from '../animation/directorTypes'
+import { evaluateCameraMarks, evaluateAxisMarks } from '../animation/cameraMarkEvaluator'
 import { nanoid } from '../utils/nanoid'
-import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup } from './cameraPathOverlay'
+import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
@@ -87,21 +87,14 @@ export function useAnimateLoop({
     }
     window.addEventListener('keydown', onQDown)
 
-    // M key: capture camera mark at current playhead time
+    // M key: capture axis marks at current playhead time
     const onMDown = (e: KeyboardEvent) => {
       if (e.code === 'KeyM' && !e.repeat) {
         const tag = (e.target as HTMLElement).tagName
         if (tag === 'INPUT' || tag === 'TEXTAREA') return
         const dir = useDirectorStore.getState()
         if (!dir.directorMode || dir.directorPlaying) return
-        const mark: CameraMark = {
-          id: nanoid(),
-          time: Math.round(dir.directorPlayheadTime),
-          position: [...dir.directorCameraPos] as [number, number, number],
-          target: [...dir.directorTargetPos] as [number, number, number],
-          focalLengthMm: dir.focalLengthMm,
-        }
-        dir.addCameraMark(mark)
+        dir.markActiveAxis()
       }
     }
     window.addEventListener('keydown', onMDown)
@@ -133,11 +126,15 @@ export function useAnimateLoop({
         } else {
           useDirectorStore.getState().setDirectorPlayheadTime(elapsed)
 
-          // Camera interpolation — marks take priority over legacy keyframes
+          // Camera interpolation — axisMarks > cameraMarks > legacy keyframes
+          const axisData = ensureAxisMarks(dt).axisMarks
+          const hasAxisMarks = Object.values(axisData).some((arr) => arr.length > 0)
           const hasMarks = (dt.cameraMarks?.length ?? 0) > 0
-          const camState = hasMarks
-            ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
-            : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
+          const camState = hasAxisMarks
+            ? evaluateAxisMarks(axisData, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorRails)
+            : hasMarks
+              ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
+              : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
           if (camState) {
             cam.position[0] = camState.position[0]
             cam.position[1] = camState.position[1]
@@ -403,6 +400,7 @@ export function useAnimateLoop({
           dirState.directorTargetAttachedTo !== null,
           dirFov,
           dpr,
+          dirState.activeRailAxis,
         )
 
         // Camera axis move handles — only for non-extended axes
@@ -424,19 +422,30 @@ export function useAnimateLoop({
           }
         }
 
-        // Camera marks on rails
+        // Camera marks on rails — axisMarks > cameraMarks
         const scState = useSceneStore.getState()
         const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
         const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
-        const marks = dirTl.cameraMarks ?? []
-        if (marks.length > 0) {
-          drawCameraMarks(
+        const axisData = ensureAxisMarks(dirTl).axisMarks
+        const hasAxisMarks = Object.values(axisData).some((arr) => arr.length > 0)
+        if (hasAxisMarks) {
+          drawAxisMarkPipes(
             renderer.overlay,
-            marks,
-            dirState.directorRails,
+            axisData,
             dirState.railWorldAnchor,
-            dirState.directorCameraPos,
+            dirState.directorRails,
           )
+        } else {
+          const marks = dirTl.cameraMarks ?? []
+          if (marks.length > 0) {
+            drawCameraMarks(
+              renderer.overlay,
+              marks,
+              dirState.directorRails,
+              dirState.railWorldAnchor,
+              dirState.directorCameraPos,
+            )
+          }
         }
 
         // Legacy keyframe path overlay (kept for playback preview)
