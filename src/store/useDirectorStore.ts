@@ -80,6 +80,9 @@ interface DirectorStore {
   addEventMarker: (marker: EventMarker) => void
   updateEventMarker: (markerId: string, patch: Partial<EventMarker>) => void
   removeEventMarker: (markerId: string) => void
+
+  // Full reset
+  resetDirector: () => void
 }
 
 function updateActiveSceneDirectorTimeline(
@@ -106,13 +109,13 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   viewfinderAspect: '16:9',
 
   // Director camera setup defaults
-  directorCameraPos:      [0, 3, 8],
+  directorCameraPos:      [0, 0, 18],
   directorTargetPos:      [0, 0, 0],
   directorCameraSelected: false,
   directorRails:          createDefaultRails(),
   selectedRailHandle:     null,
   directorCameraAxisHover: null,
-  railWorldAnchor:         [0, 3, 8],
+  railWorldAnchor:         [0, 0, 18],
   directorTargetAttachedTo: null,
 
   setDirectorMode: (on) => set({
@@ -266,6 +269,28 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       ...dt,
       eventMarkers: dt.eventMarkers.filter((m) => m.id !== markerId),
     }))
+  },
+
+  resetDirector: () => {
+    set({
+      directorPlayheadTime: 0,
+      directorPlaying: false,
+      playStartTime: 0,
+      selectedCameraKeyframeId: null,
+      focalLengthMm: 38,
+      frustumSpotlightOn: false,
+      viewfinderAspect: '16:9',
+      directorCameraPos: [0, 0, 18],
+      directorTargetPos: [0, 0, 0],
+      directorCameraSelected: false,
+      directorRails: createDefaultRails(),
+      selectedRailHandle: null,
+      directorCameraAxisHover: null,
+      railWorldAnchor: [0, 0, 18],
+      directorTargetAttachedTo: null,
+      selectedCameraMarkId: null,
+    })
+    updateActiveSceneDirectorTimeline(() => createDefaultDirectorTimeline())
   },
 }))
 

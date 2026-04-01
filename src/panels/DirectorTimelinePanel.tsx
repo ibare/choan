@@ -3,7 +3,7 @@
 // Double-click event bar → switch to bundle editing mode.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Stop, Camera, Export, Screencast } from '@phosphor-icons/react'
+import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
@@ -63,6 +63,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     addCameraMark, updateCameraMark, removeCameraMark,
     addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
     addEventMarker, updateEventMarker, removeEventMarker,
+    resetDirector,
   } = useDirectorStore()
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -609,6 +610,9 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         </Tooltip>
         <Tooltip content="Stop">
           <Button className="btn-small" onClick={handleStop}><Stop size={14} weight="fill" /></Button>
+        </Tooltip>
+        <Tooltip content="Reset all director state">
+          <Button className="btn-small" onClick={resetDirector}><ArrowCounterClockwise size={14} /></Button>
         </Tooltip>
         <div className="timeline-separator" />
         <Tooltip content="Mark current camera position (M)">
