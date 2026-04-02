@@ -25,7 +25,7 @@ import { useDirectorStore } from '../store/useDirectorStore'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
-import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, type CameraMark, type AxisMarkChannel } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, type CameraMark, type AxisMarkChannel, type CameraClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { nanoid } from '../utils/nanoid'
 import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes } from './cameraPathOverlay'
@@ -108,24 +108,45 @@ export function useAnimateLoop({
         const sceneDuration = activeScene?.duration ?? 3000
         const dt = activeScene?.directorTimeline ?? createDefaultDirectorTimeline()
 
-        if (elapsed >= sceneDuration) {
+        // Clip-based total duration: if clips exist, use the last clip's end point
+        const clips = dt.cameraClips ?? []
+        const totalDuration = clips.length > 0
+          ? Math.max(...clips.map(c => c.timelineStart + c.duration))
+          : sceneDuration
+
+        if (elapsed >= totalDuration) {
           useDirectorStore.getState().stopPlaying()
-          useDirectorStore.getState().setDirectorPlayheadTime(sceneDuration)
+          useDirectorStore.getState().setDirectorPlayheadTime(totalDuration)
         } else {
           useDirectorStore.getState().setDirectorPlayheadTime(elapsed)
 
-          // Camera interpolation — railAnimation > axisMarks > cameraMarks > legacy keyframes
-          const hasRailAnim = hasActiveRailTiming(director.directorRails)
-          const axisData = ensureAxisMarks(dt).axisMarks
-          const hasAxisMarks = !hasRailAnim && Object.values(axisData).some((arr) => arr.length > 0)
-          const hasMarks = (dt.cameraMarks?.length ?? 0) > 0
-          const camState = hasRailAnim
-            ? evaluateRailAnimation(director.directorRails, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm)
-            : hasAxisMarks
-              ? evaluateAxisMarks(axisData, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorRails)
-              : hasMarks
-                ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
-                : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
+          // Camera interpolation — clips > railAnimation > axisMarks > cameraMarks > legacy keyframes
+          const activeClip = clips.length > 0 ? findActiveClip(clips, elapsed) : null
+
+          let camState: ReturnType<typeof evaluateRailAnimation> = null
+          if (activeClip) {
+            const localTime = Math.max(0, Math.min(activeClip.duration, elapsed - activeClip.timelineStart))
+            camState = evaluateRailAnimation(
+              activeClip.cameraSetup.rails,
+              localTime,
+              activeClip.cameraSetup.railWorldAnchor,
+              activeClip.cameraSetup.targetPos,
+              activeClip.focalLengthMm,
+            )
+          } else {
+            // Legacy fallback chain: railAnimation > axisMarks > cameraMarks > keyframes
+            const hasRailAnim = hasActiveRailTiming(director.directorRails)
+            const axisData = ensureAxisMarks(dt).axisMarks
+            const hasAxisMarks = !hasRailAnim && Object.values(axisData).some((arr) => arr.length > 0)
+            const hasMarks = (dt.cameraMarks?.length ?? 0) > 0
+            camState = hasRailAnim
+              ? evaluateRailAnimation(director.directorRails, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm)
+              : hasAxisMarks
+                ? evaluateAxisMarks(axisData, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorRails)
+                : hasMarks
+                  ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
+                  : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
+          }
           if (camState) {
             cam.position[0] = camState.position[0]
             cam.position[1] = camState.position[1]
@@ -136,11 +157,20 @@ export function useAnimateLoop({
             cam.fov = camState.fov
           }
 
-          // Event evaluation
-          const activeEvents = evaluateDirectorEvents(dt.eventMarkers, elapsed, state.animationBundles)
-          if (activeEvents.length > 0) {
-            const animated = evaluateDirectorFrame(state.elements, activeEvents)
-            animatedElementsRef.current = animated
+          // Event evaluation — clip-local markers when active, else top-level
+          if (activeClip) {
+            const localTime = elapsed - activeClip.timelineStart
+            const activeEvents = evaluateDirectorEvents(activeClip.eventMarkers, localTime, state.animationBundles)
+            if (activeEvents.length > 0) {
+              const animated = evaluateDirectorFrame(state.elements, activeEvents)
+              animatedElementsRef.current = animated
+            }
+          } else {
+            const activeEvents = evaluateDirectorEvents(dt.eventMarkers, elapsed, state.animationBundles)
+            if (activeEvents.length > 0) {
+              const animated = evaluateDirectorFrame(state.elements, activeEvents)
+              animatedElementsRef.current = animated
+            }
           }
         }
 

@@ -102,10 +102,13 @@ export default function SDFCanvas() {
     const renderer = rendererRef.current
     if (!renderer) return
 
-    // Check if scene has a saved camera setup
+    // Check if scene has a saved camera setup (clip-based takes priority)
     const { scenes, activeSceneId } = useSceneStore.getState()
     const scene = scenes.find((s) => s.id === activeSceneId)
-    const setup = scene?.directorTimeline?.cameraSetup
+    const dt = scene?.directorTimeline
+    const clips = dt?.cameraClips ?? []
+    const setup = clips.length > 0 ? clips[0].cameraSetup : dt?.cameraSetup
+    const focalMm = clips.length > 0 ? clips[0].focalLengthMm : undefined
 
     if (setup) {
       // Restore from saved setup
@@ -115,6 +118,7 @@ export default function SDFCanvas() {
       ds.setDirectorRails({ ...setup.rails })
       ds.setRailWorldAnchor([...setup.railWorldAnchor])
       ds.setDirectorTargetAttachedTo(setup.targetAttachedTo)
+      if (focalMm !== undefined) ds.setFocalLengthMm(focalMm)
     } else {
       // First time — initialize from viewport camera
       const { position, target } = renderer.camera

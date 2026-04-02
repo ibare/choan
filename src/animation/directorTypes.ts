@@ -167,16 +167,73 @@ export interface DirectorCameraSetup {
   targetAttachedTo: string | null
 }
 
+// ── Camera Clip (FCP-style) ─────────────────────────────────────────────
+
+export interface CameraClip {
+  id: string
+  name: string
+  timelineStart: number    // absolute ms on the director timeline
+  duration: number         // clip length in ms (default 3000)
+  cameraSetup: DirectorCameraSetup
+  focalLengthMm: number   // per-clip focal length
+  eventMarkers: EventMarker[]  // clip-local times (0 to duration)
+}
+
+const DEFAULT_CLIP_DURATION = 3000
+
+export function createDefaultCameraClip(setup?: DirectorCameraSetup): CameraClip {
+  return {
+    id: '',  // caller must assign via nanoid
+    name: 'Camera 1',
+    timelineStart: 0,
+    duration: DEFAULT_CLIP_DURATION,
+    cameraSetup: setup ?? {
+      cameraPos: [0, 0, 18],
+      targetPos: [0, 0, 0],
+      rails: createDefaultRails(),
+      railWorldAnchor: [0, 0, 18],
+      targetAttachedTo: null,
+    },
+    focalLengthMm: 38,
+    eventMarkers: [],
+  }
+}
+
+/** Find the active camera clip at a given absolute time. Later-starting clips take priority. */
+export function findActiveClip(clips: CameraClip[], time: number): CameraClip | null {
+  let best: CameraClip | null = null
+  for (const clip of clips) {
+    if (time >= clip.timelineStart && time < clip.timelineStart + clip.duration) {
+      if (!best || clip.timelineStart > best.timelineStart) best = clip
+    }
+  }
+  return best
+}
+
+// ── Director Timeline ───────────────────────────────────────────────────
+
 export interface DirectorTimeline {
+  cameraClips: CameraClip[]
+  // Legacy (backward compat)
   cameraMarks: CameraMark[]
-  cameraKeyframes: CameraViewKeyframe[]  // legacy
+  cameraKeyframes: CameraViewKeyframe[]
   eventMarkers: EventMarker[]
-  cameraSetup?: DirectorCameraSetup      // persisted camera rig state
-  axisMarks?: Record<AxisMarkChannel, AxisMark[]>  // per-axis marks
+  cameraSetup?: DirectorCameraSetup
+  axisMarks?: Record<AxisMarkChannel, AxisMark[]>
 }
 
 export function createDefaultDirectorTimeline(): DirectorTimeline {
-  return { cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
+  return { cameraClips: [], cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
+}
+
+/** Migrate legacy DirectorTimeline (no cameraClips) to clip-based system. */
+export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline {
+  if (dt.cameraClips && dt.cameraClips.length > 0) return dt
+  if (!dt.cameraSetup) return dt  // no legacy data to migrate
+  const clip = createDefaultCameraClip(dt.cameraSetup)
+  clip.id = 'migrated-clip'
+  clip.eventMarkers = (dt.eventMarkers ?? []).map(e => ({ ...e }))
+  return { ...dt, cameraClips: [clip] }
 }
 
 /** Ensure axisMarks exists on a loaded timeline (backward compat). */

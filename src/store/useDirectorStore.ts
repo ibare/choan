@@ -7,8 +7,12 @@ import {
   createDefaultDirectorTimeline,
   createDefaultRails,
   createDefaultAxisMarks,
+  createDefaultCameraClip,
+  findActiveClip,
   ensureAxisMarks,
   AXIS_MARK_IDX,
+  RAIL_MIN_STUB,
+  type CameraClip,
   type CameraMark,
   type CameraViewKeyframe,
   type EventMarker,
@@ -19,7 +23,6 @@ import {
   type RailHandleId,
   type AxisMark,
   type AxisMarkChannel,
-  RAIL_MIN_STUB,
 } from '../animation/directorTypes'
 import { nanoid } from '../utils/nanoid'
 import type { AxisHover } from '../rendering/zTunnelOverlay'
@@ -48,6 +51,11 @@ interface DirectorStore {
   directorTargetAttachedTo: string | null             // element ID the target is attached to (null = free)
   activeRailAxis: AxisMarkChannel | null               // currently selected rail axis for marking
 
+  // Camera clip state
+  detailClipId: string | null     // null=clip view, non-null=detail view
+  selectedClipId: string | null   // selected clip in clip view
+  activeClipId: string | null     // currently editing clip
+
   // Mode controls
   setDirectorMode: (on: boolean) => void
   setDirectorPlayheadTime: (ms: number) => void
@@ -71,6 +79,17 @@ interface DirectorStore {
   setDirectorTargetAttachedTo: (id: string | null) => void
   setActiveRailAxis: (axis: AxisMarkChannel | null) => void
   saveCameraSetup: () => void  // persist current camera rig to scene
+
+  // Camera clip CRUD
+  addCameraClip: () => string
+  removeCameraClip: (id: string) => void
+  updateCameraClip: (id: string, patch: Partial<CameraClip>) => void
+  resizeCameraClip: (id: string, newDuration: number) => void
+  moveCameraClip: (id: string, newStart: number) => void
+  enterClipDetail: (clipId: string) => void
+  exitClipDetail: () => void
+  loadClipSetup: (clipId: string) => void
+  saveClipSetup: () => void
 
   // Camera mark CRUD (operates on active scene)
   selectedCameraMarkId: string | null
@@ -146,6 +165,11 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   directorTargetAttachedTo: null,
   activeRailAxis: null,
 
+  // Camera clip state defaults
+  detailClipId: null,
+  selectedClipId: null,
+  activeClipId: null,
+
   setDirectorMode: (on) => set({
     directorMode: on,
     directorPlaying: false,
@@ -180,14 +204,29 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
 
   extendRail: (axis, dir, newExtent) => {
     const extent = Math.max(RAIL_MIN_STUB, newExtent)
-    const { directorRails } = get()
+    const { directorRails, activeClipId } = get()
     if (axis === 'sphere') {
       set({ directorRails: { ...directorRails, sphere: extent } })
     } else {
+      const oldExtent = directorRails[axis][dir]
+      const isNewlyExtended = oldExtent <= RAIL_MIN_STUB + 0.001 && extent > RAIL_MIN_STUB + 0.001
+      let timingPatch: Partial<import('../animation/directorTypes').RailExtents> = {}
+      if (isNewlyExtended) {
+        // Auto-set timing when rail transitions from stub to extended
+        let clipDuration = 3000
+        if (activeClipId) {
+          const { scenes, activeSceneId } = useSceneStore.getState()
+          const scene = scenes.find((sc) => sc.id === activeSceneId)
+          const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+          const clip = dt.cameraClips.find((c) => c.id === activeClipId)
+          if (clip) clipDuration = clip.duration
+        }
+        timingPatch = { startTime: 0, endTime: clipDuration }
+      }
       set({
         directorRails: {
           ...directorRails,
-          [axis]: { ...directorRails[axis], [dir]: extent },
+          [axis]: { ...directorRails[axis], [dir]: extent, ...timingPatch },
         },
         // Auto-select the axis being extended for M key stamping
         activeRailAxis: axis as AxisMarkChannel,
@@ -202,6 +241,11 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
 
   saveCameraSetup: () => {
     const s = get()
+    // Route to saveClipSetup when editing a clip
+    if (s.activeClipId) {
+      get().saveClipSetup()
+      return
+    }
     const setup: DirectorCameraSetup = {
       cameraPos: [...s.directorCameraPos],
       targetPos: [...s.directorTargetPos],
@@ -210,6 +254,169 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       targetAttachedTo: s.directorTargetAttachedTo,
     }
     updateActiveSceneDirectorTimeline((dt) => ({ ...dt, cameraSetup: setup }))
+  },
+
+  // ── Camera clip CRUD ──
+
+  addCameraClip: () => {
+    const s = get()
+    const clipId = nanoid()
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const clipCount = dt.cameraClips.length
+
+    const setup: DirectorCameraSetup = {
+      cameraPos: [...s.directorCameraPos],
+      targetPos: [...s.directorTargetPos],
+      rails: {
+        ...s.directorRails,
+        truck: { ...s.directorRails.truck },
+        boom:  { ...s.directorRails.boom },
+        dolly: { ...s.directorRails.dolly },
+      },
+      railWorldAnchor: [...s.railWorldAnchor],
+      targetAttachedTo: s.directorTargetAttachedTo,
+    }
+
+    const clip = createDefaultCameraClip(setup)
+    clip.id = clipId
+    clip.name = `Camera ${clipCount + 1}`
+    clip.timelineStart = s.directorPlayheadTime
+    clip.focalLengthMm = s.focalLengthMm
+
+    updateActiveSceneDirectorTimeline((prev) => ({
+      ...prev,
+      cameraClips: [...prev.cameraClips, clip],
+    }))
+
+    set({ selectedClipId: clipId, activeClipId: clipId })
+    return clipId
+  },
+
+  removeCameraClip: (id) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraClips: dt.cameraClips.filter((c) => c.id !== id),
+    }))
+    const s = get()
+    const patch: Partial<DirectorStore> = {}
+    if (s.selectedClipId === id) patch.selectedClipId = null
+    if (s.activeClipId === id) patch.activeClipId = null
+    if (s.detailClipId === id) patch.detailClipId = null
+    if (Object.keys(patch).length > 0) set(patch)
+  },
+
+  updateCameraClip: (id, patch) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraClips: dt.cameraClips.map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      ),
+    }))
+  },
+
+  resizeCameraClip: (id, newDuration) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraClips: dt.cameraClips.map((c) => {
+        if (c.id !== id) return c
+        const ratio = newDuration / c.duration
+        const scaledRails: DirectorRails = {
+          ...c.cameraSetup.rails,
+          truck: {
+            ...c.cameraSetup.rails.truck,
+            startTime: c.cameraSetup.rails.truck.startTime * ratio,
+            endTime: c.cameraSetup.rails.truck.endTime * ratio,
+          },
+          boom: {
+            ...c.cameraSetup.rails.boom,
+            startTime: c.cameraSetup.rails.boom.startTime * ratio,
+            endTime: c.cameraSetup.rails.boom.endTime * ratio,
+          },
+          dolly: {
+            ...c.cameraSetup.rails.dolly,
+            startTime: c.cameraSetup.rails.dolly.startTime * ratio,
+            endTime: c.cameraSetup.rails.dolly.endTime * ratio,
+          },
+        }
+        return {
+          ...c,
+          duration: newDuration,
+          cameraSetup: { ...c.cameraSetup, rails: scaledRails },
+        }
+      }),
+    }))
+  },
+
+  moveCameraClip: (id, newStart) => {
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraClips: dt.cameraClips.map((c) =>
+        c.id === id ? { ...c, timelineStart: newStart } : c,
+      ),
+    }))
+  },
+
+  enterClipDetail: (clipId) => {
+    const s = get()
+    if (s.activeClipId) get().saveClipSetup()
+    set({ detailClipId: clipId, activeClipId: clipId })
+    get().loadClipSetup(clipId)
+  },
+
+  exitClipDetail: () => {
+    get().saveClipSetup()
+    set({ detailClipId: null })
+  },
+
+  loadClipSetup: (clipId) => {
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const clip = dt.cameraClips.find((c) => c.id === clipId)
+    if (!clip) return
+
+    set({
+      directorCameraPos: [...clip.cameraSetup.cameraPos],
+      directorTargetPos: [...clip.cameraSetup.targetPos],
+      directorRails: {
+        ...clip.cameraSetup.rails,
+        truck: { ...clip.cameraSetup.rails.truck },
+        boom:  { ...clip.cameraSetup.rails.boom },
+        dolly: { ...clip.cameraSetup.rails.dolly },
+      },
+      railWorldAnchor: [...clip.cameraSetup.railWorldAnchor],
+      directorTargetAttachedTo: clip.cameraSetup.targetAttachedTo,
+      focalLengthMm: clip.focalLengthMm,
+      activeClipId: clipId,
+    })
+  },
+
+  saveClipSetup: () => {
+    const s = get()
+    if (!s.activeClipId) return
+    const activeId = s.activeClipId
+    const setup: DirectorCameraSetup = {
+      cameraPos: [...s.directorCameraPos],
+      targetPos: [...s.directorTargetPos],
+      rails: {
+        ...s.directorRails,
+        truck: { ...s.directorRails.truck },
+        boom:  { ...s.directorRails.boom },
+        dolly: { ...s.directorRails.dolly },
+      },
+      railWorldAnchor: [...s.railWorldAnchor],
+      targetAttachedTo: s.directorTargetAttachedTo,
+    }
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraClips: dt.cameraClips.map((c) =>
+        c.id === activeId
+          ? { ...c, cameraSetup: setup, focalLengthMm: s.focalLengthMm }
+          : c,
+      ),
+    }))
   },
 
   // ── Camera mark CRUD ──
@@ -444,6 +651,9 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       selectedAxisMarkId: null,
       selectedAxisMarkChannel: null,
       activeRailAxis: null,
+      detailClipId: null,
+      selectedClipId: null,
+      activeClipId: null,
     })
     updateActiveSceneDirectorTimeline(() => createDefaultDirectorTimeline())
   },

@@ -3,7 +3,7 @@
 // Double-click event bar → switch to bundle editing mode.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast } from '@phosphor-icons/react'
+import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast, ArrowLeft, Plus } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
@@ -13,7 +13,7 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
-import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark, type CameraClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
@@ -71,6 +71,9 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     resetDirector,
     selectedAxisMarkId, selectedAxisMarkChannel,
     setSelectedAxisMark, updateAxisMark, removeAxisMark, markActiveAxis, activeRailAxis,
+    detailClipId, selectedClipId, activeClipId,
+    addCameraClip, removeCameraClip, updateCameraClip, resizeCameraClip, moveCameraClip,
+    enterClipDetail, exitClipDetail,
   } = useDirectorStore()
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -83,10 +86,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
   const dragRef = useRef<{
-    type: 'event' | 'camera-kf' | 'camera-mark' | 'axis-mark' | 'rail-timing'
+    type: 'event' | 'camera-kf' | 'camera-mark' | 'axis-mark' | 'rail-timing' | 'camera-clip'
     id: string; mode: 'move' | 'resize'
     channel?: AxisMarkChannel
-    edge?: 'start' | 'end' | 'body'
+    edge?: 'start' | 'end' | 'body' | 'left' | 'right'
     startX: number; startTime: number; startDuration: number
   } | null>(null)
 
@@ -95,6 +98,13 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const sceneDuration = scene?.duration ?? 3000
   const axisMarksData = ensureAxisMarks(dt).axisMarks
   const hasAxisMarks = Object.values(axisMarksData).some((arr) => arr.length > 0)
+  const cameraClips = dt.cameraClips ?? []
+  const isDetailView = detailClipId !== null
+  const activeClip = isDetailView ? cameraClips.find(c => c.id === detailClipId) ?? null : null
+  const viewDuration = isDetailView && activeClip ? activeClip.duration : (
+    cameraClips.length > 0 ? Math.max(3000, ...cameraClips.map(c => c.timelineStart + c.duration)) : sceneDuration
+  )
+
   const hasRailTiming = hasActiveRailTiming(directorRails)
   const hasAnyExtendedRail = (() => {
     const stub = RAIL_MIN_STUB + 0.001
@@ -117,6 +127,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
 
+    // Adjust playhead display for detail view (clip-local time)
+    const displayPlayhead = isDetailView && activeClip
+      ? directorPlayheadTime - activeClip.timelineStart
+      : directorPlayheadTime
+
     // Build RenderOptions for shared ruler/playhead
     const renderOpts: RenderOptions = {
       scrollX: 0,
@@ -125,9 +140,9 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       rulerHeight: RULER_H,
       trackHeight: TRACK_H,
       layerHeaderHeight: 0,
-      maxDuration: sceneDuration,
+      maxDuration: viewDuration,
       hoverKf: null,
-      playheadTime: directorPlayheadTime,
+      playheadTime: displayPlayhead,
     }
     const msToX = (ms: number, _opts?: RenderOptions) => SIDEBAR_W + LEFT_PAD + ms * PX_PER_MS
 
@@ -140,11 +155,57 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     renderRuler(ctx, w - SIDEBAR_W, renderOpts, (_ms, _o) => LEFT_PAD + _ms * PX_PER_MS)
     ctx.restore()
 
-    // ── Camera track (axis sub-tracks or unified) ──
-    const showAxisTracks = hasAxisMarks || hasRailTiming || hasAnyExtendedRail
-    const camAreaH = showAxisTracks ? AXIS_TRACK_H * 3 : TRACK_H
+    // ── Camera track ──
+    // Clip view: camera clips as horizontal bars
+    // Detail view: axis sub-tracks (rail timing bars)
+    const showAxisTracks = isDetailView || hasAxisMarks || hasRailTiming || hasAnyExtendedRail
+    const camAreaH = isDetailView ? AXIS_TRACK_H * 3 : (
+      !isDetailView && cameraClips.length > 0 ? TRACK_H : (showAxisTracks ? AXIS_TRACK_H * 3 : TRACK_H)
+    )
 
-    if (showAxisTracks) {
+    if (!isDetailView && cameraClips.length > 0) {
+      // ── Clip View: camera clips as bars ──
+      const camTrackY = RULER_H
+      ctx.fillStyle = 'var(--surface-2)'
+      ctx.fillRect(SIDEBAR_W, camTrackY, w - SIDEBAR_W, TRACK_H)
+      ctx.strokeStyle = 'var(--border)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(SIDEBAR_W, Math.round(camTrackY + TRACK_H) - 0.5)
+      ctx.lineTo(w, Math.round(camTrackY + TRACK_H) - 0.5)
+      ctx.stroke()
+
+      const CLIP_COLOR = '#5b4fcf'
+      for (const clip of cameraClips) {
+        const x0 = msToX(clip.timelineStart)
+        const x1 = msToX(clip.timelineStart + clip.duration)
+        const barY = camTrackY + 4
+        const barH = TRACK_H - 8
+        const isSelected = clip.id === selectedClipId
+
+        // Clip bar body
+        ctx.fillStyle = isSelected ? CLIP_COLOR + 'aa' : CLIP_COLOR + '55'
+        ctx.beginPath()
+        const r = 4
+        ctx.roundRect(x0, barY, x1 - x0, barH, r)
+        ctx.fill()
+
+        // Border
+        ctx.strokeStyle = isSelected ? '#fff' : CLIP_COLOR + 'cc'
+        ctx.lineWidth = isSelected ? 2 : 1
+        ctx.beginPath()
+        ctx.roundRect(x0, barY, x1 - x0, barH, r)
+        ctx.stroke()
+
+        // Clip name
+        if (x1 - x0 > 60) {
+          ctx.fillStyle = '#fff'
+          ctx.font = '11px system-ui'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(clip.name, x0 + 8, camTrackY + TRACK_H / 2, x1 - x0 - 16)
+        }
+      }
+    } else if (showAxisTracks) {
       // Per-axis sub-tracks — rail timing bars
       for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
         const ch = AXIS_CHANNELS[ci]
@@ -336,7 +397,17 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
     ctx.font = '500 11px Inter, system-ui, sans-serif'
     ctx.textAlign = 'left'
-    if (hasAxisMarks) {
+    if (isDetailView) {
+      // Detail view: axis labels
+      ctx.font = '500 10px Inter, system-ui, sans-serif'
+      for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
+        const ch = AXIS_CHANNELS[ci]
+        ctx.fillStyle = AXIS_COLORS[ch]
+        ctx.fillText(AXIS_LABELS[ch], 8, RULER_H + ci * AXIS_TRACK_H + AXIS_TRACK_H / 2 + 4)
+      }
+    } else if (!isDetailView && cameraClips.length > 0) {
+      ctx.fillText('🎥 Cameras', 8, RULER_H + TRACK_H / 2 + 4)
+    } else if (showAxisTracks) {
       ctx.font = '500 10px Inter, system-ui, sans-serif'
       for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
         const ch = AXIS_CHANNELS[ci]
@@ -349,7 +420,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
     ctx.font = '500 11px Inter, system-ui, sans-serif'
     ctx.fillText('⚡ Events', 8, RULER_H + camAreaH + TRACK_H / 2 + 4)
-  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId, axisMarksData, hasAxisMarks, selectedAxisMarkId, selectedAxisMarkChannel])
+  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId, axisMarksData, hasAxisMarks, selectedAxisMarkId, selectedAxisMarkChannel, cameraClips, isDetailView, activeClip, viewDuration, selectedClipId, activeRailAxis, directorRails, hasRailTiming, hasAnyExtendedRail])
 
   useEffect(() => { draw() }, [draw])
 
@@ -395,10 +466,24 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const xToMs = (clientX: number) => {
     const rect = canvasRef.current?.getBoundingClientRect()
     if (!rect) return 0
-    return Math.max(0, Math.min(sceneDuration, (clientX - rect.left - SIDEBAR_W - LEFT_PAD) / PX_PER_MS))
+    return Math.max(0, Math.min(viewDuration, (clientX - rect.left - SIDEBAR_W - LEFT_PAD) / PX_PER_MS))
   }
 
-  const EDGE_ZONE = 8  // px from right edge for resize handle
+  const EDGE_ZONE = 8  // px from edge for resize handle
+
+  const hitTestCameraClip = (localX: number, localY: number): { clip: CameraClip; edge: 'left' | 'right' | 'body' } | null => {
+    if (isDetailView || cameraClips.length === 0) return null
+    const camTrackY = RULER_H
+    if (localY < camTrackY + 4 || localY >= camTrackY + TRACK_H - 4) return null
+    for (const clip of cameraClips) {
+      const x0 = SIDEBAR_W + LEFT_PAD + clip.timelineStart * PX_PER_MS
+      const x1 = SIDEBAR_W + LEFT_PAD + (clip.timelineStart + clip.duration) * PX_PER_MS
+      if (Math.abs(localX - x0) < EDGE_ZONE) return { clip, edge: 'left' }
+      if (Math.abs(localX - x1) < EDGE_ZONE) return { clip, edge: 'right' }
+      if (localX > x0 + EDGE_ZONE && localX < x1 - EDGE_ZONE) return { clip, edge: 'body' }
+    }
+    return null
+  }
 
   const hitTestRailTimingBar = (localX: number, localY: number): { channel: AxisMarkChannel; edge: 'start' | 'end' | 'body' } | null => {
     for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
@@ -481,6 +566,27 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     const localY = e.clientY - rect.top
 
     if (localX < SIDEBAR_W) return
+
+    // Check camera clip hit (clip view only)
+    const clipHit = hitTestCameraClip(localX, localY)
+    if (clipHit) {
+      useDirectorStore.setState({ selectedClipId: clipHit.clip.id })
+      setSelectedMarkerId(null)
+      const startVal = clipHit.edge === 'right'
+        ? clipHit.clip.timelineStart + clipHit.clip.duration
+        : clipHit.clip.timelineStart
+      dragRef.current = {
+        type: 'camera-clip',
+        id: clipHit.clip.id,
+        edge: clipHit.edge,
+        mode: clipHit.edge === 'body' ? 'move' : 'resize',
+        startX: e.clientX,
+        startTime: startVal,
+        startDuration: clipHit.clip.duration,
+      }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
 
     // Check rail timing bar hit first
     const railHit = hitTestRailTimingBar(localX, localY)
@@ -593,7 +699,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
     // Ruler/playhead scrub
     scrubRef.current = true
-    setDirectorPlayheadTime(xToMs(e.clientX))
+    const scrubMs = xToMs(e.clientX)
+    setDirectorPlayheadTime(isDetailView && activeClip ? scrubMs + activeClip.timelineStart : scrubMs)
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
 
@@ -601,10 +708,29 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
-      if (dragRef.current.type === 'rail-timing' && dragRef.current.channel) {
+      if (dragRef.current.type === 'camera-clip') {
+        const clamp = (v: number) => Math.max(0, Math.round(v))
+        if (dragRef.current.edge === 'body') {
+          const newStart = clamp(dragRef.current.startTime + dtMs)
+          moveCameraClip(dragRef.current.id, newStart)
+        } else if (dragRef.current.edge === 'left') {
+          // Resize from left: change start, adjust duration
+          const newStart = clamp(dragRef.current.startTime + dtMs)
+          const oldEnd = dragRef.current.startTime + dragRef.current.startDuration
+          const newDuration = Math.max(100, Math.round(oldEnd - newStart))
+          moveCameraClip(dragRef.current.id, Math.round(oldEnd - newDuration))
+          resizeCameraClip(dragRef.current.id, newDuration)
+        } else if (dragRef.current.edge === 'right') {
+          // Resize from right: change duration
+          const newEnd = clamp(dragRef.current.startTime + dtMs)
+          const clipStart = dragRef.current.startTime - dragRef.current.startDuration
+          const newDuration = Math.max(100, Math.round(newEnd - clipStart))
+          resizeCameraClip(dragRef.current.id, newDuration)
+        }
+      } else if (dragRef.current.type === 'rail-timing' && dragRef.current.channel) {
         const { setRailTiming } = useDirectorStore.getState()
         const ext = directorRails[dragRef.current.channel as keyof typeof directorRails] as import('../animation/directorTypes').RailExtents
-        const clamp = (v: number) => Math.max(0, Math.min(sceneDuration, Math.round(v)))
+        const clamp = (v: number) => Math.max(0, Math.min(viewDuration, Math.round(v)))
         if (dragRef.current.edge === 'start') {
           const newStart = clamp(dragRef.current.startTime + dtMs)
           setRailTiming(dragRef.current.channel, newStart, ext.endTime)
@@ -636,7 +762,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       return
     }
     if (scrubRef.current) {
-      setDirectorPlayheadTime(xToMs(e.clientX))
+      const scrubMs = xToMs(e.clientX)
+      setDirectorPlayheadTime(isDetailView && activeClip ? scrubMs + activeClip.timelineStart : scrubMs)
       return
     }
 
@@ -671,8 +798,17 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     const localX = e.clientX - rect.left
     const localY = e.clientY - rect.top
 
+    // Double-click camera clip → enter detail view
+    if (!isDetailView) {
+      const clipHit = hitTestCameraClip(localX, localY)
+      if (clipHit) {
+        enterClipDetail(clipHit.clip.id)
+        return
+      }
+    }
+
     // Double-click event bar → enter bundle editing
-    const evtY = RULER_H + TRACK_H
+    const evtY = RULER_H + (isDetailView ? AXIS_TRACK_H * 3 : (!isDetailView && cameraClips.length > 0 ? TRACK_H : TRACK_H))
     if (localY >= evtY && localY < evtY + TRACK_H) {
       for (const marker of dt.eventMarkers) {
         const bundle = animationBundles.find((b) => b.id === marker.bundleId)
@@ -817,6 +953,28 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     <div className="ui-director-panel">
       {/* Header */}
       <div className="ui-director-header">
+        {isDetailView ? (
+          <>
+            <Tooltip content="Back to clip view">
+              <Button className="btn-small" onClick={() => exitClipDetail()}>
+                <ArrowLeft size={14} /> Back
+              </Button>
+            </Tooltip>
+            <span style={{ fontSize: 12, fontWeight: 600, marginLeft: 8, opacity: 0.7 }}>
+              {activeClip?.name ?? 'Camera'}
+            </span>
+            <div className="timeline-separator" />
+          </>
+        ) : (
+          <>
+            <Tooltip content="Add camera clip">
+              <Button className="btn-small" onClick={() => addCameraClip()}>
+                <Plus size={14} /> Camera
+              </Button>
+            </Tooltip>
+            <div className="timeline-separator" />
+          </>
+        )}
         <Tooltip content={directorPlaying ? 'Pause' : 'Play'}>
           <Button className="btn-small" onClick={handlePlayPause}>
             {directorPlaying ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
@@ -828,10 +986,14 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         <Tooltip content="Reset all director state">
           <Button className="btn-small" onClick={resetDirector}><ArrowCounterClockwise size={14} /></Button>
         </Tooltip>
-        <div className="timeline-separator" />
-        <Tooltip content="Stamp rail timing at current playhead">
-          <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Stamp</Button>
-        </Tooltip>
+        {isDetailView && (
+          <>
+            <div className="timeline-separator" />
+            <Tooltip content="Stamp rail timing at current playhead">
+              <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Stamp</Button>
+            </Tooltip>
+          </>
+        )}
         <Select
           options={CAMERA_PRESET_OPTIONS}
           value=""
@@ -876,7 +1038,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         <Tooltip content="Export Video">
           <Button className="btn-small" onClick={() => setExportDialogOpen(true)}><Export size={14} /></Button>
         </Tooltip>
-        <span className="ui-director-time">{(directorPlayheadTime / 1000).toFixed(1)}s / {(sceneDuration / 1000).toFixed(1)}s</span>
+        <span className="ui-director-time">{((isDetailView && activeClip ? directorPlayheadTime - activeClip.timelineStart : directorPlayheadTime) / 1000).toFixed(1)}s / {(viewDuration / 1000).toFixed(1)}s</span>
       </div>
 
       {/* Canvas */}
