@@ -89,7 +89,13 @@ interface DirectorStore {
   updateEventMarker: (markerId: string, patch: Partial<EventMarker>) => void
   removeEventMarker: (markerId: string) => void
 
-  // Per-axis mark CRUD
+  // Rail timing (replaces per-axis marks)
+  setRailTiming: (axis: AxisMarkChannel, startTime: number, endTime: number) => void
+  setRailEasing: (axis: AxisMarkChannel, easing: import('../animation/types').EasingType | undefined) => void
+  /** Set start or end time from current playhead: fills startTime first, then endTime. */
+  stampRailTime: () => void
+
+  // Per-axis mark CRUD (DEPRECATED — kept for backward compat during transition)
   selectedAxisMarkId: string | null
   selectedAxisMarkChannel: AxisMarkChannel | null
   addAxisMark: (mark: AxisMark) => void
@@ -183,6 +189,8 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
           ...directorRails,
           [axis]: { ...directorRails[axis], [dir]: extent },
         },
+        // Auto-select the axis being extended for M key stamping
+        activeRailAxis: axis as AxisMarkChannel,
       })
     }
   },
@@ -358,6 +366,45 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     const s = get()
     if (!s.activeRailAxis) return
     get().markAxis(s.activeRailAxis)
+  },
+
+  // ── Rail timing actions ──
+
+  setRailTiming: (axis, startTime, endTime) => {
+    const { directorRails } = get()
+    const ext = directorRails[axis]
+    set({
+      directorRails: {
+        ...directorRails,
+        [axis]: { ...ext, startTime, endTime },
+      },
+    })
+  },
+
+  setRailEasing: (axis, easing) => {
+    const { directorRails } = get()
+    const ext = directorRails[axis]
+    set({
+      directorRails: {
+        ...directorRails,
+        [axis]: { ...ext, easing },
+      },
+    })
+  },
+
+  stampRailTime: () => {
+    const s = get()
+    if (!s.activeRailAxis) return
+    const axis = s.activeRailAxis
+    const ext = s.directorRails[axis]
+    const time = Math.round(s.directorPlayheadTime)
+    if (ext.startTime === 0 && ext.endTime === 0) {
+      get().setRailTiming(axis, time, 0)
+    } else if (ext.endTime === 0) {
+      get().setRailTiming(axis, ext.startTime, time)
+    } else {
+      get().setRailTiming(axis, ext.startTime, time)
+    }
   },
 
   shiftAllMarks: (delta) => {

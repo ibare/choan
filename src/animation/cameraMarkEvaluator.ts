@@ -1,8 +1,8 @@
 // Camera mark evaluator — rail-following interpolation between marks.
 // Pure function, no React/Zustand imports.
 
-import type { CameraMark, DirectorRails, AxisMark, AxisMarkChannel } from './directorTypes'
-import { truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from './directorTypes'
+import type { CameraMark, DirectorRails, AxisMark, AxisMarkChannel, RailExtents } from './directorTypes'
+import { RAIL_MIN_STUB, isRailAnimated, truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from './directorTypes'
 import type { DirectorCameraState } from './directorCameraEvaluator'
 import { resolveEasing } from './easing'
 
@@ -212,6 +212,105 @@ export function evaluateAxisMarks(
     const params = boomCircularParams(basePos)
     if (params.radius > 0.01) {
       const elev = params.elevAngle + boomVal / params.radius
+      const pt = pointOnBoomCircle(params.radius, elev, params.hAngle)
+      position[0] = pt[0]; position[1] = pt[1]; position[2] = pt[2]
+    }
+  }
+
+  return {
+    position,
+    target: [...baseTarget],
+    fov: mmToFov(baseFocalMm),
+  }
+}
+
+// ── Rail-based animation evaluation ─────────────────────────────────────────
+
+/**
+ * Evaluate a single rail axis at a given time.
+ * Returns the world-space position along that axis, or null if the axis has no animation.
+ */
+function evaluateRailAxis(
+  ext: RailExtents,
+  time: number,
+  anchorVal: number,
+): number | null {
+  if (!isRailAnimated(ext)) return null
+
+  const stub = RAIL_MIN_STUB + 0.001
+  const negExtended = ext.neg > stub
+  const posExtended = ext.pos > stub
+
+  // Determine start and end positions
+  let startPos: number, endPos: number
+  if (negExtended && posExtended) {
+    startPos = anchorVal - ext.neg
+    endPos = anchorVal + ext.pos
+  } else if (posExtended) {
+    startPos = anchorVal
+    endPos = anchorVal + ext.pos
+  } else {
+    startPos = anchorVal - ext.neg
+    endPos = anchorVal
+  }
+
+  // Handle reverse direction (startTime > endTime)
+  const forward = ext.startTime <= ext.endTime
+  const tMin = forward ? ext.startTime : ext.endTime
+  const tMax = forward ? ext.endTime : ext.startTime
+  if (!forward) { const tmp = startPos; startPos = endPos; endPos = tmp }
+
+  // Clamp before/after
+  if (time <= tMin) return startPos
+  if (time >= tMax) return endPos
+
+  // Interpolate
+  const dur = tMax - tMin
+  let t = (time - tMin) / dur
+  if (ext.easing) t = resolveEasing(ext.easing)(t)
+  return lerp(startPos, endPos, t)
+}
+
+/**
+ * Evaluate rail-based camera animation at a given clip-relative time.
+ * Uses rail extents + timing to compute camera position directly.
+ * Returns null if no axis has active animation.
+ */
+export function evaluateRailAnimation(
+  rails: DirectorRails,
+  time: number,
+  railWorldAnchor: [number, number, number],
+  baseTarget: [number, number, number],
+  baseFocalMm: number,
+): DirectorCameraState | null {
+  const truckPos = evaluateRailAxis(rails.truck, time, railWorldAnchor[0])
+  const boomPos  = evaluateRailAxis(rails.boom, time, railWorldAnchor[1])
+  const dollyPos = evaluateRailAxis(rails.dolly, time, railWorldAnchor[2])
+
+  if (truckPos === null && boomPos === null && dollyPos === null) return null
+
+  const position: [number, number, number] = [
+    truckPos ?? railWorldAnchor[0],
+    boomPos ?? railWorldAnchor[1],
+    dollyPos ?? railWorldAnchor[2],
+  ]
+
+  // Circular rail overrides
+  if (rails.truckMode === 'circular' && truckPos !== null) {
+    const offset = truckPos - railWorldAnchor[0]
+    const params = truckCircularParams(railWorldAnchor)
+    if (params.radius > 0.01) {
+      const angle = params.angle + offset / params.radius
+      const pt = pointOnTruckCircle(params.center, params.radius, angle)
+      position[0] = pt[0]
+      position[2] = pt[2]
+    }
+  }
+  if (rails.boomMode === 'circular' && boomPos !== null) {
+    const offset = boomPos - railWorldAnchor[1]
+    const params = boomCircularParams(railWorldAnchor)
+    if (params.radius > 0.01) {
+      const elev = params.elevAngle + offset / params.radius
       const pt = pointOnBoomCircle(params.radius, elev, params.hAngle)
       position[0] = pt[0]; position[1] = pt[1]; position[2] = pt[2]
     }

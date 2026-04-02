@@ -25,8 +25,8 @@ import { useDirectorStore } from '../store/useDirectorStore'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
-import { createDefaultDirectorTimeline, ensureAxisMarks, type CameraMark, type AxisMarkChannel } from '../animation/directorTypes'
-import { evaluateCameraMarks, evaluateAxisMarks } from '../animation/cameraMarkEvaluator'
+import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, type CameraMark, type AxisMarkChannel } from '../animation/directorTypes'
+import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { nanoid } from '../utils/nanoid'
 import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
@@ -87,18 +87,6 @@ export function useAnimateLoop({
     }
     window.addEventListener('keydown', onQDown)
 
-    // M key: capture axis marks at current playhead time
-    const onMDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyM' && !e.repeat) {
-        const tag = (e.target as HTMLElement).tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return
-        const dir = useDirectorStore.getState()
-        if (!dir.directorMode || dir.directorPlaying) return
-        dir.markActiveAxis()
-      }
-    }
-    window.addEventListener('keydown', onMDown)
-
     const animate = () => {
       frameId = requestAnimationFrame(animate)
       const renderer = rendererRef.current
@@ -126,15 +114,18 @@ export function useAnimateLoop({
         } else {
           useDirectorStore.getState().setDirectorPlayheadTime(elapsed)
 
-          // Camera interpolation — axisMarks > cameraMarks > legacy keyframes
+          // Camera interpolation — railAnimation > axisMarks > cameraMarks > legacy keyframes
+          const hasRailAnim = hasActiveRailTiming(director.directorRails)
           const axisData = ensureAxisMarks(dt).axisMarks
-          const hasAxisMarks = Object.values(axisData).some((arr) => arr.length > 0)
+          const hasAxisMarks = !hasRailAnim && Object.values(axisData).some((arr) => arr.length > 0)
           const hasMarks = (dt.cameraMarks?.length ?? 0) > 0
-          const camState = hasAxisMarks
-            ? evaluateAxisMarks(axisData, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorRails)
-            : hasMarks
-              ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
-              : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
+          const camState = hasRailAnim
+            ? evaluateRailAnimation(director.directorRails, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm)
+            : hasAxisMarks
+              ? evaluateAxisMarks(axisData, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorRails)
+              : hasMarks
+                ? evaluateCameraMarks(dt.cameraMarks, elapsed, director.directorRails)
+                : evaluateDirectorCamera(dt.cameraKeyframes, elapsed)
           if (camState) {
             cam.position[0] = camState.position[0]
             cam.position[1] = camState.position[1]
@@ -422,21 +413,11 @@ export function useAnimateLoop({
           }
         }
 
-        // Camera marks on rails — axisMarks > cameraMarks
+        // Camera marks on rails (legacy fallback — rail timing is the primary system now)
         const scState = useSceneStore.getState()
         const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
         const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
-        const axisData = ensureAxisMarks(dirTl).axisMarks
-        const hasAxisMarks = Object.values(axisData).some((arr) => arr.length > 0)
-        if (hasAxisMarks) {
-          drawAxisMarkPipes(
-            renderer.overlay,
-            axisData,
-            dirState.railWorldAnchor,
-            dirState.directorRails,
-            dirState.directorCameraPos,
-          )
-        } else {
+        if (!hasActiveRailTiming(dirState.directorRails)) {
           const marks = dirTl.cameraMarks ?? []
           if (marks.length > 0) {
             drawCameraMarks(
@@ -469,7 +450,6 @@ export function useAnimateLoop({
       cancelAnimationFrame(frameId)
       kfAnimator.stopAll()
       window.removeEventListener('keydown', onQDown)
-      window.removeEventListener('keydown', onMDown)
     }
   }, [])
 }

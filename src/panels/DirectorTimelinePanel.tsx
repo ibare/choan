@@ -13,8 +13,8 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
-import { createDefaultDirectorTimeline, ensureAxisMarks, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark } from '../animation/directorTypes'
-import { evaluateCameraMarks, evaluateAxisMarks } from '../animation/cameraMarkEvaluator'
+import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark } from '../animation/directorTypes'
+import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
 import type { RenderOptions } from '../engine/timeline2dTypes'
@@ -83,9 +83,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
   const dragRef = useRef<{
-    type: 'event' | 'camera-kf' | 'camera-mark' | 'axis-mark'
+    type: 'event' | 'camera-kf' | 'camera-mark' | 'axis-mark' | 'rail-timing'
     id: string; mode: 'move' | 'resize'
     channel?: AxisMarkChannel
+    edge?: 'start' | 'end' | 'body'
     startX: number; startTime: number; startDuration: number
   } | null>(null)
 
@@ -94,6 +95,12 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const sceneDuration = scene?.duration ?? 3000
   const axisMarksData = ensureAxisMarks(dt).axisMarks
   const hasAxisMarks = Object.values(axisMarksData).some((arr) => arr.length > 0)
+  const hasRailTiming = hasActiveRailTiming(directorRails)
+  const hasAnyExtendedRail = (() => {
+    const stub = RAIL_MIN_STUB + 0.001
+    const { truck, boom, dolly } = directorRails
+    return truck.neg > stub || truck.pos > stub || boom.neg > stub || boom.pos > stub || dolly.neg > stub || dolly.pos > stub
+  })()
 
   // ── Canvas rendering ──
   const draw = useCallback(() => {
@@ -134,44 +141,77 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.restore()
 
     // ── Camera track (axis sub-tracks or unified) ──
-    const camAreaH = hasAxisMarks ? AXIS_TRACK_H * 3 : TRACK_H
+    const showAxisTracks = hasAxisMarks || hasRailTiming || hasAnyExtendedRail
+    const camAreaH = showAxisTracks ? AXIS_TRACK_H * 3 : TRACK_H
 
-    if (hasAxisMarks) {
-      // Per-axis sub-tracks
+    if (showAxisTracks) {
+      // Per-axis sub-tracks — rail timing bars
       for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
         const ch = AXIS_CHANNELS[ci]
         const trackY = RULER_H + ci * AXIS_TRACK_H
         const centerY = trackY + AXIS_TRACK_H / 2
         const color = AXIS_COLORS[ch]
+        const ext = directorRails[ch as keyof typeof directorRails] as import('../animation/directorTypes').RailExtents
 
         // Track background
+        const isExtended = ext.neg > RAIL_MIN_STUB + 0.001 || ext.pos > RAIL_MIN_STUB + 0.001
         ctx.fillStyle = ci % 2 === 0 ? 'var(--surface-2)' : 'var(--bg)'
         ctx.fillRect(SIDEBAR_W, trackY, w - SIDEBAR_W, AXIS_TRACK_H)
 
-        // Axis marks — circles with connecting lines
-        const chMarks = axisMarksData[ch]
-        if (chMarks.length > 1) {
-          ctx.strokeStyle = color + '55'
-          ctx.lineWidth = 2
-          ctx.beginPath()
-          for (let i = 0; i < chMarks.length; i++) {
-            const x = msToX(chMarks[i].time)
-            if (i === 0) ctx.moveTo(x, centerY)
-            else ctx.lineTo(x, centerY)
-          }
-          ctx.stroke()
+        // Dimmed if rail not extended
+        if (!isExtended) {
+          ctx.fillStyle = 'rgba(0,0,0,0.15)'
+          ctx.fillRect(SIDEBAR_W, trackY, w - SIDEBAR_W, AXIS_TRACK_H)
+          continue
         }
-        for (const mark of chMarks) {
-          const x = msToX(mark.time)
-          if (x >= SIDEBAR_W - 10 && x <= w + 10) {
-            const isSelected = mark.id === selectedAxisMarkId && ch === selectedAxisMarkChannel
+
+        // Rail timing bar
+        const hasTiming = ext.startTime !== ext.endTime
+        if (hasTiming) {
+          const tMin = Math.min(ext.startTime, ext.endTime)
+          const tMax = Math.max(ext.startTime, ext.endTime)
+          const x0 = msToX(tMin)
+          const x1 = msToX(tMax)
+          const barH = AXIS_TRACK_H - 6
+          const barY = trackY + 3
+
+          // Bar body
+          ctx.fillStyle = color + '44'
+          ctx.fillRect(x0, barY, x1 - x0, barH)
+
+          // Bar border
+          ctx.strokeStyle = color + 'aa'
+          ctx.lineWidth = 1.5
+          ctx.strokeRect(x0, barY, x1 - x0, barH)
+
+          // Start/end handles
+          const isActive = activeRailAxis === ch
+          for (const hx of [x0, x1]) {
             ctx.beginPath()
-            ctx.arc(x, centerY, isSelected ? 7 : 5, 0, Math.PI * 2)
-            ctx.fillStyle = isSelected ? '#ffd633' : color
+            ctx.arc(hx, centerY, isActive ? 6 : 4, 0, Math.PI * 2)
+            ctx.fillStyle = isActive ? '#ffd633' : color
             ctx.fill()
             ctx.strokeStyle = '#fff'
             ctx.lineWidth = 1.5
             ctx.stroke()
+          }
+        }
+
+        // Legacy: axis marks circles (backward compat during transition)
+        const chMarks = axisMarksData[ch]
+        if (!hasTiming && chMarks.length > 0) {
+          for (const mark of chMarks) {
+            const x = msToX(mark.time)
+            if (x >= SIDEBAR_W - 10 && x <= w + 10) {
+              const isSelected = mark.id === selectedAxisMarkId && ch === selectedAxisMarkChannel
+              ctx.beginPath()
+              ctx.arc(x, centerY, isSelected ? 7 : 5, 0, Math.PI * 2)
+              ctx.fillStyle = isSelected ? '#ffd633' : color
+              ctx.fill()
+              ctx.strokeStyle = '#fff'
+              ctx.lineWidth = 1.5
+              ctx.stroke()
+            }
           }
         }
       }
@@ -360,6 +400,24 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   const EDGE_ZONE = 8  // px from right edge for resize handle
 
+  const hitTestRailTimingBar = (localX: number, localY: number): { channel: AxisMarkChannel; edge: 'start' | 'end' | 'body' } | null => {
+    for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
+      const ch = AXIS_CHANNELS[ci]
+      const ext = directorRails[ch as keyof typeof directorRails] as import('../animation/directorTypes').RailExtents
+      if (ext.startTime === ext.endTime) continue
+      const trackY = RULER_H + ci * AXIS_TRACK_H
+      if (localY < trackY || localY >= trackY + AXIS_TRACK_H) continue
+      const tMin = Math.min(ext.startTime, ext.endTime)
+      const tMax = Math.max(ext.startTime, ext.endTime)
+      const x0 = SIDEBAR_W + LEFT_PAD + tMin * PX_PER_MS
+      const x1 = SIDEBAR_W + LEFT_PAD + tMax * PX_PER_MS
+      if (Math.abs(localX - x0) < EDGE_ZONE) return { channel: ch, edge: 'start' }
+      if (Math.abs(localX - x1) < EDGE_ZONE) return { channel: ch, edge: 'end' }
+      if (localX > x0 + EDGE_ZONE && localX < x1 - EDGE_ZONE) return { channel: ch, edge: 'body' }
+    }
+    return null
+  }
+
   const hitTestAxisMark = (localX: number, localY: number): { channel: AxisMarkChannel; mark: AxisMark } | null => {
     if (!hasAxisMarks) return null
     for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
@@ -378,7 +436,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   const hitTestEventBar = (localX: number, localY: number): { marker: EventMarker; isEdge: boolean } | null => {
-    const camAreaH = hasAxisMarks ? AXIS_TRACK_H * 3 : TRACK_H
+    const camAreaH = (hasAxisMarks || hasRailTiming) ? AXIS_TRACK_H * 3 : TRACK_H
     const evtY = RULER_H + camAreaH
     if (localY < evtY || localY >= evtY + TRACK_H) return null
     for (const marker of dt.eventMarkers) {
@@ -424,7 +482,31 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
     if (localX < SIDEBAR_W) return
 
-    // Check axis mark hit (per-axis system)
+    // Check rail timing bar hit first
+    const railHit = hitTestRailTimingBar(localX, localY)
+    if (railHit) {
+      const ext = directorRails[railHit.channel as keyof typeof directorRails] as import('../animation/directorTypes').RailExtents
+      const tMin = Math.min(ext.startTime, ext.endTime)
+      const tMax = Math.max(ext.startTime, ext.endTime)
+      useDirectorStore.getState().setActiveRailAxis(railHit.channel)
+      setSelectedCameraMarkId(null)
+      setSelectedCameraKfId(null)
+      setSelectedMarkerId(null)
+      dragRef.current = {
+        type: 'rail-timing',
+        id: railHit.channel,
+        edge: railHit.edge,
+        channel: railHit.channel,
+        mode: railHit.edge === 'body' ? 'move' : 'resize',
+        startX: e.clientX,
+        startTime: railHit.edge === 'end' ? tMax : tMin,
+        startDuration: tMax - tMin,
+      }
+      ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
+
+    // Check axis mark hit (legacy per-axis system)
     const axisHit = hitTestAxisMark(localX, localY)
     if (axisHit) {
       setSelectedAxisMark(axisHit.channel, axisHit.mark.id)
@@ -519,7 +601,23 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
-      if (dragRef.current.type === 'axis-mark' && dragRef.current.channel) {
+      if (dragRef.current.type === 'rail-timing' && dragRef.current.channel) {
+        const { setRailTiming } = useDirectorStore.getState()
+        const ext = directorRails[dragRef.current.channel as keyof typeof directorRails] as import('../animation/directorTypes').RailExtents
+        const clamp = (v: number) => Math.max(0, Math.min(sceneDuration, Math.round(v)))
+        if (dragRef.current.edge === 'start') {
+          const newStart = clamp(dragRef.current.startTime + dtMs)
+          setRailTiming(dragRef.current.channel, newStart, ext.endTime)
+        } else if (dragRef.current.edge === 'end') {
+          const newEnd = clamp(dragRef.current.startTime + dtMs)
+          setRailTiming(dragRef.current.channel, ext.startTime, newEnd)
+        } else {
+          // body drag — move both, preserve duration
+          const newStart = clamp(dragRef.current.startTime + dtMs)
+          const newEnd = clamp(newStart + dragRef.current.startDuration)
+          setRailTiming(dragRef.current.channel, newStart, newEnd)
+        }
+      } else if (dragRef.current.type === 'axis-mark' && dragRef.current.channel) {
         const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
         updateAxisMark(dragRef.current.channel, dragRef.current.id, { time: Math.round(newTime) })
       } else if (dragRef.current.type === 'camera-mark') {
@@ -597,7 +695,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   const handleSaveView = () => {
-    markActiveAxis()
+    useDirectorStore.getState().stampRailTime()
   }
 
   const handleApplyPreset = (presetType: string) => {
@@ -656,16 +754,19 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       (timeMs) => {
         const state = useChoanStore.getState()
 
-        // Camera — axisMarks > cameraMarks > legacy keyframes
+        // Camera — railAnimation > axisMarks > cameraMarks > legacy keyframes
         const dirState = useDirectorStore.getState()
+        const exportHasRailAnim = hasActiveRailTiming(dirState.directorRails)
         const exportAxisData = ensureAxisMarks(dt).axisMarks
-        const exportHasAxis = Object.values(exportAxisData).some((arr) => arr.length > 0)
+        const exportHasAxis = !exportHasRailAnim && Object.values(exportAxisData).some((arr) => arr.length > 0)
         const exportHasMarks = (dt.cameraMarks?.length ?? 0) > 0
-        const camState = exportHasAxis
-          ? evaluateAxisMarks(exportAxisData, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorRails)
-          : exportHasMarks
-            ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
-            : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
+        const camState = exportHasRailAnim
+          ? evaluateRailAnimation(dirState.directorRails, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm)
+          : exportHasAxis
+            ? evaluateAxisMarks(exportAxisData, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorRails)
+            : exportHasMarks
+              ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
+              : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
         if (camState) {
           renderer.camera.position[0] = camState.position[0]
           renderer.camera.position[1] = camState.position[1]
@@ -728,8 +829,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           <Button className="btn-small" onClick={resetDirector}><ArrowCounterClockwise size={14} /></Button>
         </Tooltip>
         <div className="timeline-separator" />
-        <Tooltip content="Mark current camera position (M)">
-          <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Mark</Button>
+        <Tooltip content="Stamp rail timing at current playhead">
+          <Button className="btn-small" onClick={handleSaveView}><Camera size={14} /> Stamp</Button>
         </Tooltip>
         <Select
           options={CAMERA_PRESET_OPTIONS}

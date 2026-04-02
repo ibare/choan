@@ -11,7 +11,16 @@ export const RAIL_MIN_STUB = 0.5  // world units — minimum red stub per side
 
 export type RailMode = 'linear' | 'circular'
 
-export interface RailExtents { neg: number; pos: number }
+export interface RailExtents {
+  neg: number
+  pos: number
+  /** Clip-relative time (ms) when movement starts. 0 = not set. */
+  startTime: number
+  /** Clip-relative time (ms) when movement ends. 0 = not set. */
+  endTime: number
+  /** Easing curve applied to the movement. */
+  easing?: EasingType
+}
 
 export interface DirectorRails {
   dolly:     RailExtents  // Z axis (forward / backward) — linear only
@@ -26,15 +35,41 @@ export type RailAxis = 'dolly' | 'truck' | 'boom' | 'sphere'
 export type RailDir  = 'neg' | 'pos'
 export interface RailHandleId { axis: RailAxis; dir: RailDir }
 
+function defaultExtents(): RailExtents {
+  return { neg: RAIL_MIN_STUB, pos: RAIL_MIN_STUB, startTime: 0, endTime: 0 }
+}
+
 export function createDefaultRails(): DirectorRails {
   return {
-    dolly:     { neg: RAIL_MIN_STUB, pos: RAIL_MIN_STUB },
-    truck:     { neg: RAIL_MIN_STUB, pos: RAIL_MIN_STUB },
-    boom:      { neg: RAIL_MIN_STUB, pos: RAIL_MIN_STUB },
+    dolly:     defaultExtents(),
+    truck:     defaultExtents(),
+    boom:      defaultExtents(),
     truckMode: 'linear',
     boomMode:  'linear',
     sphere:    RAIL_MIN_STUB,
   }
+}
+
+/** Backfill startTime/endTime for old RailExtents data missing these fields. */
+export function migrateRailExtents(ext: Partial<RailExtents>): RailExtents {
+  return {
+    neg: ext.neg ?? RAIL_MIN_STUB,
+    pos: ext.pos ?? RAIL_MIN_STUB,
+    startTime: ext.startTime ?? 0,
+    endTime: ext.endTime ?? 0,
+    easing: ext.easing,
+  }
+}
+
+/** Check if a rail axis has active animation timing. */
+export function isRailAnimated(ext: RailExtents): boolean {
+  const isExtended = ext.neg > RAIL_MIN_STUB + 0.001 || ext.pos > RAIL_MIN_STUB + 0.001
+  return isExtended && ext.startTime !== ext.endTime
+}
+
+/** Check if any axis in DirectorRails has active animation. */
+export function hasActiveRailTiming(rails: DirectorRails): boolean {
+  return isRailAnimated(rails.truck) || isRailAnimated(rails.boom) || isRailAnimated(rails.dolly)
 }
 
 // ── Circular rail math utilities ─────────────────────────────────────────────
@@ -72,7 +107,7 @@ export function pointOnBoomCircle(
   return [Math.sin(hAngle) * h, y, Math.cos(hAngle) * h]
 }
 
-// ── Per-axis camera marks ────────────────────────────────────────────────
+// ── Per-axis camera marks (DEPRECATED — replaced by rail timing) ────────
 
 /** Which axis channel an AxisMark belongs to. */
 export type AxisMarkChannel = 'truck' | 'boom' | 'dolly'
@@ -141,7 +176,7 @@ export interface DirectorTimeline {
 }
 
 export function createDefaultDirectorTimeline(): DirectorTimeline {
-  return { cameraMarks: [], cameraKeyframes: [], eventMarkers: [], axisMarks: createDefaultAxisMarks() }
+  return { cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
 }
 
 /** Ensure axisMarks exists on a loaded timeline (backward compat). */
