@@ -9,8 +9,8 @@ import { useSceneStore } from '../store/useSceneStore'
 import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
-import { createDefaultDirectorTimeline } from '../animation/directorTypes'
-import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
+import { createDefaultDirectorTimeline, findActiveClip } from '../animation/directorTypes'
+import { evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 
@@ -24,7 +24,7 @@ export default function CameraPIP() {
 
   const scene = scenes.find((s) => s.id === activeSceneId)
   const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
-  const hasCameraKfs = dt.cameraKeyframes.length > 0
+  const cameraClips = dt.cameraClips ?? []
 
   // Show PIP in Director mode when not playing
   const visible = directorMode && !directorPlaying
@@ -48,25 +48,43 @@ export default function CameraPIP() {
     const savedTarget: [number, number, number] = [...cam.target]
     const savedFov = cam.fov
 
-    // Apply director camera at current playhead time
-    const fovFromMm = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
-    const camState = hasCameraKfs
-      ? evaluateDirectorCamera(dt.cameraKeyframes, directorPlayheadTime)
-      : null
-    if (camState) {
-      cam.position[0] = camState.position[0]
-      cam.position[1] = camState.position[1]
-      cam.position[2] = camState.position[2]
-      cam.target[0] = camState.target[0]
-      cam.target[1] = camState.target[1]
-      cam.target[2] = camState.target[2]
+    // Apply director camera at current playhead time via clip system
+    const activeClip = cameraClips.length > 0 ? findActiveClip(cameraClips, directorPlayheadTime) : null
+    if (activeClip) {
+      const setup = activeClip.cameraSetup
+      const localTime = Math.max(0, Math.min(activeClip.duration, directorPlayheadTime - activeClip.timelineStart))
+      const camState = evaluateRailAnimation(
+        setup.rails, localTime, setup.railWorldAnchor, setup.targetPos, activeClip.focalLengthMm,
+      )
+      if (camState) {
+        // Rail animation active — use interpolated position
+        cam.position[0] = camState.position[0]
+        cam.position[1] = camState.position[1]
+        cam.position[2] = camState.position[2]
+        cam.target[0] = camState.target[0]
+        cam.target[1] = camState.target[1]
+        cam.target[2] = camState.target[2]
+        cam.fov = camState.fov
+      } else {
+        // No rail timing — use clip's static camera setup
+        cam.position[0] = setup.cameraPos[0]
+        cam.position[1] = setup.cameraPos[1]
+        cam.position[2] = setup.cameraPos[2]
+        cam.target[0] = setup.targetPos[0]
+        cam.target[1] = setup.targetPos[1]
+        cam.target[2] = setup.targetPos[2]
+        cam.fov = 2 * Math.atan(36 / (2 * activeClip.focalLengthMm)) * (180 / Math.PI)
+      }
+    } else {
+      // No clip at this time — use current focal length
+      cam.fov = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
     }
-    // Always use the focal length slider's FOV
-    cam.fov = fovFromMm
 
-    // Evaluate events at this time
+    // Evaluate events at this time (clip-local or top-level)
     const state = useChoanStore.getState()
-    const activeEvents = evaluateDirectorEvents(dt.eventMarkers, directorPlayheadTime, state.animationBundles)
+    const evMarkers = activeClip ? activeClip.eventMarkers : dt.eventMarkers
+    const evTime = activeClip ? directorPlayheadTime - activeClip.timelineStart : directorPlayheadTime
+    const activeEvents = evaluateDirectorEvents(evMarkers, evTime, state.animationBundles)
     const animated = activeEvents.length > 0
       ? evaluateDirectorFrame(state.elements, activeEvents)
       : state.elements
@@ -106,7 +124,7 @@ export default function CameraPIP() {
     renderer.updateScene(state.elements, rs.extrudeDepth)
     renderer.renderPipeline(rs)
     renderer.blitAndOverlay()
-  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, hasCameraKfs])
+  }, [visible, directorPlayheadTime, dt, scene, focalLengthMm, cameraClips])
 
   if (!visible) return null
 

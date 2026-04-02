@@ -871,6 +871,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   const handlePlayPause = () => {
     if (directorPlaying) { stopPlaying(); return }
+    // If playhead is at or past the end, reset to 0 before playing
+    if (directorPlayheadTime >= viewDuration - 1) {
+      setDirectorPlayheadTime(0)
+    }
     startPlaying()
   }
 
@@ -886,6 +890,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
     setExporting(true)
     setExportProgress(0)
+    useDirectorStore.setState({ exporting: true })
 
     const rs = useRenderSettings.getState()
 
@@ -946,9 +951,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       a.click()
       URL.revokeObjectURL(url)
       setExporting(false)
+      useDirectorStore.setState({ exporting: false })
       setExportDialogOpen(false)
     }).catch(() => {
       setExporting(false)
+      useDirectorStore.setState({ exporting: false })
     })
   }
 
@@ -1064,7 +1071,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         onExport={handleExport}
         exporting={exporting}
         progress={exportProgress}
-        duration={sceneDuration}
+        duration={viewDuration}
       />
     </div>
   )

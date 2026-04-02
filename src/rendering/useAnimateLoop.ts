@@ -92,6 +92,9 @@ export function useAnimateLoop({
       const renderer = rendererRef.current
       if (!renderer) return
 
+      // Skip rendering while video export owns the canvas
+      if (useDirectorStore.getState().exporting) return
+
       controlsRef.current?.update()
 
       const cam = renderer.camera

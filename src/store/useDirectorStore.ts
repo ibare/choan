@@ -37,6 +37,7 @@ interface DirectorStore {
   focalLengthMm: number  // focal length in mm for FOV control
   frustumSpotlightOn: boolean  // Q key frustum spotlight toggle
   viewfinderAspect: string     // e.g. '16:9', '4:3', '1:1', '9:16', '2.35:1'
+  exporting: boolean           // true while video export is in progress
 
   // ── Director camera setup (rail UX, step 1) ──────────────────────────────
   // Separate from the viewport camera (orbit controls).
@@ -153,6 +154,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   focalLengthMm: 38,
   frustumSpotlightOn: false,
   viewfinderAspect: '16:9',
+  exporting: false,
 
   // Director camera setup defaults
   directorCameraPos:      [0, 0, 18],
