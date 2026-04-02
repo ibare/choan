@@ -714,17 +714,17 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           const newStart = clamp(dragRef.current.startTime + dtMs)
           moveCameraClip(dragRef.current.id, newStart)
         } else if (dragRef.current.edge === 'left') {
-          // Resize from left: change start, adjust duration
-          const newStart = clamp(dragRef.current.startTime + dtMs)
-          const oldEnd = dragRef.current.startTime + dragRef.current.startDuration
-          const newDuration = Math.max(100, Math.round(oldEnd - newStart))
-          moveCameraClip(dragRef.current.id, Math.round(oldEnd - newDuration))
+          // Resize from left: move start, keep end fixed
+          const origStart = dragRef.current.startTime
+          const origEnd = origStart + dragRef.current.startDuration
+          const newStart = clamp(origStart + dtMs)
+          const newDuration = Math.max(100, Math.round(origEnd - newStart))
+          moveCameraClip(dragRef.current.id, Math.round(origEnd - newDuration))
           resizeCameraClip(dragRef.current.id, newDuration)
         } else if (dragRef.current.edge === 'right') {
-          // Resize from right: change duration
-          const newEnd = clamp(dragRef.current.startTime + dtMs)
-          const clipStart = dragRef.current.startTime - dragRef.current.startDuration
-          const newDuration = Math.max(100, Math.round(newEnd - clipStart))
+          // Resize from right: keep start fixed, change end
+          const origStart = dragRef.current.startTime - dragRef.current.startDuration
+          const newDuration = Math.max(100, clamp(dragRef.current.startDuration + dtMs))
           resizeCameraClip(dragRef.current.id, newDuration)
         }
       } else if (dragRef.current.type === 'rail-timing' && dragRef.current.channel) {
@@ -773,10 +773,15 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     const rect = canvas.getBoundingClientRect()
     const localX = e.clientX - rect.left
     const localY = e.clientY - rect.top
+    const clipHover = hitTestCameraClip(localX, localY)
     const markHover = hitTestCameraMark(localX, localY)
     const camHit = hitTestCameraKf(localX, localY)
     const evtHit = hitTestEventBar(localX, localY)
-    if (markHover || camHit) {
+    if (clipHover && (clipHover.edge === 'left' || clipHover.edge === 'right')) {
+      canvas.style.cursor = 'ew-resize'
+    } else if (clipHover) {
+      canvas.style.cursor = 'grab'
+    } else if (markHover || camHit) {
       canvas.style.cursor = 'grab'
     } else if (evtHit?.isEdge) {
       canvas.style.cursor = 'ew-resize'
