@@ -141,6 +141,72 @@ function buildCrossSection(
 }
 
 /**
+ * Build a rectangular box (cuboid) mesh between two 3D points with square cross-section.
+ * Returns Float32Array of triangle vertices (12 triangles = 36 vertices = 108 floats).
+ */
+function buildBoxMesh(
+  start: [number, number, number],
+  end: [number, number, number],
+  halfSize: number,
+): Float32Array {
+  // Direction vector
+  let dx = end[0] - start[0]
+  let dy = end[1] - start[1]
+  let dz = end[2] - start[2]
+  const dl = Math.sqrt(dx * dx + dy * dy + dz * dz)
+  if (dl < 1e-6) return new Float32Array(0)
+  dx /= dl; dy /= dl; dz /= dl
+
+  // Perpendicular vectors u, v
+  let ux: number, uy: number, uz: number
+  if (Math.abs(dy) < 0.9) {
+    ux = dz; uy = 0; uz = -dx
+  } else {
+    ux = 0; uy = -dz; uz = dy
+  }
+  const ul = Math.sqrt(ux * ux + uy * uy + uz * uz)
+  if (ul < 1e-6) return new Float32Array(0)
+  ux /= ul; uy /= ul; uz /= ul
+  const vx = dy * uz - dz * uy
+  const vy = dz * ux - dx * uz
+  const vz = dx * uy - dy * ux
+
+  const s = halfSize
+  // 8 corners: 4 at start face, 4 at end face
+  // Order: (-u-v), (+u-v), (+u+v), (-u+v)
+  const corners: [number, number, number][] = []
+  for (const c of [start, end]) {
+    corners.push(
+      [c[0] - ux * s - vx * s, c[1] - uy * s - vy * s, c[2] - uz * s - vz * s],
+      [c[0] + ux * s - vx * s, c[1] + uy * s - vy * s, c[2] + uz * s - vz * s],
+      [c[0] + ux * s + vx * s, c[1] + uy * s + vy * s, c[2] + uz * s + vz * s],
+      [c[0] - ux * s + vx * s, c[1] - uy * s + vy * s, c[2] - uz * s + vz * s],
+    )
+  }
+  // s0-s3 = start face, e0-e3 = end face
+  const [s0, s1, s2, s3, e0, e1, e2, e3] = corners
+
+  // 6 faces × 2 triangles each (CCW winding when viewed from outside)
+  const faces: [number, number, number][][] = [
+    [s0, s1, e1, s0, e1, e0], // bottom (-v)
+    [s2, s3, e3, s2, e3, e2], // top (+v)
+    [s0, s3, e3, s0, e3, e0], // left (-u)
+    [s1, s2, e2, s1, e2, e1], // right (+u)
+    [s0, s3, s2, s0, s2, s1], // start cap
+    [e0, e1, e2, e0, e2, e3], // end cap
+  ]
+
+  const out = new Float32Array(108) // 12 triangles × 3 verts × 3 floats
+  let idx = 0
+  for (const face of faces) {
+    for (const v of face) {
+      out[idx++] = v[0]; out[idx++] = v[1]; out[idx++] = v[2]
+    }
+  }
+  return out
+}
+
+/**
  * Draw a tube mesh along a 3D path (array of points).
  * Generates cross-section circles at each path point, connects them with triangles.
  */
@@ -305,6 +371,16 @@ function drawTargetMarker(
   ov.drawDiscScreen(s.px, s.py, isAttached ? 10 * dpr : 6 * dpr, color)
 }
 
+// Per-axis rail cube colors: active (selected) vs inactive
+const RAIL_CUBE_COLORS: Record<AxisMarkChannel, {
+  color:       [number, number, number, number]
+  colorActive: [number, number, number, number]
+}> = {
+  truck: { color: [0.9, 0.3, 0.3, 0.15], colorActive: [0.9, 0.3, 0.3, 0.4] },
+  boom:  { color: [0.3, 0.8, 0.3, 0.15], colorActive: [0.3, 0.8, 0.3, 0.4] },
+  dolly: { color: [0.2, 0.5, 1.0, 0.15], colorActive: [0.2, 0.5, 1.0, 0.4] },
+}
+
 const RAIL_OFFSET = 4.5  // push rail handles beyond the axis tunnel range (CAM_TUNNEL_RANGE=4)
 
 function drawRailAxes(
@@ -327,9 +403,10 @@ function drawRailAxes(
     extent: number,
     axisAnchored: boolean,  // true if either neg or pos of this axis is extended
   ): void {
-    const isActive = activeRailAxis === AXIS_TO_CHANNEL[axisIdx]
-    const lw = isActive ? 6 : 2  // 3x thicker for selected axis
-    const isExtended = extent > RAIL_MIN_STUB + 0.001
+    const channel = AXIS_TO_CHANNEL[axisIdx]
+    const isActive = activeRailAxis === channel
+    const colors = RAIL_CUBE_COLORS[channel]
+    const railColor = isActive ? colors.colorActive : colors.color
     // Anchor: use world anchor if the axis has any extension, otherwise camera pos
     const anchorVal = axisAnchored ? railWorldAnchor[axisIdx] : cameraPos[axisIdx]
     const dx = axisIdx === 0 ? sign : 0
@@ -338,36 +415,23 @@ function drawRailAxes(
     const baseX = (axisIdx === 0 ? anchorVal : cameraPos[0]) + dx * RAIL_OFFSET
     const baseY = (axisIdx === 1 ? anchorVal : cameraPos[1]) + dy * RAIL_OFFSET
     const baseZ = (axisIdx === 2 ? anchorVal : cameraPos[2]) + dz * RAIL_OFFSET
-    const stub = RAIL_MIN_STUB
-    const stubEndX = baseX + dx * stub
-    const stubEndY = baseY + dy * stub
-    const stubEndZ = baseZ + dz * stub
 
-    // Connecting line: camera → rail base (fills the gap when anchored)
-    if (axisAnchored) {
-      ov.drawLines3D(new Float32Array([
-        cameraPos[0], cameraPos[1], cameraPos[2],
-        baseX, baseY, baseZ,
-      ]), RAIL_ACTIVE_COLOR, lw)
-    }
+    // Tip: full extent from base
+    const tipX = baseX + dx * extent
+    const tipY = baseY + dy * extent
+    const tipZ = baseZ + dz * extent
 
-    // Red stub (always present)
-    ov.drawLines3D(new Float32Array([baseX, baseY, baseZ, stubEndX, stubEndY, stubEndZ]), RAIL_STUB_COLOR, lw)
+    // Single continuous rail cube: when anchored, start from camera to fill the gap
+    const startPt: [number, number, number] = axisAnchored
+      ? [cameraPos[0], cameraPos[1], cameraPos[2]]
+      : [baseX, baseY, baseZ]
+    const railMesh = buildBoxMesh(startPt, [tipX, tipY, tipZ], PIPE_RADIUS)
+    if (railMesh.length > 0) ov.drawTriangles3D(railMesh, railColor)
 
-    if (isExtended) {
-      // Blue extension beyond the stub
-      const tipX = baseX + dx * extent
-      const tipY = baseY + dy * extent
-      const tipZ = baseZ + dz * extent
-      ov.drawLines3D(new Float32Array([stubEndX, stubEndY, stubEndZ, tipX, tipY, tipZ]), RAIL_ACTIVE_COLOR, lw)
-      // White handle at tip
-      const s = ov.projectToScreen(tipX, tipY, tipZ)
-      ov.drawDiscScreen(s.px, s.py, 10 * dpr, HANDLE_COLOR)
-    } else {
-      // Red handle at stub tip
-      const s = ov.projectToScreen(stubEndX, stubEndY, stubEndZ)
-      ov.drawDiscScreen(s.px, s.py, 10 * dpr, RAIL_STUB_COLOR)
-    }
+    // Handle at tip
+    const isExtended = extent > RAIL_MIN_STUB + 0.001
+    const s = ov.projectToScreen(tipX, tipY, tipZ)
+    ov.drawDiscScreen(s.px, s.py, 10 * dpr, isExtended ? HANDLE_COLOR : railColor)
   }
 
   // Per-axis "anchored" flag: true if either neg or pos is extended
@@ -377,14 +441,14 @@ function drawRailAxes(
 
   // Truck (X axis=0) — linear or circular
   if (rails.truckMode === 'circular') {
-    drawCircularRail(ov, cameraPos, railWorldAnchor, 'truck', rails.truck, dpr)
+    drawCircularRail(ov, cameraPos, railWorldAnchor, 'truck', rails.truck, dpr, activeRailAxis)
   } else {
     drawOneSide(0,  1, rails.truck.pos, truckAnchored)
     drawOneSide(0, -1, rails.truck.neg, truckAnchored)
   }
   // Boom (Y axis=1) — linear or circular
   if (rails.boomMode === 'circular') {
-    drawCircularRail(ov, cameraPos, railWorldAnchor, 'boom', rails.boom, dpr)
+    drawCircularRail(ov, cameraPos, railWorldAnchor, 'boom', rails.boom, dpr, activeRailAxis)
   } else {
     drawOneSide(1,  1, rails.boom.pos, boomAnchored)
     drawOneSide(1, -1, rails.boom.neg, boomAnchored)
@@ -448,8 +512,10 @@ function drawCircularRail(
   axis: 'truck' | 'boom',
   ext: { neg: number; pos: number },
   dpr: number,
+  activeRailAxis: AxisMarkChannel | null,
 ): void {
   const isExtended = ext.neg > RAIL_MIN_STUB + 0.001 || ext.pos > RAIL_MIN_STUB + 0.001
+  const isActive = activeRailAxis === axis
 
   if (axis === 'truck') {
     // Horizontal orbit in XZ plane
@@ -463,11 +529,11 @@ function drawCircularRail(
 
     // Draw neg arc (stub + extension)
     drawArcSide(ov, center, radius, anchorAngle, -1, negAngle, dpr,
-      (a) => pointOnTruckCircle(center, radius, a))
+      (a) => pointOnTruckCircle(center, radius, a), axis, isActive)
 
     // Draw pos arc
     drawArcSide(ov, center, radius, anchorAngle, +1, posAngle, dpr,
-      (a) => pointOnTruckCircle(center, radius, a))
+      (a) => pointOnTruckCircle(center, radius, a), axis, isActive)
 
   } else {
     // Vertical orbit in camera heading plane
@@ -480,14 +546,14 @@ function drawCircularRail(
     const posAngle = ext.pos / radius
 
     drawArcSide(ov, [0, 0, 0], radius, anchorElev, -1, negAngle, dpr,
-      (a) => pointOnBoomCircle(radius, a, hAngle))
+      (a) => pointOnBoomCircle(radius, a, hAngle), axis, isActive)
 
     drawArcSide(ov, [0, 0, 0], radius, anchorElev, +1, posAngle, dpr,
-      (a) => pointOnBoomCircle(radius, a, hAngle))
+      (a) => pointOnBoomCircle(radius, a, hAngle), axis, isActive)
   }
 }
 
-/** Draw one side (neg or pos) of a circular rail arc. */
+/** Draw one side (neg or pos) of a circular rail arc as tube mesh. */
 function drawArcSide(
   ov: OverlayRenderer,
   _center: [number, number, number],
@@ -497,44 +563,28 @@ function drawArcSide(
   totalAngle: number,
   dpr: number,
   pointFn: (angle: number) => [number, number, number],
+  channel: AxisMarkChannel,
+  isActive: boolean,
 ): void {
   const isExtended = totalAngle > RAIL_MIN_STUB / Math.max(_radius, 0.01) + 0.001
-  const stubAngle = RAIL_MIN_STUB / Math.max(_radius, 0.01)
+  const colors = RAIL_CUBE_COLORS[channel]
+  const railColor = isActive ? colors.colorActive : colors.color
 
-  // Red stub arc
-  const stubSegs = Math.max(4, Math.round(ARC_SEGMENTS * stubAngle / (Math.PI * 2)))
-  const stubVerts: number[] = []
-  for (let i = 0; i < stubSegs; i++) {
-    const a0 = baseAngle + sign * (i / stubSegs) * stubAngle
-    const a1 = baseAngle + sign * ((i + 1) / stubSegs) * stubAngle
-    const p0 = pointFn(a0), p1 = pointFn(a1)
-    stubVerts.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
+  // Single continuous arc as tube
+  const segs = Math.max(4, Math.round(ARC_SEGMENTS * totalAngle / (Math.PI * 2)))
+  const path: [number, number, number][] = []
+  for (let i = 0; i <= segs; i++) {
+    const a = baseAngle + sign * (i / segs) * totalAngle
+    path.push(pointFn(a))
   }
-  ov.drawLines3D(new Float32Array(stubVerts), RAIL_STUB_COLOR)
+  if (path.length >= 2) {
+    drawTubeAlongPathColored(ov, path, railColor, railColor)
+  }
 
-  if (isExtended) {
-    // Blue extension arc
-    const extSegs = Math.max(4, Math.round(ARC_SEGMENTS * totalAngle / (Math.PI * 2)))
-    const extVerts: number[] = []
-    for (let i = 0; i < extSegs; i++) {
-      const t0 = stubAngle + (i / extSegs) * (totalAngle - stubAngle)
-      const t1 = stubAngle + ((i + 1) / extSegs) * (totalAngle - stubAngle)
-      const a0 = baseAngle + sign * t0
-      const a1 = baseAngle + sign * t1
-      const p0 = pointFn(a0), p1 = pointFn(a1)
-      extVerts.push(p0[0], p0[1], p0[2], p1[0], p1[1], p1[2])
-    }
-    ov.drawLines3D(new Float32Array(extVerts), RAIL_ACTIVE_COLOR)
-    // White handle at tip
-    const tipPt = pointFn(baseAngle + sign * totalAngle)
-    const s = ov.projectToScreen(tipPt[0], tipPt[1], tipPt[2])
-    ov.drawDiscScreen(s.px, s.py, 10 * dpr, HANDLE_COLOR)
-  } else {
-    // Red handle at stub tip
-    const stubTip = pointFn(baseAngle + sign * stubAngle)
-    const s = ov.projectToScreen(stubTip[0], stubTip[1], stubTip[2])
-    ov.drawDiscScreen(s.px, s.py, 10 * dpr, RAIL_STUB_COLOR)
-  }
+  // Handle at tip
+  const tipPt = pointFn(baseAngle + sign * totalAngle)
+  const s = ov.projectToScreen(tipPt[0], tipPt[1], tipPt[2])
+  ov.drawDiscScreen(s.px, s.py, 10 * dpr, isExtended ? HANDLE_COLOR : railColor)
 }
 
 function drawSphereRail(
@@ -545,20 +595,21 @@ function drawSphereRail(
   dpr: number,
 ): void {
   const [tx, ty, tz] = targetPos
-  const isActive = radius > RAIL_MIN_STUB + 0.001
-  const color = isActive ? RAIL_ACTIVE_COLOR : RAIL_STUB_COLOR
+  const isExtended = radius > RAIL_MIN_STUB + 0.001
+  // Sphere rail uses a neutral blue-ish color (not axis-specific)
+  const bodyColor: [number, number, number, number] = isExtended
+    ? [0.2, 0.5, 1.0, 0.15]
+    : [0.9, 0.2, 0.2, 0.2]
 
-  // Draw horizontal circle at target's Y height
-  const verts: number[] = []
-  for (let i = 0; i < SPHERE_SEGMENTS; i++) {
-    const a0 = (i / SPHERE_SEGMENTS) * Math.PI * 2
-    const a1 = ((i + 1) / SPHERE_SEGMENTS) * Math.PI * 2
-    verts.push(
-      tx + Math.cos(a0) * radius, ty, tz + Math.sin(a0) * radius,
-      tx + Math.cos(a1) * radius, ty, tz + Math.sin(a1) * radius,
-    )
+  // Draw horizontal circle at target's Y height as tube
+  const path: [number, number, number][] = []
+  for (let i = 0; i <= SPHERE_SEGMENTS; i++) {
+    const a = (i / SPHERE_SEGMENTS) * Math.PI * 2
+    path.push([tx + Math.cos(a) * radius, ty, tz + Math.sin(a) * radius])
   }
-  ov.drawLines3D(new Float32Array(verts), color)
+  if (path.length >= 2) {
+    drawTubeAlongPathColored(ov, path, bodyColor, bodyColor)
+  }
 
   // Handle: point on the circle closest to the camera (in XZ projection)
   const dx = cameraPos[0] - tx
@@ -568,7 +619,7 @@ function drawSphereRail(
     const hx = tx + (dx / dist) * radius
     const hz = tz + (dz / dist) * radius
     const s = ov.projectToScreen(hx, ty, hz)
-    ov.drawDiscScreen(s.px, s.py, 8 * dpr, isActive ? HANDLE_COLOR : RAIL_STUB_COLOR)
+    ov.drawDiscScreen(s.px, s.py, 8 * dpr, isExtended ? HANDLE_COLOR : RAIL_STUB_COLOR)
   }
 }
 
@@ -704,21 +755,28 @@ function sampleAxisPath(
 
 /**
  * Draws per-axis mark pipes — one colored pipe per axis that has 2+ marks.
+ * @param anchor - railWorldAnchor (used for the mark's own axis offset)
+ * @param cameraPos - current camera position (used for non-mark axes so pipes follow the camera)
  */
 export function drawAxisMarkPipes(
   ov: OverlayRenderer,
   axisMarks: Record<AxisMarkChannel, AxisMark[]>,
-  basePos: [number, number, number],
+  anchor: [number, number, number],
   rails: DirectorRails,
+  cameraPos?: [number, number, number],
 ): void {
+  const cam = cameraPos ?? anchor
   const channels: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
   for (const ch of channels) {
     const marks = axisMarks[ch]
     if (marks.length < 2) continue
-    const path = sampleAxisPath(marks, ch, basePos, rails, AXIS_PIPE_SAMPLES)
+    // Mix: mark axis uses anchor, other axes use camera pos
+    const idx = ch === 'truck' ? 0 : ch === 'boom' ? 1 : 2
+    const mixedBase: [number, number, number] = [...cam]
+    mixedBase[idx] = anchor[idx]
+    const path = sampleAxisPath(marks, ch, mixedBase, rails, AXIS_PIPE_SAMPLES)
     if (path.length < 2) continue
 
-    // Reuse drawTubeAlongPath but with per-axis colors
     const colors = AXIS_PIPE_COLORS[ch]
     drawTubeAlongPathColored(ov, path, colors.body, colors.edge)
   }

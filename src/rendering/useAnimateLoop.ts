@@ -434,6 +434,7 @@ export function useAnimateLoop({
             axisData,
             dirState.railWorldAnchor,
             dirState.directorRails,
+            dirState.directorCameraPos,
           )
         } else {
           const marks = dirTl.cameraMarks ?? []
