@@ -246,19 +246,8 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
     const camCount = (dt.cameras ?? []).length
 
-    const cam: DirectorCamera = {
-      id: camId,
-      name: `Camera ${camCount + 1}`,
-      setup: {
-        cameraPos: [...s.directorCameraPos],
-        targetPos: [...s.directorTargetPos],
-        rails: createDefaultRails(),
-        railWorldAnchor: [...s.directorCameraPos],
-        targetAttachedTo: null,
-      },
-      focalLengthMm: s.focalLengthMm,
-      viewfinderAspect: s.viewfinderAspect,
-    }
+    const cam = createDefaultCamera(camId)
+    cam.name = `Camera ${camCount + 1}`
 
     updateActiveSceneDirectorTimeline((prev) => ({
       ...prev,
