@@ -1,65 +1,122 @@
-// Auto-persistence — debounced LocalStorage backup of scene data.
-// Subscribes to scene/element/animation stores and saves on change. Restores on app start.
+// Project persistence — IndexedDB-backed project storage.
+// Each project is stored independently with its own scenes.
+// Auto-saves on store changes with debouncing.
 
+import { openDB, type IDBPDatabase } from 'idb'
 import { useElementStore } from './useElementStore'
 import { useAnimationStore } from './useAnimationStore'
 import { useSceneStore } from './useSceneStore'
 import { nanoid } from '../utils/nanoid'
-import type { ChoanElement } from './useElementStore'
-import type { AnimationBundle } from '../animation/types'
 import type { Scene } from './sceneTypes'
 
-const STORAGE_KEY = 'choan-backup'
-const DEBOUNCE_MS = 300
+// ── DB schema ──
 
-// ── Backup formats ──
+const DB_NAME = 'choan-db'
+const DB_VERSION = 1
+const PROJECTS_STORE = 'projects'
+const META_STORE = 'meta'
 
-interface BackupDataV1 {
-  version: 1
-  elements: ChoanElement[]
-  animationBundles: AnimationBundle[]
-}
-
-interface BackupDataV2 {
-  version: 2
+export interface ProjectRecord {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
   scenes: Scene[]
   activeSceneId: string
 }
 
-type BackupData = BackupDataV1 | BackupDataV2
+export interface ProjectListItem {
+  id: string
+  name: string
+  updatedAt: number
+}
 
-// ── V1 → V2 migration ──
+let dbPromise: Promise<IDBPDatabase> | null = null
 
-function migrateV1toV2(v1: BackupDataV1): BackupDataV2 {
-  const sceneId = nanoid()
-  return {
-    version: 2,
-    scenes: [{
-      id: sceneId,
-      name: 'Scene 1',
-      elements: v1.elements,
-      animationBundles: v1.animationBundles,
-      order: 0,
-      duration: 3000,
-    }],
-    activeSceneId: sceneId,
+function getDB(): Promise<IDBPDatabase> {
+  if (!dbPromise) {
+    dbPromise = openDB(DB_NAME, DB_VERSION, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains(PROJECTS_STORE)) {
+          db.createObjectStore(PROJECTS_STORE, { keyPath: 'id' })
+        }
+        if (!db.objectStoreNames.contains(META_STORE)) {
+          db.createObjectStore(META_STORE)
+        }
+      },
+    })
+  }
+  return dbPromise
+}
+
+// ── Project CRUD ──
+
+export async function saveProject(
+  id: string,
+  name: string,
+  scenes: Scene[],
+  activeSceneId: string,
+): Promise<void> {
+  const db = await getDB()
+  const existing = await db.get(PROJECTS_STORE, id) as ProjectRecord | undefined
+  const record: ProjectRecord = {
+    id,
+    name,
+    createdAt: existing?.createdAt ?? Date.now(),
+    updatedAt: Date.now(),
+    scenes,
+    activeSceneId,
+  }
+  await db.put(PROJECTS_STORE, record)
+  await db.put(META_STORE, id, 'lastOpenedProjectId')
+}
+
+export async function loadProject(id: string): Promise<ProjectRecord | null> {
+  const db = await getDB()
+  const record = await db.get(PROJECTS_STORE, id) as ProjectRecord | undefined
+  return record ?? null
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const db = await getDB()
+  await db.delete(PROJECTS_STORE, id)
+  const lastId = await db.get(META_STORE, 'lastOpenedProjectId')
+  if (lastId === id) {
+    await db.delete(META_STORE, 'lastOpenedProjectId')
   }
 }
 
-// ── Save / Restore ──
+export async function listProjects(): Promise<ProjectListItem[]> {
+  const db = await getDB()
+  const all = await db.getAll(PROJECTS_STORE) as ProjectRecord[]
+  return all
+    .map(({ id, name, updatedAt }) => ({ id, name, updatedAt }))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+}
 
+// ── Current project state ──
+
+let currentProjectId: string | null = null
+let currentProjectName = 'Untitled'
+
+export function getCurrentProjectId(): string | null { return currentProjectId }
+export function getCurrentProjectName(): string { return currentProjectName }
+
+export function setCurrentProject(id: string, name: string): void {
+  currentProjectId = id
+  currentProjectName = name
+}
+
+// ── Auto-save ──
+
+const DEBOUNCE_MS = 300
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-function save() {
-  // Sync active scene data before saving
+async function save() {
+  if (!currentProjectId) return
   useSceneStore.getState().syncActiveSceneData()
   const { scenes, activeSceneId } = useSceneStore.getState()
-  const data: BackupDataV2 = { version: 2, scenes, activeSceneId }
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  } catch {
-    // Storage full or unavailable — silently ignore
-  }
+  await saveProject(currentProjectId, currentProjectName, scenes, activeSceneId)
 }
 
 function scheduleSave() {
@@ -67,31 +124,27 @@ function scheduleSave() {
   debounceTimer = setTimeout(save, DEBOUNCE_MS)
 }
 
-/** Restore from LocalStorage. Returns true if data was loaded. */
-export function restoreBackup(): boolean {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return false
-    const parsed = JSON.parse(raw) as BackupData
-    if (!parsed.version) return false
+// ── App lifecycle ──
 
-    let data: BackupDataV2
-    if (parsed.version === 1) {
-      const v1 = parsed as BackupDataV1
-      if (!Array.isArray(v1.elements)) return false
-      data = migrateV1toV2(v1)
-    } else if (parsed.version === 2) {
-      data = parsed as BackupDataV2
-      if (!Array.isArray(data.scenes) || data.scenes.length === 0) return false
-    } else {
-      return false
+/** Restore last opened project or create a new one. */
+export async function restoreLastProject(): Promise<boolean> {
+  const db = await getDB()
+  const lastId = await db.get(META_STORE, 'lastOpenedProjectId') as string | undefined
+
+  if (lastId) {
+    const record = await loadProject(lastId)
+    if (record && Array.isArray(record.scenes) && record.scenes.length > 0) {
+      currentProjectId = record.id
+      currentProjectName = record.name
+      useSceneStore.getState().loadScenes(record.scenes, record.activeSceneId)
+      return true
     }
-
-    useSceneStore.getState().loadScenes(data.scenes, data.activeSceneId)
-    return true
-  } catch {
-    return false
   }
+
+  // No previous project — create a fresh one
+  currentProjectId = nanoid()
+  currentProjectName = 'Untitled'
+  return false
 }
 
 /** Start auto-save subscriptions. Call once at app init. */

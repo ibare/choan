@@ -14,7 +14,7 @@ import { Button } from './components/ui/Button'
 import { DownloadSimple, SignOut } from '@phosphor-icons/react'
 import { track } from './utils/analytics'
 import { startExportAnim, startRestore, MERGE_DURATION } from './animation/exportAnimation'
-import { restoreBackup, initPersistence } from './store/persistence'
+import { restoreLastProject, initPersistence } from './store/persistence'
 import { initHistory } from './store/history'
 
 export default function App() {
@@ -28,11 +28,12 @@ export default function App() {
   const [toastOpen, setToastOpen]       = useState(false)
   const [toastMsg, setToastMsg]         = useState('')
 
-  // Restore backup from LocalStorage + init auto-save + undo history
+  // Restore last project from IndexedDB + init auto-save + undo history
   useEffect(() => {
-    restoreBackup()
-    initPersistence()
-    initHistory()
+    restoreLastProject().then(() => {
+      initPersistence()
+      initHistory()
+    })
   }, [])
   const [timelineHeight, setTimelineHeight] = useState(180)
   const [leftPanelWidth, setLeftPanelWidth] = useState(160)
