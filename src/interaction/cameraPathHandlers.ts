@@ -4,6 +4,7 @@
 import type { OverlayRenderer } from '../engine/overlay'
 import type { CameraViewKeyframe, DirectorRails, RailHandleId } from '../animation/directorTypes'
 import { RAIL_MIN_STUB, truckCircularParams, boomCircularParams, pointOnTruckCircle, pointOnBoomCircle } from '../animation/directorTypes'
+import { getSliderHandlePos } from '../rendering/cameraPathOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
 
 export interface CameraKeyframeHit {
@@ -279,8 +280,6 @@ export function computeCameraKeyframeDragPosition(
 
 export type RailSliderHit = { axis: 'x' | 'y' | 'z' }
 
-const SLIDER_OFFSET = 2.4  // must match cameraPathOverlay.ts
-
 /**
  * Hit test rail slider handles — each extended axis has its own handle
  * offset along its axis from the camera position.
@@ -310,9 +309,8 @@ export function hitTestRailSlider(
 
   for (const { axis, idx, ext } of axes) {
     if (ext.neg < stub && ext.pos < stub) continue  // not extended
-    // Handle position: camera pos + offset toward the more-extended side
-    const hPos: [number, number, number] = [...cameraPos]
-    hPos[idx] += SLIDER_OFFSET * (ext.pos >= ext.neg ? 1 : -1)
+    // Handle position: follows circular arc when applicable
+    const hPos = getSliderHandlePos(cameraPos, idx, ext, rails)
     const s = overlay.projectToScreen(hPos[0], hPos[1], hPos[2])
     const d = Math.sqrt((mx - s.px) ** 2 + (my - s.py) ** 2)
     if (d < bestDist) {

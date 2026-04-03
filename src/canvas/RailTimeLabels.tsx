@@ -18,7 +18,7 @@ interface RailTimeLabelsProps {
   labelsRef: MutableRefObject<RailTimeLabelData[]>
 }
 
-const LEADER_LEN = 40   // px — leader line length
+const LEADER_LEN = 80   // px — leader line length
 const LABEL_PAD_X = 6
 const LABEL_PAD_Y = 2
 const MARGIN = 12        // px — viewport edge margin
@@ -71,54 +71,65 @@ export default function RailTimeLabels({ labelsRef }: RailTimeLabelsProps) {
       ]
 
       // ── Compute label positions with perpendicular offset ──
-      type PlacedLabel = { lx: number; ly: number; lbl: RailTimeLabelData; seq: number }
+      type PlacedLabel = { lx: number; ly: number; lbl: RailTimeLabelData; seq: number; tw: number; th: number }
       const placed: PlacedLabel[] = []
+
+      // Helper: compute bounding box overlap area with all placed labels
+      const overlapScore = (cx: number, cy: number, tw: number, th: number): number => {
+        let score = 0
+        const ax0 = cx - tw / 2, ax1 = cx + tw / 2, ay0 = cy - th / 2, ay1 = cy + th / 2
+        for (const prev of placed) {
+          const bx0 = prev.lx - prev.tw / 2, bx1 = prev.lx + prev.tw / 2
+          const by0 = prev.ly - prev.th / 2, by1 = prev.ly + prev.th / 2
+          const ox = Math.max(0, Math.min(ax1, bx1) - Math.max(ax0, bx0))
+          const oy = Math.max(0, Math.min(ay1, by1) - Math.max(ay0, by0))
+          score += ox * oy
+        }
+        return score
+      }
 
       for (const lbl of labels) {
         const seq = timeToSeq.get(lbl.timeMs)!
 
-        // Perpendicular to rail direction (rotate 90 degrees)
-        let perpX = -lbl.railDirY
-        let perpY = lbl.railDirX
+        // Two perpendicular candidates (rotate rail direction ±90°)
+        const perpAx = -lbl.railDirY, perpAy = lbl.railDirX
+        const perpBx = lbl.railDirY, perpBy = -lbl.railDirX
 
-        // Choose the perpendicular direction that points more toward viewport center
-        const cx = w / 2, cy = h / 2
-        const toCenterX = cx - lbl.anchorX, toCenterY = cy - lbl.anchorY
-        if (perpX * toCenterX + perpY * toCenterY < 0) {
-          perpX = -perpX
-          perpY = -perpY
-        }
-
-        // Label endpoint
-        let lx = lbl.anchorX + perpX * LEADER_LEN
-        let ly = lbl.anchorY + perpY * LEADER_LEN
-
-        // Estimate total width: number badge + time text
+        // Estimate label dimensions
         ctx.font = '700 11px system-ui, sans-serif'
         const numText = `${seq}`
-        const numW = ctx.measureText(numText).width + 8
+        const numW = ctx.measureText(numText).width + 10
         const timeW = ctx.measureText(lbl.text).width + LABEL_PAD_X * 2
         const totalW = numW + timeW
         const th = 20
 
-        // Clamp to viewport edges
-        lx = Math.max(MARGIN + totalW / 2, Math.min(w - MARGIN - totalW / 2, lx))
-        ly = Math.max(MARGIN + th / 2, Math.min(h - MARGIN - th / 2, ly))
+        // Clamp helper
+        const clamp = (cx: number, cy: number): [number, number] => [
+          Math.max(MARGIN + totalW / 2, Math.min(w - MARGIN - totalW / 2, cx)),
+          Math.max(MARGIN + th / 2, Math.min(h - MARGIN - th / 2, cy)),
+        ]
 
-        // Simple overlap avoidance
-        for (const prev of placed) {
-          const dx = lx - prev.lx, dy = ly - prev.ly
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < th + 6) {
-            const push = (th + 6 - dist) / 2
-            const nx = dist > 0.01 ? dx / dist : 0
-            const ny = dist > 0.01 ? dy / dist : 1
-            lx += nx * push
-            ly += ny * push
-          }
+        // Candidate A: perpendicular direction A
+        const [axA, ayA] = clamp(lbl.anchorX + perpAx * LEADER_LEN, lbl.anchorY + perpAy * LEADER_LEN)
+        const scoreA = overlapScore(axA, ayA, totalW, th)
+
+        // Candidate B: perpendicular direction B (opposite)
+        const [axB, ayB] = clamp(lbl.anchorX + perpBx * LEADER_LEN, lbl.anchorY + perpBy * LEADER_LEN)
+        const scoreB = overlapScore(axB, ayB, totalW, th)
+
+        // Pick the candidate with less overlap; tie-break by closer to viewport center
+        let lx: number, ly: number
+        if (scoreA === 0 && scoreB === 0) {
+          // No overlap on either side — prefer toward viewport center
+          const cx = w / 2, cy = h / 2
+          const dA = (axA - cx) ** 2 + (ayA - cy) ** 2
+          const dB = (axB - cx) ** 2 + (ayB - cy) ** 2
+          ;[lx, ly] = dA <= dB ? [axA, ayA] : [axB, ayB]
+        } else {
+          ;[lx, ly] = scoreA <= scoreB ? [axA, ayA] : [axB, ayB]
         }
 
-        placed.push({ lx, ly, lbl, seq })
+        placed.push({ lx, ly, lbl, seq, tw: totalW, th })
       }
 
       // ── Draw leader lines + two-part labels ──
@@ -136,13 +147,15 @@ export default function RailTimeLabels({ labelsRef }: RailTimeLabelsProps) {
         const bx = lx - totalW / 2
         const by = ly - th / 2
 
-        // Leader line
+        // Leader line (dashed)
         ctx.beginPath()
+        ctx.setLineDash([4, 3])
         ctx.moveTo(lbl.anchorX, lbl.anchorY)
         ctx.lineTo(bx + numW / 2, ly)
         ctx.strokeStyle = lightColor + '99'
         ctx.lineWidth = 1.5
         ctx.stroke()
+        ctx.setLineDash([])
 
         // Small dot at anchor
         ctx.beginPath()

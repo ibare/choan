@@ -394,6 +394,39 @@ const RAIL_CUBE_COLORS: Record<AxisMarkChannel, {
 }
 
 const RAIL_OFFSET = 4.5  // push rail handles beyond the axis tunnel range (CAM_TUNNEL_RANGE=4)
+const AXIS_HEX: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55c055', dolly: '#5588dd' }
+
+/** Collect a time label for a rail endpoint. Shared by drawOneSide and drawArcSide. */
+function collectRailTimeLabel(
+  labels: RailTimeLabel[],
+  ov: OverlayRenderer,
+  tipScreen: { px: number; py: number },
+  baseScreen: { px: number; py: number },
+  channel: AxisMarkChannel,
+  sign: number,
+  rails: DirectorRails,
+  dpr: number,
+  axisAnchored: boolean,
+): void {
+  const ext = rails[channel]
+  if (!axisAnchored || ext.startTime === ext.endTime) return
+
+  let rdx = tipScreen.px - baseScreen.px
+  let rdy = tipScreen.py - baseScreen.py
+  const rdl = Math.sqrt(rdx * rdx + rdy * rdy)
+  if (rdl > 0.01) { rdx /= rdl; rdy /= rdl } else { rdx = 0; rdy = -1 }
+
+  const timeVal = sign > 0 ? ext.endTime : ext.startTime
+  labels.push({
+    anchorX: tipScreen.px / dpr,
+    anchorY: tipScreen.py / dpr,
+    timeMs: timeVal,
+    text: `${(timeVal / 1000).toFixed(1)}s`,
+    color: AXIS_HEX[channel],
+    railDirX: rdx,
+    railDirY: rdy,
+  })
+}
 
 function drawRailAxes(
   ov: OverlayRenderer,
@@ -407,7 +440,6 @@ function drawRailAxes(
   const labels: RailTimeLabel[] = []
   // Map axis index to channel for active comparison
   const AXIS_TO_CHANNEL: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
-  const AXIS_HEX: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55c055', dolly: '#5588dd' }
 
   // Helper: draw one sided rail segment.
   // If EITHER side of the axis is extended, both sides anchor in world space.
@@ -447,28 +479,8 @@ function drawRailAxes(
     const s = ov.projectToScreen(tipX, tipY, tipZ)
     ov.drawDiscScreen(s.px, s.py, 10 * dpr, isExtended ? HANDLE_COLOR : railColor)
 
-    // Collect time label if axis has timing (show on both sides, even stub)
-    const ext = rails[channel]
-    if (axisAnchored && ext.startTime !== ext.endTime) {
-      // Compute screen-space rail direction for leader line placement
-      const baseScreen = ov.projectToScreen(baseX, baseY, baseZ)
-      let rdx = s.px - baseScreen.px
-      let rdy = s.py - baseScreen.py
-      const rdl = Math.sqrt(rdx * rdx + rdy * rdy)
-      if (rdl > 0.01) { rdx /= rdl; rdy /= rdl } else { rdx = 0; rdy = -1 }
-
-      const timeVal = sign > 0 ? ext.endTime : ext.startTime
-      const timeSec = (timeVal / 1000).toFixed(1)
-      labels.push({
-        anchorX: s.px / dpr,
-        anchorY: s.py / dpr,
-        timeMs: timeVal,
-        text: `${timeSec}s`,
-        color: AXIS_HEX[channel],
-        railDirX: rdx,
-        railDirY: rdy,
-      })
-    }
+    // Collect time label
+    collectRailTimeLabel(labels, ov, s, ov.projectToScreen(baseX, baseY, baseZ), channel, sign, rails, dpr, axisAnchored)
   }
 
   // Per-axis "anchored" flag: true if either neg or pos is extended
@@ -478,14 +490,14 @@ function drawRailAxes(
 
   // Truck (X axis=0) — linear or circular
   if (rails.truckMode === 'circular') {
-    drawCircularRail(ov, cameraPos, railWorldAnchor, 'truck', rails.truck, dpr, activeRailAxis)
+    drawCircularRail(ov, cameraPos, railWorldAnchor, 'truck', rails.truck, dpr, activeRailAxis, labels, rails)
   } else {
     drawOneSide(0,  1, rails.truck.pos, truckAnchored)
     drawOneSide(0, -1, rails.truck.neg, truckAnchored)
   }
   // Boom (Y axis=1) — linear or circular
   if (rails.boomMode === 'circular') {
-    drawCircularRail(ov, cameraPos, railWorldAnchor, 'boom', rails.boom, dpr, activeRailAxis)
+    drawCircularRail(ov, cameraPos, railWorldAnchor, 'boom', rails.boom, dpr, activeRailAxis, labels, rails)
   } else {
     drawOneSide(1,  1, rails.boom.pos, boomAnchored)
     drawOneSide(1, -1, rails.boom.neg, boomAnchored)
@@ -508,14 +520,37 @@ function sliderSign(ext: { neg: number; pos: number }): number {
   return ext.pos >= ext.neg ? 1 : -1
 }
 
-/** Compute the 3D position of a slider handle for a given axis. */
+/** Compute the 3D position of a slider handle for a given axis, following circular arcs. */
 export function getSliderHandlePos(
   cameraPos: [number, number, number],
   axisIdx: number,
   ext: { neg: number; pos: number },
+  rails?: DirectorRails,
 ): [number, number, number] {
+  const offset = SLIDER_OFFSET * sliderSign(ext)
+
+  // Circular truck (X axis): offset along the arc in XZ plane
+  if (axisIdx === 0 && rails?.truckMode === 'circular') {
+    const params = truckCircularParams(cameraPos)
+    if (params.radius > 0.01) {
+      const angleOffset = offset / params.radius
+      const pt = pointOnTruckCircle(params.center, params.radius, params.angle + angleOffset)
+      return [pt[0], cameraPos[1], pt[2]]
+    }
+  }
+
+  // Circular boom (Y axis): offset along the vertical arc
+  if (axisIdx === 1 && rails?.boomMode === 'circular') {
+    const params = boomCircularParams(cameraPos)
+    if (params.radius > 0.01) {
+      const elevOffset = offset / params.radius
+      return pointOnBoomCircle(params.radius, params.elevAngle + elevOffset, params.hAngle)
+    }
+  }
+
+  // Linear (default): straight offset along axis
   const pos: [number, number, number] = [...cameraPos]
-  pos[axisIdx] += SLIDER_OFFSET * sliderSign(ext)
+  pos[axisIdx] += offset
   return pos
 }
 
@@ -530,7 +565,7 @@ function drawRailSliderHandles(
   const exts = [rails.truck, rails.boom, rails.dolly]
 
   function drawSlider(axisIdx: number): void {
-    const pos = getSliderHandlePos(cameraPos, axisIdx, exts[axisIdx])
+    const pos = getSliderHandlePos(cameraPos, axisIdx, exts[axisIdx], rails)
     const s = ov.projectToScreen(pos[0], pos[1], pos[2])
     ov.drawDiscScreen(s.px, s.py, 12 * dpr, rings[axisIdx])
     ov.drawDiscScreen(s.px, s.py, 8 * dpr, SLIDER_FILL)
@@ -551,30 +586,28 @@ function drawCircularRail(
   ext: { neg: number; pos: number },
   dpr: number,
   activeRailAxis: AxisMarkChannel | null,
+  labels: RailTimeLabel[],
+  rails: DirectorRails,
 ): void {
   const isExtended = ext.neg > RAIL_MIN_STUB + 0.001 || ext.pos > RAIL_MIN_STUB + 0.001
   const isActive = activeRailAxis === axis
 
   if (axis === 'truck') {
-    // Horizontal orbit in XZ plane
     const { center, radius, angle: camAngle } = truckCircularParams(cameraPos)
     if (radius < 0.01) return
     const anchorAngle = isExtended
       ? Math.atan2(railWorldAnchor[0], railWorldAnchor[2])
       : camAngle
-    const negAngle = ext.neg / radius  // arc length → angle
+    const negAngle = ext.neg / radius
     const posAngle = ext.pos / radius
 
-    // Draw neg arc (stub + extension)
     drawArcSide(ov, center, radius, anchorAngle, -1, negAngle, dpr,
-      (a) => pointOnTruckCircle(center, radius, a), axis, isActive)
+      (a) => pointOnTruckCircle(center, radius, a), axis, isActive, labels, rails, isExtended)
 
-    // Draw pos arc
     drawArcSide(ov, center, radius, anchorAngle, +1, posAngle, dpr,
-      (a) => pointOnTruckCircle(center, radius, a), axis, isActive)
+      (a) => pointOnTruckCircle(center, radius, a), axis, isActive, labels, rails, isExtended)
 
   } else {
-    // Vertical orbit in camera heading plane
     const { radius, elevAngle: camElev, hAngle } = boomCircularParams(cameraPos)
     if (radius < 0.01) return
     const anchorElev = isExtended
@@ -584,10 +617,10 @@ function drawCircularRail(
     const posAngle = ext.pos / radius
 
     drawArcSide(ov, [0, 0, 0], radius, anchorElev, -1, negAngle, dpr,
-      (a) => pointOnBoomCircle(radius, a, hAngle), axis, isActive)
+      (a) => pointOnBoomCircle(radius, a, hAngle), axis, isActive, labels, rails, isExtended)
 
     drawArcSide(ov, [0, 0, 0], radius, anchorElev, +1, posAngle, dpr,
-      (a) => pointOnBoomCircle(radius, a, hAngle), axis, isActive)
+      (a) => pointOnBoomCircle(radius, a, hAngle), axis, isActive, labels, rails, isExtended)
   }
 }
 
@@ -603,6 +636,9 @@ function drawArcSide(
   pointFn: (angle: number) => [number, number, number],
   channel: AxisMarkChannel,
   isActive: boolean,
+  labels: RailTimeLabel[],
+  rails: DirectorRails,
+  axisAnchored: boolean,
 ): void {
   const isExtended = totalAngle > RAIL_MIN_STUB / Math.max(_radius, 0.01) + 0.001
   const colors = RAIL_CUBE_COLORS[channel]
@@ -623,6 +659,10 @@ function drawArcSide(
   const tipPt = pointFn(baseAngle + sign * totalAngle)
   const s = ov.projectToScreen(tipPt[0], tipPt[1], tipPt[2])
   ov.drawDiscScreen(s.px, s.py, 10 * dpr, isExtended ? HANDLE_COLOR : railColor)
+
+  // Collect time label
+  const basePt = pointFn(baseAngle)
+  collectRailTimeLabel(labels, ov, s, ov.projectToScreen(basePt[0], basePt[1], basePt[2]), channel, sign, rails, dpr, axisAnchored)
 }
 
 function drawSphereRail(
