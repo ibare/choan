@@ -102,7 +102,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const isDetailView = detailClipId !== null
   const activeClip = isDetailView ? cameraClips.find(c => c.id === detailClipId) ?? null : null
   const viewDuration = isDetailView && activeClip ? activeClip.duration : (
-    cameraClips.length > 0 ? Math.max(3000, ...cameraClips.map(c => c.timelineStart + c.duration)) : sceneDuration
+    cameraClips.length > 0 ? Math.max(...cameraClips.map(c => c.timelineStart + c.duration)) : sceneDuration
   )
 
   const hasRailTiming = hasActiveRailTiming(directorRails)
@@ -899,20 +899,35 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       (w, h) => renderer.resize(w, h),
       (timeMs) => {
         const state = useChoanStore.getState()
-
-        // Camera — railAnimation > axisMarks > cameraMarks > legacy keyframes
         const dirState = useDirectorStore.getState()
-        const exportHasRailAnim = hasActiveRailTiming(dirState.directorRails)
-        const exportAxisData = ensureAxisMarks(dt).axisMarks
-        const exportHasAxis = !exportHasRailAnim && Object.values(exportAxisData).some((arr) => arr.length > 0)
-        const exportHasMarks = (dt.cameraMarks?.length ?? 0) > 0
-        const camState = exportHasRailAnim
-          ? evaluateRailAnimation(dirState.directorRails, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm)
-          : exportHasAxis
-            ? evaluateAxisMarks(exportAxisData, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorRails)
-            : exportHasMarks
-              ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
-              : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
+        const clips = dt.cameraClips ?? []
+
+        // Camera — clips > railAnimation > axisMarks > cameraMarks > legacy keyframes
+        const activeClipForFrame = clips.length > 0 ? findActiveClip(clips, timeMs) : null
+
+        let camState: ReturnType<typeof evaluateRailAnimation> = null
+        if (activeClipForFrame) {
+          const localTime = Math.max(0, Math.min(activeClipForFrame.duration, timeMs - activeClipForFrame.timelineStart))
+          camState = evaluateRailAnimation(
+            activeClipForFrame.cameraSetup.rails,
+            localTime,
+            activeClipForFrame.cameraSetup.railWorldAnchor,
+            activeClipForFrame.cameraSetup.targetPos,
+            activeClipForFrame.focalLengthMm,
+          )
+        } else {
+          const exportHasRailAnim = hasActiveRailTiming(dirState.directorRails)
+          const exportAxisData = ensureAxisMarks(dt).axisMarks
+          const exportHasAxis = !exportHasRailAnim && Object.values(exportAxisData).some((arr) => arr.length > 0)
+          const exportHasMarks = (dt.cameraMarks?.length ?? 0) > 0
+          camState = exportHasRailAnim
+            ? evaluateRailAnimation(dirState.directorRails, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm)
+            : exportHasAxis
+              ? evaluateAxisMarks(exportAxisData, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorRails)
+              : exportHasMarks
+                ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
+                : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
+        }
         if (camState) {
           renderer.camera.position[0] = camState.position[0]
           renderer.camera.position[1] = camState.position[1]
@@ -923,8 +938,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           renderer.camera.fov = camState.fov
         }
 
-        // Events
-        const activeEvents = evaluateDirectorEvents(dt.eventMarkers, timeMs, state.animationBundles)
+        // Events — clip-local when active, else top-level
+        const evMarkers = activeClipForFrame ? activeClipForFrame.eventMarkers : dt.eventMarkers
+        const evTime = activeClipForFrame ? timeMs - activeClipForFrame.timelineStart : timeMs
+        const activeEvents = evaluateDirectorEvents(evMarkers, evTime, state.animationBundles)
         const animated = evaluateDirectorFrame(state.elements, activeEvents)
 
         renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
