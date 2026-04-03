@@ -337,6 +337,8 @@ export interface RailTimeLabel {
   railDirY: number
 }
 
+const LOCKED_LINE_COLOR: [number, number, number, number] = [1.0, 0.7, 0.2, 0.6]
+
 export function drawDirectorCameraSetup(
   ov: OverlayRenderer,
   cameraPos: [number, number, number],
@@ -349,6 +351,7 @@ export function drawDirectorCameraSetup(
   dpr: number,
   activeRailAxis?: AxisMarkChannel | null,
   frustumColor?: [number, number, number, number],
+  targetMode?: 'fixed' | 'locked',
 ): RailTimeLabel[] {
   // Camera frustum icon (always visible for click targeting)
   drawFrustum(ov, cameraPos, targetPos, fov, frustumColor)
@@ -357,6 +360,15 @@ export function drawDirectorCameraSetup(
 
   // Target marker + rails (only when selected)
   drawTargetMarker(ov, targetPos, isTargetAttached, dpr)
+
+  // Locked mode: draw solid line connecting camera and target
+  if (targetMode === 'locked') {
+    ov.drawLines3D(new Float32Array([
+      cameraPos[0], cameraPos[1], cameraPos[2],
+      targetPos[0], targetPos[1], targetPos[2],
+    ]), LOCKED_LINE_COLOR)
+  }
+
   return drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr, activeRailAxis ?? null)
 }
 

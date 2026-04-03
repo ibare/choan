@@ -21,6 +21,7 @@ import {
   type DirectorRails,
   type DirectorCameraSetup,
   type DirectorCamera,
+  type TargetMode,
   type RailAxis,
   type RailDir,
   type RailHandleId,
@@ -53,6 +54,7 @@ interface DirectorStore {
   directorCameraAxisHover: AxisHover
   railWorldAnchor:         [number, number, number]  // world-fixed anchor for extended rails
   directorTargetAttachedTo: string | null             // element ID the target is attached to (null = free)
+  directorTargetMode: TargetMode  // 'fixed' | 'locked'
   activeRailAxis: AxisMarkChannel | null               // currently selected rail axis for marking
 
   // Camera clip state
@@ -85,6 +87,8 @@ interface DirectorStore {
   setDirectorCameraAxisHover: (hover: AxisHover) => void
   setRailWorldAnchor:        (anchor: [number, number, number]) => void
   setDirectorTargetAttachedTo: (id: string | null) => void
+  setDirectorTargetMode: (mode: TargetMode) => void
+  toggleDirectorTargetMode: () => void
   setActiveRailAxis: (axis: AxisMarkChannel | null) => void
   saveCameraSetup: () => void  // persist current camera rig to scene
 
@@ -172,6 +176,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   directorCameraAxisHover: null,
   railWorldAnchor:         [0, 0, 18],
   directorTargetAttachedTo: null,
+  directorTargetMode: 'fixed' as TargetMode,
   activeRailAxis: null,
 
   // Camera clip state defaults
@@ -314,6 +319,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       },
       railWorldAnchor: [...cam.setup.railWorldAnchor],
       directorTargetAttachedTo: cam.setup.targetAttachedTo,
+      directorTargetMode: cam.setup.targetMode ?? 'fixed',
       focalLengthMm: cam.focalLengthMm,
       viewfinderAspect: cam.viewfinderAspect,
     })
@@ -356,6 +362,8 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   setDirectorCameraAxisHover: (hover) => set({ directorCameraAxisHover: hover }),
   setRailWorldAnchor: (anchor) => set({ railWorldAnchor: anchor }),
   setDirectorTargetAttachedTo: (id) => set({ directorTargetAttachedTo: id }),
+  setDirectorTargetMode: (mode) => set({ directorTargetMode: mode }),
+  toggleDirectorTargetMode: () => set((s) => ({ directorTargetMode: s.directorTargetMode === 'fixed' ? 'locked' : 'fixed' })),
   setActiveRailAxis: (axis) => set({ activeRailAxis: axis }),
 
   saveCameraSetup: () => {
@@ -373,6 +381,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       rails: { ...s.directorRails },
       railWorldAnchor: [...s.railWorldAnchor],
       targetAttachedTo: s.directorTargetAttachedTo,
+      targetMode: s.directorTargetMode,
     }
     updateActiveSceneDirectorTimeline((dt) => ({
       ...dt,
@@ -405,6 +414,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       },
       railWorldAnchor: [...s.railWorldAnchor],
       targetAttachedTo: s.directorTargetAttachedTo,
+      targetMode: s.directorTargetMode,
     }
 
     const clip = createDefaultCameraClip(setup, s.selectedCameraId ?? '')
@@ -516,6 +526,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       },
       railWorldAnchor: [...clip.cameraSetup.railWorldAnchor],
       directorTargetAttachedTo: clip.cameraSetup.targetAttachedTo,
+      directorTargetMode: clip.cameraSetup.targetMode ?? 'fixed',
       focalLengthMm: clip.focalLengthMm,
       activeClipId: clipId,
     })
@@ -536,6 +547,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       },
       railWorldAnchor: [...s.railWorldAnchor],
       targetAttachedTo: s.directorTargetAttachedTo,
+      targetMode: s.directorTargetMode,
     }
     updateActiveSceneDirectorTimeline((dt) => ({
       ...dt,
@@ -775,6 +787,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       directorCameraAxisHover: null,
       railWorldAnchor: [0, 0, 18],
       directorTargetAttachedTo: null,
+      directorTargetMode: 'fixed' as TargetMode,
       selectedCameraMarkId: null,
       selectedAxisMarkId: null,
       selectedAxisMarkChannel: null,

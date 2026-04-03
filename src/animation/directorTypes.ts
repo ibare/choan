@@ -159,9 +159,12 @@ export interface EventMarker {
   durationOverride?: number  // optional: override bundle's natural duration
 }
 
+export type TargetMode = 'fixed' | 'locked'
+
 export interface DirectorCameraSetup {
   cameraPos: [number, number, number]
   targetPos: [number, number, number]
+  targetMode: TargetMode
   rails: DirectorRails
   railWorldAnchor: [number, number, number]
   targetAttachedTo: string | null
@@ -184,6 +187,7 @@ export function createDefaultCamera(id?: string): DirectorCamera {
     setup: {
       cameraPos: [0, 0, 18],
       targetPos: [0, 0, 0],
+      targetMode: 'fixed',
       rails: createDefaultRails(),
       railWorldAnchor: [0, 0, 18],
       targetAttachedTo: null,
@@ -218,6 +222,7 @@ export function createDefaultCameraClip(setup?: DirectorCameraSetup, cameraId?: 
     cameraSetup: setup ?? {
       cameraPos: [0, 0, 18],
       targetPos: [0, 0, 0],
+      targetMode: 'fixed',
       rails: createDefaultRails(),
       railWorldAnchor: [0, 0, 18],
       targetAttachedTo: null,
@@ -268,7 +273,7 @@ export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline 
       result.cameras = [{
         id: 'migrated-cam-1',
         name: 'Camera 1',
-        setup: { ...result.cameraSetup },
+        setup: { ...result.cameraSetup, targetMode: result.cameraSetup.targetMode ?? 'fixed' },
         focalLengthMm: 38,
         viewfinderAspect: '16:9',
       }]
@@ -277,7 +282,7 @@ export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline 
       result.cameras = [{
         id: 'migrated-cam-1',
         name: 'Camera 1',
-        setup: { ...firstClip.cameraSetup },
+        setup: { ...firstClip.cameraSetup, targetMode: firstClip.cameraSetup.targetMode ?? 'fixed' },
         focalLengthMm: firstClip.focalLengthMm,
         viewfinderAspect: '16:9',
       }]

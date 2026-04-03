@@ -765,6 +765,10 @@ export function usePointerHandlers({
           const dirSt = useDirectorStore.getState()
           const prev = dirSt.directorCameraPos
           dirSt.setDirectorCameraPos(newPos)
+          if (dirSt.directorTargetMode === 'locked') {
+            const tgt = dirSt.directorTargetPos
+            dirSt.setDirectorTargetPos([tgt[0] + newPos[0] - prev[0], tgt[1] + newPos[1] - prev[1], tgt[2] + newPos[2] - prev[2]])
+          }
           dirSt.shiftAllMarks([newPos[0] - prev[0], newPos[1] - prev[1], newPos[2] - prev[2]])
         }
       }
@@ -852,6 +856,10 @@ export function usePointerHandlers({
               if (newPos) {
                 const prev = dirSt.directorCameraPos
                 dirSt.setDirectorCameraPos(newPos)
+                if (dirSt.directorTargetMode === 'locked') {
+                  const tgt = dirSt.directorTargetPos
+                  dirSt.setDirectorTargetPos([tgt[0] + newPos[0] - prev[0], tgt[1] + newPos[1] - prev[1], tgt[2] + newPos[2] - prev[2]])
+                }
                 if (!isExtended || e.altKey) {
                   dirSt.setRailWorldAnchor([...newPos])
                   dirSt.shiftAllMarks([newPos[0] - prev[0], newPos[1] - prev[1], newPos[2] - prev[2]])
@@ -870,6 +878,10 @@ export function usePointerHandlers({
               const newPos: [number, number, number] = [...axisDragOrigPosRef.current]
               newPos[ai] = newVal
               dirSt.setDirectorCameraPos(newPos)
+              if (dirSt.directorTargetMode === 'locked') {
+                const tgt = dirSt.directorTargetPos
+                dirSt.setDirectorTargetPos([tgt[0] + newPos[0] - prev[0], tgt[1] + newPos[1] - prev[1], tgt[2] + newPos[2] - prev[2]])
+              }
 
               if (!isExtended || e.altKey) {
                 const newAnchor: [number, number, number] = [...dirSt.railWorldAnchor]

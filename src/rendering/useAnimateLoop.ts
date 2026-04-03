@@ -137,6 +137,8 @@ export function useAnimateLoop({
               activeClip.cameraSetup.railWorldAnchor,
               activeClip.cameraSetup.targetPos,
               activeClip.focalLengthMm,
+              director.directorTargetMode,
+              activeClip.cameraSetup.cameraPos,
             )
           } else {
             // Legacy fallback chain: railAnimation > axisMarks > cameraMarks > keyframes
@@ -145,7 +147,7 @@ export function useAnimateLoop({
             const hasAxisMarks = !hasRailAnim && Object.values(axisData).some((arr) => arr.length > 0)
             const hasMarks = (dt.cameraMarks?.length ?? 0) > 0
             camState = hasRailAnim
-              ? evaluateRailAnimation(director.directorRails, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm)
+              ? evaluateRailAnimation(director.directorRails, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorTargetMode, director.directorCameraPos)
               : hasAxisMarks
                 ? evaluateAxisMarks(axisData, elapsed, director.railWorldAnchor, director.directorTargetPos, director.focalLengthMm, director.directorRails)
                 : hasMarks
@@ -426,6 +428,7 @@ export function useAnimateLoop({
               true,
               dirState.directorTargetAttachedTo !== null,
               dirFov, dpr, dirState.activeRailAxis,
+              undefined, dirState.directorTargetMode,
             )
             railTimeLabelsRef.current = railLabels
 

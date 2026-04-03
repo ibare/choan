@@ -282,6 +282,8 @@ export function evaluateRailAnimation(
   railWorldAnchor: [number, number, number],
   baseTarget: [number, number, number],
   baseFocalMm: number,
+  targetMode?: 'fixed' | 'locked',
+  baseCameraPos?: [number, number, number],
 ): DirectorCameraState | null {
   const truckPos = evaluateRailAxis(rails.truck, time, railWorldAnchor[0])
   const boomPos  = evaluateRailAxis(rails.boom, time, railWorldAnchor[1])
@@ -316,9 +318,18 @@ export function evaluateRailAnimation(
     }
   }
 
-  return {
-    position,
-    target: [...baseTarget],
-    fov: mmToFov(baseFocalMm),
+  // Locked: target maintains fixed offset from camera's initial position
+  if (targetMode === 'locked' && baseCameraPos) {
+    return {
+      position,
+      target: [
+        position[0] + baseTarget[0] - baseCameraPos[0],
+        position[1] + baseTarget[1] - baseCameraPos[1],
+        position[2] + baseTarget[2] - baseCameraPos[2],
+      ],
+      fov: mmToFov(baseFocalMm),
+    }
   }
+
+  return { position, target: [...baseTarget], fov: mmToFov(baseFocalMm) }
 }

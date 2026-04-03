@@ -3,7 +3,7 @@
 // Double-click event bar → switch to bundle editing mode.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast, ArrowLeft, Plus, Trash } from '@phosphor-icons/react'
+import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast, ArrowLeft, Plus, Trash, LinkSimple } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
@@ -75,6 +75,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     addCameraClip, removeCameraClip, updateCameraClip, resizeCameraClip, moveCameraClip,
     enterClipDetail, exitClipDetail,
     addCamera, removeCamera, selectCamera,
+    directorTargetMode, toggleDirectorTargetMode,
   } = useDirectorStore()
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -916,6 +917,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
             activeClipForFrame.cameraSetup.railWorldAnchor,
             activeClipForFrame.cameraSetup.targetPos,
             activeClipForFrame.focalLengthMm,
+            dirState.directorTargetMode,
+            activeClipForFrame.cameraSetup.cameraPos,
           )
         } else {
           const exportHasRailAnim = hasActiveRailTiming(dirState.directorRails)
@@ -923,7 +926,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           const exportHasAxis = !exportHasRailAnim && Object.values(exportAxisData).some((arr) => arr.length > 0)
           const exportHasMarks = (dt.cameraMarks?.length ?? 0) > 0
           camState = exportHasRailAnim
-            ? evaluateRailAnimation(dirState.directorRails, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm)
+            ? evaluateRailAnimation(dirState.directorRails, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorTargetMode, dirState.directorCameraPos)
             : exportHasAxis
               ? evaluateAxisMarks(exportAxisData, timeMs, dirState.railWorldAnchor, dirState.directorTargetPos, dirState.focalLengthMm, dirState.directorRails)
               : exportHasMarks
@@ -1072,6 +1075,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           />
           <span className="ui-director-focal__label">{focalLengthMm}mm</span>
         </div>
+        <Tooltip content={directorTargetMode === 'locked' ? 'Target: Locked (follows camera)' : 'Target: Fixed'}>
+          <Button className="btn-small" active={directorTargetMode === 'locked'} disabled={!selectedCameraId} onClick={toggleDirectorTargetMode}>
+            <LinkSimple size={14} />
+          </Button>
+        </Tooltip>
         <Tooltip content="Frustum Spotlight (Q)">
           <Button className="btn-small" active={frustumSpotlightOn && selectedCameraId !== null} disabled={!selectedCameraId} onClick={toggleFrustumSpotlight}>
             <Screencast size={14} />
