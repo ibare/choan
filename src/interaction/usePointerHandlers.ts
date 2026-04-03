@@ -214,7 +214,7 @@ export function usePointerHandlers({
         const { w, h } = canvasSizeRef.current
 
         // ── Rail handle hit test (highest priority in director mode) ──
-        if (director.directorCameraSelected) {
+        if (director.selectedCameraId) {
           const railHit = hitTestRailHandle(
             e.clientX, e.clientY, rect, renderer.overlay,
             director.directorCameraPos, director.directorTargetPos,
@@ -280,7 +280,7 @@ export function usePointerHandlers({
         }
 
         // ── Rail slider drag (camera position on extended rails) ──
-        if (director.directorCameraSelected) {
+        if (director.selectedCameraId) {
           const sliderHit = hitTestRailSlider(
             e.clientX, e.clientY, rect, renderer.overlay,
             director.directorCameraPos, director.directorRails, 16,
@@ -307,7 +307,7 @@ export function usePointerHandlers({
         }
 
         // ── Camera axis tunnel drag (non-extended axes only) ──
-        if (director.directorCameraSelected) {
+        if (director.selectedCameraId) {
           const camHover = director.directorCameraAxisHover
           if (camHover) {
             const rayP = getCameraRayParams(renderer.camera)
@@ -328,26 +328,47 @@ export function usePointerHandlers({
           }
         }
 
-        // ── Director camera body hit test ──
-        const camBodyHit = hitTestDirectorCameraBody(
-          e.clientX, e.clientY, rect, renderer.overlay,
-          director.directorCameraPos, 16,
-        )
-        if (camBodyHit) {
-          const rayP = getCameraRayParams(renderer.camera)
-          const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
-          dragPlaneNormalRef.current = [...rayP.forward]
-          const startHit = rayPlaneIntersect(ro, rd, rayP.forward, director.directorCameraPos)
-          dragStartWorldRef.current = startHit ?? [...director.directorCameraPos]
-          isDraggingDirCameraRef.current = true
-          dragDirCameraOrigPosRef.current = [...director.directorCameraPos]
-          useDirectorStore.getState().setDirectorCameraSelected(true)
-          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
-          return
+        // ── Director camera body hit test (all cameras) ──
+        {
+          const scHit = useSceneStore.getState()
+          const actHit = scHit.scenes.find((s) => s.id === scHit.activeSceneId)
+          const dtHit = actHit?.directorTimeline ?? createDefaultDirectorTimeline()
+          const allCams = dtHit.cameras ?? []
+          let hitCamId: string | null = null
+          let hitCamPos: [number, number, number] | null = null
+
+          for (const cam of allCams) {
+            const testPos = cam.id === director.selectedCameraId
+              ? director.directorCameraPos
+              : cam.setup.cameraPos
+            if (hitTestDirectorCameraBody(e.clientX, e.clientY, rect, renderer.overlay, testPos, 16)) {
+              hitCamId = cam.id
+              hitCamPos = testPos
+              break
+            }
+          }
+
+          if (hitCamId && hitCamPos) {
+            if (hitCamId !== director.selectedCameraId) {
+              // Clicked a different camera → switch selection
+              useDirectorStore.getState().selectCamera(hitCamId)
+            } else {
+              // Clicked the already-selected camera → start drag
+              const rayP = getCameraRayParams(renderer.camera)
+              const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+              dragPlaneNormalRef.current = [...rayP.forward]
+              const startHit = rayPlaneIntersect(ro, rd, rayP.forward, hitCamPos)
+              dragStartWorldRef.current = startHit ?? [...hitCamPos]
+              isDraggingDirCameraRef.current = true
+              dragDirCameraOrigPosRef.current = [...hitCamPos]
+            }
+            ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+            return
+          }
         }
 
         // No camera hit → deselect
-        useDirectorStore.getState().setDirectorCameraSelected(false)
+        useDirectorStore.getState().selectCamera(null)
         useDirectorStore.getState().setSelectedRailHandle(null)
 
         const scState = useSceneStore.getState()
@@ -992,7 +1013,7 @@ export function usePointerHandlers({
 
     // ── Camera axis tunnel hover (Director mode) ──
     const dirMoveState = useDirectorStore.getState()
-    if (dirMoveState.directorMode && !dirMoveState.directorPlaying && dirMoveState.directorCameraSelected) {
+    if (dirMoveState.directorMode && !dirMoveState.directorPlaying && dirMoveState.selectedCameraId) {
       const renderer = rendererRef.current
       if (renderer) {
         const dpr = window.devicePixelRatio || 1

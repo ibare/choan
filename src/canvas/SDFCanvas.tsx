@@ -96,38 +96,30 @@ export default function SDFCanvas() {
     setDistanceLabels(labels)
   }, [altPressed, selectedIds, elements, pixelToWorld, worldToPixel])
 
-  // Initialize or restore director camera when entering director mode
+  // Director mode camera initialization is handled by setDirectorMode(true) in the store.
+  // This effect only handles the edge case: first-ever entry with no saved cameras
+  // uses the viewport camera position as the initial camera position.
   const directorMode = useDirectorStore((s) => s.directorMode)
   useEffect(() => {
     if (!directorMode) return
     const renderer = rendererRef.current
     if (!renderer) return
 
-    // Check if scene has a saved camera setup (clip-based takes priority)
     const { scenes, activeSceneId } = useSceneStore.getState()
     const scene = scenes.find((s) => s.id === activeSceneId)
-    const dt = scene?.directorTimeline
-    const clips = dt?.cameraClips ?? []
-    const setup = clips.length > 0 ? clips[0].cameraSetup : dt?.cameraSetup
-    const focalMm = clips.length > 0 ? clips[0].focalLengthMm : undefined
+    const cameras = scene?.directorTimeline?.cameras ?? []
 
-    if (setup) {
-      // Restore from saved setup
-      const ds = useDirectorStore.getState()
-      ds.setDirectorCameraPos([...setup.cameraPos])
-      ds.setDirectorTargetPos([...setup.targetPos])
-      ds.setDirectorRails({ ...setup.rails })
-      ds.setRailWorldAnchor([...setup.railWorldAnchor])
-      ds.setDirectorTargetAttachedTo(setup.targetAttachedTo)
-      if (focalMm !== undefined) ds.setFocalLengthMm(focalMm)
-    } else {
-      // First time — initialize from viewport camera
-      const { position, target } = renderer.camera
-      const camPos = [...position] as [number, number, number]
-      useDirectorStore.getState().setDirectorCameraPos(camPos)
-      useDirectorStore.getState().setDirectorTargetPos([...target] as [number, number, number])
-      useDirectorStore.getState().setRailWorldAnchor([...camPos])
-    }
+    // If cameras exist, setDirectorMode already loaded the first one
+    if (cameras.length > 0) return
+
+    // First time — viewport camera becomes the default camera position
+    // (setDirectorMode already created a default camera, update it with viewport pos)
+    const { position, target } = renderer.camera
+    const camPos = [...position] as [number, number, number]
+    const ds = useDirectorStore.getState()
+    ds.setDirectorCameraPos(camPos)
+    ds.setDirectorTargetPos([...target] as [number, number, number])
+    ds.setRailWorldAnchor([...camPos])
   }, [directorMode])
 
   // Initialize renderer + controls

@@ -85,7 +85,7 @@ export function useAnimateLoop({
 
     // Q key: frustum spotlight toggle
     const onQDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyQ' && !e.repeat) useDirectorStore.getState().toggleFrustumSpotlight()
+      if (e.code === 'KeyQ' && !e.repeat && useDirectorStore.getState().selectedCameraId) useDirectorStore.getState().toggleFrustumSpotlight()
     }
     window.addEventListener('keydown', onQDown)
 
@@ -300,7 +300,7 @@ export function useAnimateLoop({
       // Pre-compute director camera viewProj for frustum mask (Q key toggle)
       let dirCamStateForMask: Float32Array | null = null
       const dirForMask = useDirectorStore.getState()
-      if (dirForMask.frustumSpotlightOn && dirForMask.directorMode && !dirForMask.directorPlaying) {
+      if (dirForMask.frustumSpotlightOn && dirForMask.directorMode && !dirForMask.directorPlaying && dirForMask.selectedCameraId) {
         {
           const camPos = dirForMask.directorCameraPos
           const camTgt = dirForMask.directorTargetPos
@@ -402,82 +402,77 @@ export function useAnimateLoop({
           }
         }
 
-        // ── Director camera object + rails overlay ──
+        // ── Multi-camera rendering ──
         const dpr = window.devicePixelRatio || 1
-        const focalMm = dirState.focalLengthMm
-        const dirFov = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
-        const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)
+        const scStateOv = useSceneStore.getState()
+        const actSceneOv = scStateOv.scenes.find((s) => s.id === scStateOv.activeSceneId)
+        const dirTl = actSceneOv?.directorTimeline ?? createDefaultDirectorTimeline()
+        const allCameras = dirTl.cameras ?? []
+        const FRUSTUM_INACTIVE: [number, number, number, number] = [0.5, 0.5, 0.6, 0.25]
 
-        // Camera frustum footprint on Z=0 ground plane
-        drawCameraFootprint(
-          renderer.overlay,
-          dirState.directorCameraPos, dirState.directorTargetPos,
-          dirFov, vfaw / vfah,
-          false,
-        )
+        for (const cam of allCameras) {
+          const isSelected = cam.id === dirState.selectedCameraId
+          if (isSelected) {
+            // Selected camera: use live transient state
+            const focalMm = dirState.focalLengthMm
+            const dirFov = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
 
-        // Camera icon + target marker + rails
-        const railLabels = drawDirectorCameraSetup(
-          renderer.overlay,
-          dirState.directorCameraPos,
-          dirState.directorTargetPos,
-          dirState.directorRails,
-          dirState.railWorldAnchor,
-          dirState.directorCameraSelected,
-          dirState.directorTargetAttachedTo !== null,
-          dirFov,
-          dpr,
-          dirState.activeRailAxis,
-        )
-        railTimeLabelsRef.current = railLabels
-
-        // Camera axis move handles — only for non-extended axes
-        // Extended axes use the rail slider instead of tunnels
-        if (dirState.directorCameraSelected) {
-          const r = dirState.directorRails
-          const stub = 0.501  // RAIL_MIN_STUB + epsilon
-          const tunnelAxes: ('x' | 'y' | 'z')[] = []
-          if (r.truck.neg < stub && r.truck.pos < stub) tunnelAxes.push('x')
-          if (r.boom.neg  < stub && r.boom.pos  < stub) tunnelAxes.push('y')
-          if (r.dolly.neg < stub && r.dolly.pos < stub) tunnelAxes.push('z')
-          if (tunnelAxes.length > 0) {
-            drawCameraAxisHandles(
+            const railLabels = drawDirectorCameraSetup(
               renderer.overlay,
               dirState.directorCameraPos,
-              tunnelAxes,
-              dirState.directorCameraAxisHover,
-            )
-          }
-        }
-
-        // Camera marks on rails (legacy fallback — rail timing is the primary system now)
-        const scState = useSceneStore.getState()
-        const actScene = scState.scenes.find((s) => s.id === scState.activeSceneId)
-        const dirTl = actScene?.directorTimeline ?? createDefaultDirectorTimeline()
-        if (!hasActiveRailTiming(dirState.directorRails)) {
-          const marks = dirTl.cameraMarks ?? []
-          if (marks.length > 0) {
-            drawCameraMarks(
-              renderer.overlay,
-              marks,
+              dirState.directorTargetPos,
               dirState.directorRails,
               dirState.railWorldAnchor,
-              dirState.directorCameraPos,
+              true,
+              dirState.directorTargetAttachedTo !== null,
+              dirFov, dpr, dirState.activeRailAxis,
+            )
+            railTimeLabelsRef.current = railLabels
+
+            // Selected-only overlays
+            const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)
+            drawCameraFootprint(
+              renderer.overlay,
+              dirState.directorCameraPos, dirState.directorTargetPos,
+              dirFov, vfaw / vfah, false,
+            )
+
+            const r = dirState.directorRails
+            const stub = 0.501
+            const tunnelAxes: ('x' | 'y' | 'z')[] = []
+            if (r.truck.neg < stub && r.truck.pos < stub) tunnelAxes.push('x')
+            if (r.boom.neg  < stub && r.boom.pos  < stub) tunnelAxes.push('y')
+            if (r.dolly.neg < stub && r.dolly.pos < stub) tunnelAxes.push('z')
+            if (tunnelAxes.length > 0) {
+              drawCameraAxisHandles(
+                renderer.overlay,
+                dirState.directorCameraPos,
+                tunnelAxes,
+                dirState.directorCameraAxisHover,
+              )
+            }
+
+            if (!hasActiveRailTiming(dirState.directorRails)) {
+              const marks = dirTl.cameraMarks ?? []
+              if (marks.length > 0) {
+                drawCameraMarks(renderer.overlay, marks, dirState.directorRails, dirState.railWorldAnchor, dirState.directorCameraPos)
+              }
+            }
+
+            if (dirTl.cameraKeyframes.length >= 1) {
+              const curCamState = evaluateDirectorCamera(dirTl.cameraKeyframes, dirState.directorPlayheadTime)
+              drawCameraPathOverlay(renderer.overlay, dirTl.cameraKeyframes, curCamState, dirState.selectedCameraKeyframeId ?? null, 0.5, dpr)
+            }
+          } else {
+            // Non-selected camera: frustum icon only (muted color)
+            const camFov = 2 * Math.atan(36 / (2 * cam.focalLengthMm)) * (180 / Math.PI)
+            drawDirectorCameraSetup(
+              renderer.overlay,
+              cam.setup.cameraPos, cam.setup.targetPos,
+              cam.setup.rails, cam.setup.railWorldAnchor,
+              false, false, camFov, dpr, null, FRUSTUM_INACTIVE,
             )
           }
-        }
-
-        // Legacy keyframe path overlay (kept for playback preview)
-        if (dirTl.cameraKeyframes.length >= 1) {
-          const curCamState = evaluateDirectorCamera(dirTl.cameraKeyframes, dirState.directorPlayheadTime)
-          drawCameraPathOverlay(
-            renderer.overlay,
-            dirTl.cameraKeyframes,
-            curCamState,
-            dirState.selectedCameraKeyframeId ?? null,
-            0.5,
-            dpr,
-          )
         }
       }
     }

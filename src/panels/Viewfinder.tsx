@@ -15,12 +15,12 @@ export default function Viewfinder() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const {
     directorMode, directorPlaying, directorPlayheadTime,
-    directorCameraSelected,
+    selectedCameraId,
     focalLengthMm, viewfinderAspect,
     directorCameraPos, directorTargetPos,
   } = useDirectorStore()
 
-  const visible = directorMode && !directorPlaying && directorCameraSelected
+  const visible = directorMode && !directorPlaying && selectedCameraId !== null
 
   const [aw, ah] = viewfinderAspect.split(':').map(Number)
   const vfAspectRatio = aw / ah

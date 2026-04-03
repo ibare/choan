@@ -6,9 +6,11 @@ import { useSceneStore } from './useSceneStore'
 import {
   createDefaultDirectorTimeline,
   createDefaultRails,
+  createDefaultCamera,
   createDefaultAxisMarks,
   createDefaultCameraClip,
   findActiveClip,
+  migrateDirectorTimeline,
   ensureAxisMarks,
   AXIS_MARK_IDX,
   RAIL_MIN_STUB,
@@ -18,6 +20,7 @@ import {
   type EventMarker,
   type DirectorRails,
   type DirectorCameraSetup,
+  type DirectorCamera,
   type RailAxis,
   type RailDir,
   type RailHandleId,
@@ -44,7 +47,7 @@ interface DirectorStore {
   // Represents the physical director camera object placed in the scene.
   directorCameraPos:      [number, number, number]
   directorTargetPos:      [number, number, number]
-  directorCameraSelected: boolean
+  selectedCameraId: string | null
   directorRails:          DirectorRails
   selectedRailHandle:     RailHandleId | null
   directorCameraAxisHover: AxisHover
@@ -70,7 +73,11 @@ interface DirectorStore {
   // Director camera setup actions
   setDirectorCameraPos:      (pos: [number, number, number]) => void
   setDirectorTargetPos:      (pos: [number, number, number]) => void
-  setDirectorCameraSelected: (selected: boolean) => void
+  // Multi-camera CRUD
+  addCamera: () => string
+  removeCamera: (id: string) => void
+  selectCamera: (id: string | null) => void
+  loadCameraSetup: (cameraId: string) => void
   setDirectorRails:          (rails: DirectorRails) => void
   setSelectedRailHandle:     (handle: RailHandleId | null) => void
   extendRail:                (axis: RailAxis, dir: RailDir, newExtent: number) => void
@@ -159,7 +166,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   // Director camera setup defaults
   directorCameraPos:      [0, 0, 18],
   directorTargetPos:      [0, 0, 0],
-  directorCameraSelected: false,
+  selectedCameraId: null,
   directorRails:          createDefaultRails(),
   selectedRailHandle:     null,
   directorCameraAxisHover: null,
@@ -172,13 +179,38 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   selectedClipId: null,
   activeClipId: null,
 
-  setDirectorMode: (on) => set({
-    directorMode: on,
-    directorPlaying: false,
-    frustumSpotlightOn: false,
-    directorCameraSelected: false,
-    selectedRailHandle: null,
-  }),
+  setDirectorMode: (on) => {
+    if (on) {
+      // Ensure at least one camera exists in the scene
+      const { scenes, activeSceneId } = useSceneStore.getState()
+      const scene = scenes.find((s) => s.id === activeSceneId)
+      let dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+      dt = migrateDirectorTimeline(dt)
+      if ((dt.cameras ?? []).length === 0) {
+        const cam = createDefaultCamera(nanoid())
+        dt = { ...dt, cameras: [cam] }
+      }
+      updateActiveSceneDirectorTimeline(() => dt)
+      const firstCamId = dt.cameras[0].id
+      set({
+        directorMode: true,
+        directorPlaying: false,
+        frustumSpotlightOn: false,
+        selectedCameraId: firstCamId,
+        selectedRailHandle: null,
+      })
+      get().loadCameraSetup(firstCamId)
+    } else {
+      get().saveCameraSetup()
+      set({
+        directorMode: false,
+        directorPlaying: false,
+        frustumSpotlightOn: false,
+        selectedCameraId: null,
+        selectedRailHandle: null,
+      })
+    }
+  },
   setSelectedCameraKeyframeId: (id) => set({ selectedCameraKeyframeId: id }),
   setFocalLengthMm: (mm) => set({ focalLengthMm: Math.max(10, Math.min(200, mm)) }),
   toggleFrustumSpotlight: () => set((s) => ({ frustumSpotlightOn: !s.frustumSpotlightOn })),
@@ -200,7 +232,103 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
 
   setDirectorCameraPos: (pos) => set({ directorCameraPos: pos }),
   setDirectorTargetPos: (pos) => set({ directorTargetPos: pos }),
-  setDirectorCameraSelected: (selected) => set({ directorCameraSelected: selected }),
+
+  // ── Multi-camera CRUD ──
+
+  addCamera: () => {
+    const s = get()
+    // Save current camera before creating new one
+    get().saveCameraSetup()
+
+    const camId = nanoid()
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const camCount = (dt.cameras ?? []).length
+
+    const cam: DirectorCamera = {
+      id: camId,
+      name: `Camera ${camCount + 1}`,
+      setup: {
+        cameraPos: [...s.directorCameraPos],
+        targetPos: [...s.directorTargetPos],
+        rails: createDefaultRails(),
+        railWorldAnchor: [...s.directorCameraPos],
+        targetAttachedTo: null,
+      },
+      focalLengthMm: s.focalLengthMm,
+      viewfinderAspect: s.viewfinderAspect,
+    }
+
+    updateActiveSceneDirectorTimeline((prev) => ({
+      ...prev,
+      cameras: [...(prev.cameras ?? []), cam],
+    }))
+
+    set({ selectedCameraId: camId })
+    get().loadCameraSetup(camId)
+    return camId
+  },
+
+  removeCamera: (id) => {
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const cameras = dt.cameras ?? []
+    if (cameras.length <= 1) return  // minimum 1 camera
+
+    updateActiveSceneDirectorTimeline((prev) => ({
+      ...prev,
+      cameras: (prev.cameras ?? []).filter((c) => c.id !== id),
+      cameraClips: prev.cameraClips.filter((c) => c.cameraId !== id),
+    }))
+
+    const s = get()
+    if (s.selectedCameraId === id) {
+      const remaining = cameras.filter((c) => c.id !== id)
+      if (remaining.length > 0) {
+        set({ selectedCameraId: remaining[0].id })
+        get().loadCameraSetup(remaining[0].id)
+      } else {
+        set({ selectedCameraId: null })
+      }
+    }
+  },
+
+  selectCamera: (id) => {
+    const s = get()
+    if (s.selectedCameraId === id) return
+    // Save current camera before switching
+    if (s.selectedCameraId) get().saveCameraSetup()
+    if (id) {
+      set({ selectedCameraId: id })
+      get().loadCameraSetup(id)
+    } else {
+      set({ selectedCameraId: null })
+    }
+  },
+
+  loadCameraSetup: (cameraId) => {
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const cam = (dt.cameras ?? []).find((c) => c.id === cameraId)
+    if (!cam) return
+    set({
+      directorCameraPos: [...cam.setup.cameraPos],
+      directorTargetPos: [...cam.setup.targetPos],
+      directorRails: {
+        ...cam.setup.rails,
+        truck: { ...cam.setup.rails.truck },
+        boom:  { ...cam.setup.rails.boom },
+        dolly: { ...cam.setup.rails.dolly },
+      },
+      railWorldAnchor: [...cam.setup.railWorldAnchor],
+      directorTargetAttachedTo: cam.setup.targetAttachedTo,
+      focalLengthMm: cam.focalLengthMm,
+      viewfinderAspect: cam.viewfinderAspect,
+    })
+  },
   setDirectorRails: (rails) => set({ directorRails: rails }),
   setSelectedRailHandle: (handle) => set({ selectedRailHandle: handle }),
 
@@ -248,6 +376,8 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       get().saveClipSetup()
       return
     }
+    if (!s.selectedCameraId) return
+    const camId = s.selectedCameraId
     const setup: DirectorCameraSetup = {
       cameraPos: [...s.directorCameraPos],
       targetPos: [...s.directorTargetPos],
@@ -255,7 +385,14 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       railWorldAnchor: [...s.railWorldAnchor],
       targetAttachedTo: s.directorTargetAttachedTo,
     }
-    updateActiveSceneDirectorTimeline((dt) => ({ ...dt, cameraSetup: setup }))
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameras: (dt.cameras ?? []).map((c) =>
+        c.id === camId
+          ? { ...c, setup, focalLengthMm: s.focalLengthMm, viewfinderAspect: s.viewfinderAspect }
+          : c,
+      ),
+    }))
   },
 
   // ── Camera clip CRUD ──
@@ -281,7 +418,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       targetAttachedTo: s.directorTargetAttachedTo,
     }
 
-    const clip = createDefaultCameraClip(setup)
+    const clip = createDefaultCameraClip(setup, s.selectedCameraId ?? '')
     clip.id = clipId
     clip.name = `Camera ${clipCount + 1}`
     clip.timelineStart = s.directorPlayheadTime
@@ -643,7 +780,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       viewfinderAspect: '16:9',
       directorCameraPos: [0, 0, 18],
       directorTargetPos: [0, 0, 0],
-      directorCameraSelected: false,
+      selectedCameraId: null,
       directorRails: createDefaultRails(),
       selectedRailHandle: null,
       directorCameraAxisHover: null,

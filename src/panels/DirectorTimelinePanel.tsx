@@ -3,7 +3,7 @@
 // Double-click event bar → switch to bundle editing mode.
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast, ArrowLeft, Plus } from '@phosphor-icons/react'
+import { Play, Pause, Stop, ArrowCounterClockwise, Camera, Export, Screencast, ArrowLeft, Plus, Trash } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { Tooltip } from '../components/ui/Tooltip'
@@ -62,7 +62,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const { animationBundles } = useChoanStore()
   const {
     directorPlayheadTime, directorPlaying, focalLengthMm, frustumSpotlightOn, viewfinderAspect,
-    directorCameraPos, directorTargetPos, directorRails,
+    directorCameraPos, directorTargetPos, directorRails, selectedCameraId,
     setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm, toggleFrustumSpotlight, setViewfinderAspect,
     selectedCameraMarkId, setSelectedCameraMarkId,
     addCameraMark, updateCameraMark, removeCameraMark,
@@ -74,6 +74,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     detailClipId, selectedClipId, activeClipId,
     addCameraClip, removeCameraClip, updateCameraClip, resizeCameraClip, moveCameraClip,
     enterClipDetail, exitClipDetail,
+    addCamera, removeCamera, selectCamera,
   } = useDirectorStore()
 
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -98,6 +99,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const sceneDuration = scene?.duration ?? 3000
   const axisMarksData = ensureAxisMarks(dt).axisMarks
   const hasAxisMarks = Object.values(axisMarksData).some((arr) => arr.length > 0)
+  const cameras = dt.cameras ?? []
   const cameraClips = dt.cameraClips ?? []
   const isDetailView = detailClipId !== null
   const activeClip = isDetailView ? cameraClips.find(c => c.id === detailClipId) ?? null : null
@@ -982,6 +984,28 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     <div className="ui-director-panel">
       {/* Header */}
       <div className="ui-director-header">
+        {/* Camera selector */}
+        {cameras.length > 1 && (
+          <Select
+            options={cameras.map((c) => ({ value: c.id, label: c.name }))}
+            value={selectedCameraId ?? ''}
+            onChange={(id) => selectCamera(id)}
+            size="sm"
+          />
+        )}
+        <Tooltip content="Add camera">
+          <Button className="btn-small" onClick={() => addCamera()}>
+            <Plus size={14} /> Cam
+          </Button>
+        </Tooltip>
+        {cameras.length > 1 && selectedCameraId && (
+          <Tooltip content="Remove selected camera">
+            <Button className="btn-small" onClick={() => removeCamera(selectedCameraId)}>
+              <Trash size={14} />
+            </Button>
+          </Tooltip>
+        )}
+        <div className="timeline-separator" />
         {isDetailView ? (
           <>
             <Tooltip content="Back to clip view">
@@ -998,7 +1022,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           <>
             <Tooltip content="Add camera clip">
               <Button className="btn-small" onClick={() => addCameraClip()}>
-                <Plus size={14} /> Camera
+                <Plus size={14} /> Clip
               </Button>
             </Tooltip>
             <div className="timeline-separator" />
@@ -1049,7 +1073,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           <span className="ui-director-focal__label">{focalLengthMm}mm</span>
         </div>
         <Tooltip content="Frustum Spotlight (Q)">
-          <Button className="btn-small" active={frustumSpotlightOn} onClick={toggleFrustumSpotlight}>
+          <Button className="btn-small" active={frustumSpotlightOn && selectedCameraId !== null} disabled={!selectedCameraId} onClick={toggleFrustumSpotlight}>
             <Screencast size={14} />
           </Button>
         </Tooltip>

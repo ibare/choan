@@ -167,11 +167,38 @@ export interface DirectorCameraSetup {
   targetAttachedTo: string | null
 }
 
+// ── Director Camera (multi-camera entity) ──────────────────────────────
+
+export interface DirectorCamera {
+  id: string
+  name: string
+  setup: DirectorCameraSetup
+  focalLengthMm: number
+  viewfinderAspect: string  // e.g. '16:9', '4:3'
+}
+
+export function createDefaultCamera(id?: string): DirectorCamera {
+  return {
+    id: id ?? '',
+    name: 'Camera 1',
+    setup: {
+      cameraPos: [0, 0, 18],
+      targetPos: [0, 0, 0],
+      rails: createDefaultRails(),
+      railWorldAnchor: [0, 0, 18],
+      targetAttachedTo: null,
+    },
+    focalLengthMm: 38,
+    viewfinderAspect: '16:9',
+  }
+}
+
 // ── Camera Clip (FCP-style) ─────────────────────────────────────────────
 
 export interface CameraClip {
   id: string
   name: string
+  cameraId: string         // which camera this clip belongs to
   timelineStart: number    // absolute ms on the director timeline
   duration: number         // clip length in ms (default 3000)
   cameraSetup: DirectorCameraSetup
@@ -181,10 +208,11 @@ export interface CameraClip {
 
 const DEFAULT_CLIP_DURATION = 3000
 
-export function createDefaultCameraClip(setup?: DirectorCameraSetup): CameraClip {
+export function createDefaultCameraClip(setup?: DirectorCameraSetup, cameraId?: string): CameraClip {
   return {
     id: '',  // caller must assign via nanoid
     name: 'Camera 1',
+    cameraId: cameraId ?? '',
     timelineStart: 0,
     duration: DEFAULT_CLIP_DURATION,
     cameraSetup: setup ?? {
@@ -213,6 +241,7 @@ export function findActiveClip(clips: CameraClip[], time: number): CameraClip | 
 // ── Director Timeline ───────────────────────────────────────────────────
 
 export interface DirectorTimeline {
+  cameras: DirectorCamera[]
   cameraClips: CameraClip[]
   // Legacy (backward compat)
   cameraMarks: CameraMark[]
@@ -223,17 +252,56 @@ export interface DirectorTimeline {
 }
 
 export function createDefaultDirectorTimeline(): DirectorTimeline {
-  return { cameraClips: [], cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
+  return { cameras: [], cameraClips: [], cameraMarks: [], cameraKeyframes: [], eventMarkers: [] }
 }
 
-/** Migrate legacy DirectorTimeline (no cameraClips) to clip-based system. */
+/** Migrate legacy DirectorTimeline to multi-camera + clip-based system. */
 export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline {
-  if (dt.cameraClips && dt.cameraClips.length > 0) return dt
-  if (!dt.cameraSetup) return dt  // no legacy data to migrate
-  const clip = createDefaultCameraClip(dt.cameraSetup)
-  clip.id = 'migrated-clip'
-  clip.eventMarkers = (dt.eventMarkers ?? []).map(e => ({ ...e }))
-  return { ...dt, cameraClips: [clip] }
+  let result = { ...dt }
+
+  // Ensure cameras array exists
+  if (!result.cameras) result.cameras = []
+
+  // Migrate legacy cameraSetup or first clip into cameras array
+  if (result.cameras.length === 0) {
+    if (result.cameraSetup) {
+      result.cameras = [{
+        id: 'migrated-cam-1',
+        name: 'Camera 1',
+        setup: { ...result.cameraSetup },
+        focalLengthMm: 38,
+        viewfinderAspect: '16:9',
+      }]
+    } else if (result.cameraClips && result.cameraClips.length > 0) {
+      const firstClip = result.cameraClips[0]
+      result.cameras = [{
+        id: 'migrated-cam-1',
+        name: 'Camera 1',
+        setup: { ...firstClip.cameraSetup },
+        focalLengthMm: firstClip.focalLengthMm,
+        viewfinderAspect: '16:9',
+      }]
+    }
+  }
+
+  // Assign cameraId to clips missing it
+  if (result.cameras.length > 0) {
+    const defaultCamId = result.cameras[0].id
+    result.cameraClips = (result.cameraClips ?? []).map(clip =>
+      clip.cameraId ? clip : { ...clip, cameraId: defaultCamId },
+    )
+  }
+
+  // Migrate legacy cameraSetup to a single clip (if no clips exist)
+  if ((!result.cameraClips || result.cameraClips.length === 0) && result.cameraSetup) {
+    const camId = result.cameras[0]?.id ?? ''
+    const clip = createDefaultCameraClip(result.cameraSetup, camId)
+    clip.id = 'migrated-clip'
+    clip.eventMarkers = (result.eventMarkers ?? []).map(e => ({ ...e }))
+    result.cameraClips = [clip]
+  }
+
+  return result
 }
 
 /** Ensure axisMarks exists on a loaded timeline (backward compat). */

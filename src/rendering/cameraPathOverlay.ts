@@ -348,18 +348,16 @@ export function drawDirectorCameraSetup(
   fov: number,
   dpr: number,
   activeRailAxis?: AxisMarkChannel | null,
+  frustumColor?: [number, number, number, number],
 ): RailTimeLabel[] {
-  // Target marker (always visible in director mode)
+  // Camera frustum icon (always visible for click targeting)
+  drawFrustum(ov, cameraPos, targetPos, fov, frustumColor)
+
+  if (!isSelected) return []
+
+  // Target marker + rails (only when selected)
   drawTargetMarker(ov, targetPos, isTargetAttached, dpr)
-
-  // Camera frustum icon (reuses drawFrustum helper below)
-  drawFrustum(ov, cameraPos, targetPos, fov)
-
-  // Rails (only when camera is selected)
-  if (isSelected) {
-    return drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr, activeRailAxis ?? null)
-  }
-  return []
+  return drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr, activeRailAxis ?? null)
 }
 
 function drawTargetMarker(
