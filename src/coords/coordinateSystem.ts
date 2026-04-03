@@ -1,66 +1,84 @@
 // Coordinate system transforms — single source of truth.
 //
-// The canvas uses an orthographic projection where:
-//   - World X: left = -FRUSTUM*aspect, right = +FRUSTUM*aspect
-//   - World Y: top = +FRUSTUM, bottom = -FRUSTUM
-//   - Pixel origin: top-left corner
+// Elements are stored in a fixed reference pixel coordinate system (REF_W × REF_H).
+// This ensures world positions are independent of the actual canvas size.
+// When the canvas is wider/taller, the camera frustum reveals more area,
+// but element positions remain stable — like zooming out, not moving objects.
 //
-// All three previous copies of these formulas (SDFCanvas.tsx worldToPixel,
-// SDFCanvas.tsx pixelToWorld, SDFCanvas.tsx p2w closure, engine/scene.ts update())
-// now derive from this module.
+// The mapping uses an orthographic projection where:
+//   - World X: left = -FRUSTUM*REF_ASPECT, right = +FRUSTUM*REF_ASPECT
+//   - World Y: top = +FRUSTUM, bottom = -FRUSTUM
+//   - Pixel origin: top-left corner of the reference frame
 
 import { FRUSTUM } from '../engine/scene'
+
+// ── Fixed reference resolution ───────────────────────────────────────────────
+// All pixel↔world conversions use this fixed frame so that element positions
+// are independent of the actual canvas size.
+
+export const REF_W = 1920
+export const REF_H = 1080
+export const REF_ASPECT = REF_W / REF_H
 
 // ── Core transforms ──────────────────────────────────────────────────────────
 
 /**
- * Pixel → world (orthographic).
- * Returns [wx, wy] tuple for direct use in Float32Array spreads.
+ * Pixel → world (orthographic, fixed reference frame).
+ * The canvasW/canvasH parameters are accepted for API compatibility but ignored.
+ * All conversions use the fixed REF_W × REF_H reference resolution.
  */
 export function pixelToWorld(
   px: number,
   py: number,
-  canvasW: number,
-  canvasH: number,
 ): [number, number] {
-  const aspect = canvasW / canvasH
   return [
-    -FRUSTUM * aspect + (px / canvasW) * 2 * FRUSTUM * aspect,
-    FRUSTUM - (py / canvasH) * 2 * FRUSTUM,
+    -FRUSTUM * REF_ASPECT + (px / REF_W) * 2 * FRUSTUM * REF_ASPECT,
+    FRUSTUM - (py / REF_H) * 2 * FRUSTUM,
   ]
 }
 
 /**
- * World → pixel (orthographic).
- * Returns [px, py] tuple.
+ * World → pixel (orthographic, fixed reference frame).
+ * The canvasW/canvasH parameters are accepted for API compatibility but ignored.
  */
 export function worldToPixel(
   wx: number,
   wy: number,
-  canvasW: number,
-  canvasH: number,
 ): [number, number] {
-  const aspect = canvasW / canvasH
   return [
-    ((wx + FRUSTUM * aspect) / (2 * FRUSTUM * aspect)) * canvasW,
-    ((FRUSTUM - wy) / (2 * FRUSTUM)) * canvasH,
+    ((wx + FRUSTUM * REF_ASPECT) / (2 * FRUSTUM * REF_ASPECT)) * REF_W,
+    ((FRUSTUM - wy) / (2 * FRUSTUM)) * REF_H,
   ]
 }
 
 /**
  * Convert a pixel width to its world-space equivalent (unsigned).
- * Useful for computing world-space half-sizes for UBO packing.
  */
-export function pixelWidthToWorld(pixW: number, canvasW: number, canvasH: number): number {
-  const aspect = canvasW / canvasH
-  return (pixW / canvasW) * 2 * FRUSTUM * aspect
+export function pixelWidthToWorld(pixW: number): number {
+  return (pixW / REF_W) * 2 * FRUSTUM * REF_ASPECT
 }
 
 /**
  * Convert a pixel height to its world-space equivalent (unsigned).
  */
-export function pixelHeightToWorld(pixH: number, canvasH: number): number {
-  return (pixH / canvasH) * 2 * FRUSTUM
+export function pixelHeightToWorld(pixH: number): number {
+  return (pixH / REF_H) * 2 * FRUSTUM
+}
+
+/**
+ * Convert actual canvas pixel coordinates to reference-frame pixel coordinates.
+ * Use this at mouse input boundaries to map screen clicks to the fixed coordinate system.
+ */
+export function canvasToRefPixel(
+  canvasX: number,
+  canvasY: number,
+  canvasW: number,
+  canvasH: number,
+): [number, number] {
+  return [
+    canvasX * (REF_W / canvasW),
+    canvasY * (REF_H / canvasH),
+  ]
 }
 
 // ── Ray intersection utilities (pure math, no camera/engine imports) ─────────

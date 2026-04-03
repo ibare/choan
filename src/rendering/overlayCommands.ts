@@ -38,7 +38,7 @@ export function drawOverlay(
   const { w, h } = canvasSize
   const aspect = w / h
   const zs = zoomScale
-  const p2w = (px: number, py: number): [number, number] => pixelToWorld(px, py, w, h)
+  const p2w = (px: number, py: number): [number, number] => pixelToWorld(px, py)
 
   // Selection outlines + handles (corner discs + mid-edge capsules)
   const isSingleSelect = selectedIds.length === 1

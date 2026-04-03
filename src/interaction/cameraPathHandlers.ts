@@ -219,8 +219,6 @@ export function hitTestRailHandle(
 export function computeRailHandleDrag(
   canvasX: number,
   canvasY: number,
-  canvasW: number,
-  canvasH: number,
   cameraPos: [number, number, number],
   targetPos: [number, number, number],
   handle: RailHandleId,
@@ -229,7 +227,7 @@ export function computeRailHandleDrag(
 ): number {
   const [cx, cy, cz] = cameraPos
   const [tx, , tz] = targetPos
-  const [wx, wy] = pixelToWorld(canvasX, canvasY, canvasW, canvasH)
+  const [wx, wy] = pixelToWorld(canvasX, canvasY)
 
   const o = RAIL_OFFSET
   switch (handle.axis) {
@@ -239,7 +237,7 @@ export function computeRailHandleDrag(
       return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wy - cy - o : cy - o - wy)
     case 'dolly': {
       // Dolly (Z) — map vertical mouse delta to Z extent change
-      const [, origWy] = pixelToWorld(canvasX, origCanvasY, canvasW, canvasH)
+      const [, origWy] = pixelToWorld(canvasX, origCanvasY)
       const delta = (wy - origWy) * (handle.dir === 'neg' ? 1 : -1)
       return Math.max(RAIL_MIN_STUB, origExtent + delta)
     }
@@ -262,12 +260,10 @@ export function computeRailHandleDrag(
 export function computeCameraKeyframeDragPosition(
   canvasX: number,
   canvasY: number,
-  canvasW: number,
-  canvasH: number,
   originalPosition: [number, number, number],
   shiftKey: boolean,
 ): [number, number, number] {
-  const [wx, wy] = pixelToWorld(canvasX, canvasY, canvasW, canvasH)
+  const [wx, wy] = pixelToWorld(canvasX, canvasY)
 
   if (shiftKey) {
     return [originalPosition[0], originalPosition[1], originalPosition[2] + (wy - originalPosition[1]) * 0.5]

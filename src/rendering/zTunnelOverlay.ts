@@ -51,10 +51,10 @@ export function canShowZTunnel(phi: number, theta: number): boolean {
 /** Compute shared tunnel geometry for an element. */
 function tunnelGeometry(element: ChoanElement, canvasW: number, canvasH: number, extrudeDepth: number) {
   const corners = [
-    pixelToWorld(element.x, element.y, canvasW, canvasH),
-    pixelToWorld(element.x + element.width, element.y, canvasW, canvasH),
-    pixelToWorld(element.x + element.width, element.y + element.height, canvasW, canvasH),
-    pixelToWorld(element.x, element.y + element.height, canvasW, canvasH),
+    pixelToWorld(element.x, element.y),
+    pixelToWorld(element.x + element.width, element.y),
+    pixelToWorld(element.x + element.width, element.y + element.height),
+    pixelToWorld(element.x, element.y + element.height),
   ]
   const elZ = element.z * extrudeDepth
   const elZMid = elZ + extrudeDepth / 2
@@ -327,9 +327,9 @@ export function drawRotationRing(
   extrudeDepth: number,
   dpr: number,
 ): void {
-  const cx = pixelToWorld(element.x + element.width / 2, element.y + element.height / 2, canvasW, canvasH)
-  const hw = pixelToWorld(element.x + element.width, element.y, canvasW, canvasH)
-  const hh = pixelToWorld(element.x, element.y + element.height, canvasW, canvasH)
+  const cx = pixelToWorld(element.x + element.width / 2, element.y + element.height / 2)
+  const hw = pixelToWorld(element.x + element.width, element.y)
+  const hh = pixelToWorld(element.x, element.y + element.height)
 
   // Ring radius = 0.7 × element diagonal (in world space)
   const diagW = Math.abs(hw[0] - cx[0])
@@ -367,9 +367,9 @@ export function hitTestRotationRing(
   extrudeDepth: number,
   tolerancePx: number,
 ): boolean {
-  const cx = pixelToWorld(element.x + element.width / 2, element.y + element.height / 2, canvasW, canvasH)
-  const hw = pixelToWorld(element.x + element.width, element.y, canvasW, canvasH)
-  const hh = pixelToWorld(element.x, element.y + element.height, canvasW, canvasH)
+  const cx = pixelToWorld(element.x + element.width / 2, element.y + element.height / 2)
+  const hw = pixelToWorld(element.x + element.width, element.y)
+  const hh = pixelToWorld(element.x, element.y + element.height)
   const diagW = Math.abs(hw[0] - cx[0])
   const diagH = Math.abs(hh[1] - cx[1])
   const ringRadius = Math.sqrt(diagW * diagW + diagH * diagH) * 0.7

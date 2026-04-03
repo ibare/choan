@@ -5,58 +5,60 @@ vi.mock('../../engine/scene', () => ({ FRUSTUM: 10 }))
 
 import { pixelToWorld, worldToPixel, pixelWidthToWorld, pixelHeightToWorld } from '../../coords/coordinateSystem'
 
-// 캔버스 100×100, aspect=1, FRUSTUM=10
-// World: x ∈ [-10, 10], y ∈ [10, -10] (top=+10, bottom=-10)
+// 고정 참조 해상도: REF_W=1920, REF_H=1080, REF_ASPECT=16/9, FRUSTUM=10
+// World X: [-160/9, +160/9] ≈ [-17.778, +17.778]
+// World Y: [+10, -10] (top=+10, bottom=-10)
+
+const FA = 10 * (16 / 9) // FRUSTUM * REF_ASPECT = 160/9
 
 describe('pixelToWorld', () => {
-  it('좌상단 (0,0) → (-10, 10)', () => {
-    const [wx, wy] = pixelToWorld(0, 0, 100, 100)
-    expect(wx).toBeCloseTo(-10, 5)
+  it('좌상단 (0,0) → (-160/9, 10)', () => {
+    const [wx, wy] = pixelToWorld(0, 0)
+    expect(wx).toBeCloseTo(-FA, 5)
     expect(wy).toBeCloseTo(10, 5)
   })
-  it('중앙 (50,50) → (0, 0)', () => {
-    const [wx, wy] = pixelToWorld(50, 50, 100, 100)
+  it('중앙 (960,540) → (0, 0)', () => {
+    const [wx, wy] = pixelToWorld(960, 540)
     expect(wx).toBeCloseTo(0, 5)
     expect(wy).toBeCloseTo(0, 5)
   })
-  it('우하단 (100,100) → (10, -10)', () => {
-    const [wx, wy] = pixelToWorld(100, 100, 100, 100)
-    expect(wx).toBeCloseTo(10, 5)
+  it('우하단 (1920,1080) → (160/9, -10)', () => {
+    const [wx, wy] = pixelToWorld(1920, 1080)
+    expect(wx).toBeCloseTo(FA, 5)
     expect(wy).toBeCloseTo(-10, 5)
   })
-  it('가로로 긴 캔버스 (200×100) — aspect=2', () => {
-    const [wx] = pixelToWorld(0, 50, 200, 100)
-    // FRUSTUM * aspect = 10 * 2 = 20, 좌측 끝 → -20
-    expect(wx).toBeCloseTo(-20, 5)
+  it('좌측 중앙 (0,540) → (-160/9, 0)', () => {
+    const [wx] = pixelToWorld(0, 540)
+    expect(wx).toBeCloseTo(-FA, 5)
   })
 })
 
 describe('worldToPixel', () => {
-  it('(-10, 10) → (0, 0)', () => {
-    const [px, py] = worldToPixel(-10, 10, 100, 100)
+  it('(-160/9, 10) → (0, 0)', () => {
+    const [px, py] = worldToPixel(-FA, 10)
     expect(px).toBeCloseTo(0, 5)
     expect(py).toBeCloseTo(0, 5)
   })
-  it('(0, 0) → (50, 50)', () => {
-    const [px, py] = worldToPixel(0, 0, 100, 100)
-    expect(px).toBeCloseTo(50, 5)
-    expect(py).toBeCloseTo(50, 5)
+  it('(0, 0) → (960, 540)', () => {
+    const [px, py] = worldToPixel(0, 0)
+    expect(px).toBeCloseTo(960, 5)
+    expect(py).toBeCloseTo(540, 5)
   })
-  it('(10, -10) → (100, 100)', () => {
-    const [px, py] = worldToPixel(10, -10, 100, 100)
-    expect(px).toBeCloseTo(100, 5)
-    expect(py).toBeCloseTo(100, 5)
+  it('(160/9, -10) → (1920, 1080)', () => {
+    const [px, py] = worldToPixel(FA, -10)
+    expect(px).toBeCloseTo(1920, 5)
+    expect(py).toBeCloseTo(1080, 5)
   })
 })
 
 describe('pixelToWorld ↔ worldToPixel 라운드트립', () => {
   const cases = [
-    [0, 0], [50, 50], [100, 100], [25, 75], [10, 90],
+    [0, 0], [960, 540], [1920, 1080], [480, 810], [192, 972],
   ]
   for (const [px, py] of cases) {
     it(`(${px}, ${py}) 라운드트립`, () => {
-      const [wx, wy] = pixelToWorld(px, py, 100, 100)
-      const [rpx, rpy] = worldToPixel(wx, wy, 100, 100)
+      const [wx, wy] = pixelToWorld(px, py)
+      const [rpx, rpy] = worldToPixel(wx, wy)
       expect(rpx).toBeCloseTo(px, 5)
       expect(rpy).toBeCloseTo(py, 5)
     })
@@ -64,25 +66,25 @@ describe('pixelToWorld ↔ worldToPixel 라운드트립', () => {
 })
 
 describe('pixelWidthToWorld', () => {
-  it('100px 너비 = 전체 world width (aspect=1: 20)', () => {
-    expect(pixelWidthToWorld(100, 100, 100)).toBeCloseTo(20, 5)
+  it('1920px 너비 = 전체 world width (320/9 ≈ 35.556)', () => {
+    expect(pixelWidthToWorld(1920)).toBeCloseTo(2 * FA, 5)
   })
-  it('50px → world width의 절반 = 10', () => {
-    expect(pixelWidthToWorld(50, 100, 100)).toBeCloseTo(10, 5)
+  it('960px → world width의 절반 = 160/9', () => {
+    expect(pixelWidthToWorld(960)).toBeCloseTo(FA, 5)
   })
   it('0px → 0', () => {
-    expect(pixelWidthToWorld(0, 100, 100)).toBe(0)
+    expect(pixelWidthToWorld(0)).toBe(0)
   })
 })
 
 describe('pixelHeightToWorld', () => {
-  it('100px 높이 = 전체 world height = 20', () => {
-    expect(pixelHeightToWorld(100, 100)).toBeCloseTo(20, 5)
+  it('1080px 높이 = 전체 world height = 20', () => {
+    expect(pixelHeightToWorld(1080)).toBeCloseTo(20, 5)
   })
-  it('50px → 10', () => {
-    expect(pixelHeightToWorld(50, 100)).toBeCloseTo(10, 5)
+  it('540px → 10', () => {
+    expect(pixelHeightToWorld(540)).toBeCloseTo(10, 5)
   })
   it('0px → 0', () => {
-    expect(pixelHeightToWorld(0, 100)).toBe(0)
+    expect(pixelHeightToWorld(0)).toBe(0)
   })
 })

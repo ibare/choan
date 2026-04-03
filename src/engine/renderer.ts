@@ -192,9 +192,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     const aabbs: AABB2D[] = regularWithIdx.map(({ el }) => {
       const cx = el.x + el.width / 2
       const cy = el.y + el.height / 2
-      const [wx, wy] = pixelToWorld(cx, cy, cssWidth, cssHeight)
-      const hw = pixelWidthToWorld(el.width, cssWidth, cssHeight) / 2
-      const hh = pixelHeightToWorld(el.height, cssHeight) / 2
+      const [wx, wy] = pixelToWorld(cx, cy)
+      const hw = pixelWidthToWorld(el.width) / 2
+      const hh = pixelHeightToWorld(el.height) / 2
       const ed = extrudeDepth ?? EXTRUDE_DEPTH
       const wz = el.z * ed
       return { cx: wx, cy: wy, cz: wz, hw, hh, hd: ed / 2 }

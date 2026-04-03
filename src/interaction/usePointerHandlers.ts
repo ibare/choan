@@ -87,7 +87,7 @@ export function usePointerHandlers({
     if (Math.abs(rd[2]) < 1e-6) return null
     const t = (zPlane - ro[2]) / rd[2]
     if (t < 0) return null
-    const [px, py] = worldToPixelCS(ro[0] + rd[0] * t, ro[1] + rd[1] * t, w, h)
+    const [px, py] = worldToPixelCS(ro[0] + rd[0] * t, ro[1] + rd[1] * t)
     return { x: px, y: py }
   }, [])
 
@@ -387,7 +387,7 @@ export function usePointerHandlers({
             const { w: ew, h: eh } = canvasSizeRef.current
             const elRect = elRenderer.canvas.getBoundingClientRect()
             const elWorldZ = selEl.z * rs.extrudeDepth + rs.extrudeDepth / 2
-            const elCenter = pixelToWorld(selEl.x + selEl.width / 2, selEl.y + selEl.height / 2, ew, eh)
+            const elCenter = pixelToWorld(selEl.x + selEl.width / 2, selEl.y + selEl.height / 2)
             const rayP = getCameraRayParams(elRenderer.camera)
             const { ro, rd } = screenToRay(e.clientX, e.clientY, elRect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, ew, eh)
             const startT = rayAxisClosestT(ro, rd, [elCenter[0], elCenter[1], elWorldZ], [0, 0, 1])
@@ -417,7 +417,7 @@ export function usePointerHandlers({
             const { w, h } = canvasSizeRef.current
             const rs = useRenderSettings.getState()
             if (hitTestRotationRing(canvasPx, canvasPy, renderer.overlay, selEl, w, h, rs.extrudeDepth, 12 * dpr)) {
-              const cxWorld = pixelToWorld(selEl.x + selEl.width / 2, selEl.y + selEl.height / 2, w, h)
+              const cxWorld = pixelToWorld(selEl.x + selEl.width / 2, selEl.y + selEl.height / 2)
               const elZ = selEl.z * rs.extrudeDepth + rs.extrudeDepth / 2
               const centerScreen = renderer.overlay.projectToScreen(cxWorld[0], cxWorld[1], elZ)
               isRotationDraggingRef.current = true
@@ -473,8 +473,7 @@ export function usePointerHandlers({
         if (colorPickerAnchorRef.current) {
           anchor = colorPickerAnchorRef.current
         } else {
-          const { w, h } = canvasSizeRef.current
-          const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
+          const [awx, awy] = pixelToWorld(el.x + el.width, el.y)
           const rs = useRenderSettings.getState()
           const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
           anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)
@@ -753,13 +752,12 @@ export function usePointerHandlers({
 
     // ── Camera keyframe drag ──
     if (isDraggingCameraKfRef.current && dragCameraKfIdRef.current) {
-      const { w, h } = canvasSizeRef.current
       const renderer = rendererRef.current
       const rect = renderer?.canvas.getBoundingClientRect()
       const canvasX = rect ? e.clientX - rect.left : e.clientX
       const canvasY = rect ? e.clientY - rect.top : e.clientY
       const newPos = computeCameraKeyframeDragPosition(
-        canvasX, canvasY, w, h,
+        canvasX, canvasY,
         dragCameraKfOrigPosRef.current, e.shiftKey,
       )
       const patch = dragCameraKfTypeRef.current === 'position'
@@ -906,8 +904,7 @@ export function usePointerHandlers({
         if (colorPickerAnchorRef.current) {
           anchor = colorPickerAnchorRef.current
         } else {
-          const { w, h } = canvasSizeRef.current
-          const [awx, awy] = pixelToWorld(el.x + el.width, el.y, w, h)
+          const [awx, awy] = pixelToWorld(el.x + el.width, el.y)
           const rs = useRenderSettings.getState()
           const anchorZ = (el.z ?? 0) * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.01
           anchor = renderer.overlay.projectToScreen(awx, awy, anchorZ)

@@ -47,14 +47,13 @@ export default function PinOverlay({ canvasSizeRef, rendererRef }: PinOverlayPro
       const children = elements.filter((e) => e.parentId === container.id)
       // Always recalculate — camera zoom changes projectToScreen results
 
-      const { w, h } = canvasSizeRef.current
       const rs = useRenderSettings.getState()
       const dpr = window.devicePixelRatio || 1
 
       const result: PinPos[] = []
       for (const child of children) {
         const z = child.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.03
-        const [wx, wy] = pixelToWorld(child.x + child.width - 8, child.y + 8, w, h)
+        const [wx, wy] = pixelToWorld(child.x + child.width - 8, child.y + 8)
         const screen = renderer.overlay.projectToScreen(wx, wy, z)
         result.push({ id: child.id, x: screen.px / dpr, y: screen.py / dpr, sizing: child.layoutSizing ?? 'equal' })
       }

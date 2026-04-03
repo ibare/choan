@@ -34,7 +34,6 @@ export default function SplitLabels({ splitModeRef, canvasSizeRef, rendererRef }
       const el = useChoanStore.getState().elements.find((e: ChoanElement) => e.id === elementId)
       if (!el || !renderer) { setLabels([]); return }
 
-      const { w, h } = canvasSizeRef.current
       const rs = useRenderSettings.getState()
       const z = el.z * rs.extrudeDepth + rs.extrudeDepth / 2 + 0.02
       const dpr = window.devicePixelRatio || 1
@@ -52,7 +51,7 @@ export default function SplitLabels({ splitModeRef, canvasSizeRef, rendererRef }
           cx = el.x + el.width / 2
           cy = el.y + sliceH * i + sliceH / 2
         }
-        const [wx, wy] = pixelToWorld(cx, cy, w, h)
+        const [wx, wy] = pixelToWorld(cx, cy)
         const screen = renderer.overlay.projectToScreen(wx, wy, z)
         result.push({ x: screen.px / dpr, y: screen.py / dpr, num: i + 1 })
       }

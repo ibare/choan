@@ -90,7 +90,7 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
     if (exportAnim.phase !== 'idle' && count > 0) {
       for (let i = 0; i < count; i++) {
         const el = elements[i]
-        const [ewx, ewy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2, canvasW, canvasH)
+        const [ewx, ewy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2)
         centerWx += ewx; centerWy += ewy
       }
       centerWx /= count; centerWy /= count
@@ -111,11 +111,11 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
       // Center pixel → world
       const cx = el.x + el.width / 2
       const cy = el.y + el.height / 2
-      const [wx, wy] = pixelToWorld(cx, cy, canvasW, canvasH)
+      const [wx, wy] = pixelToWorld(cx, cy)
 
       // Size: pixel → world half-size
-      const hw = pixelWidthToWorld(el.width, canvasW, canvasH) / 2
-      const hh = pixelHeightToWorld(el.height, canvasH) / 2
+      const hw = pixelWidthToWorld(el.width) / 2
+      const hh = pixelHeightToWorld(el.height) / 2
 
       // Shape type
       let shapeType = SHAPE_RECT

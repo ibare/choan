@@ -37,16 +37,16 @@ export interface HitResult {
   objectIndex: number
 }
 
-function elementToWorld(el: ChoanElement, canvasW: number, canvasH: number, ed = EXTRUDE_DEPTH) {
-  const aspect = canvasW / canvasH
+function elementToWorld(el: ChoanElement, _canvasW: number, _canvasH: number, ed = EXTRUDE_DEPTH) {
+  const REF_W = 1920, REF_H = 1080, REF_ASPECT = REF_W / REF_H
   const cx = el.x + el.width / 2
   const cy = el.y + el.height / 2
   return {
-    wx: -FRUSTUM * aspect + (cx / canvasW) * 2 * FRUSTUM * aspect,
-    wy: FRUSTUM - (cy / canvasH) * 2 * FRUSTUM,
+    wx: -FRUSTUM * REF_ASPECT + (cx / REF_W) * 2 * FRUSTUM * REF_ASPECT,
+    wy: FRUSTUM - (cy / REF_H) * 2 * FRUSTUM,
     wz: el.z * ed,
-    hw: ((el.width / canvasW) * 2 * FRUSTUM * aspect) / 2,
-    hh: ((el.height / canvasH) * 2 * FRUSTUM) / 2,
+    hw: ((el.width / REF_W) * 2 * FRUSTUM * REF_ASPECT) / 2,
+    hh: ((el.height / REF_H) * 2 * FRUSTUM) / 2,
     hd: ed / 2,
   }
 }

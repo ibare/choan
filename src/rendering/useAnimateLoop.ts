@@ -395,7 +395,7 @@ export function useAnimateLoop({
           const el = state.elements.find((e) => e.id === dirState.directorTargetAttachedTo)
           if (el) {
             const { w: cw, h: ch } = canvasSizeRef.current
-            const [wx, wy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2, cw, ch)
+            const [wx, wy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2)
             const rs2 = useRenderSettings.getState()
             const wz = el.z * rs2.extrudeDepth + rs2.extrudeDepth / 2
             useDirectorStore.getState().setDirectorTargetPos([wx, wy, wz])

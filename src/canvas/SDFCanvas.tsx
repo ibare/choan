@@ -61,14 +61,12 @@ export default function SDFCanvas() {
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {
-    const { w, h } = canvasSizeRef.current
-    const [px, py] = worldToPixelCS(wx, wy, w, h)
+    const [px, py] = worldToPixelCS(wx, wy)
     return { x: px, y: py }
   }, [])
 
   const pixelToWorld = useCallback((px: number, py: number) => {
-    const { w, h } = canvasSizeRef.current
-    const [wx, wy] = pixelToWorldCS(px, py, w, h)
+    const [wx, wy] = pixelToWorldCS(px, py)
     return { wx, wy }
   }, [])
 
