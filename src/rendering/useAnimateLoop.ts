@@ -28,7 +28,7 @@ import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
 import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, type CameraMark, type AxisMarkChannel, type CameraClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { nanoid } from '../utils/nanoid'
-import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes } from './cameraPathOverlay'
+import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes, type RailTimeLabel } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
@@ -52,6 +52,7 @@ export function useAnimateLoop({
   animatedElementsRef,
   splitModeRef,
   tunnelHoverRef,
+  railTimeLabelsRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
@@ -71,6 +72,7 @@ export function useAnimateLoop({
   animatedElementsRef: MutableRefObject<ChoanElement[]>
   splitModeRef: MutableRefObject<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>
   tunnelHoverRef: MutableRefObject<AxisHover>
+  railTimeLabelsRef: MutableRefObject<RailTimeLabel[]>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -368,6 +370,7 @@ export function useAnimateLoop({
       )
 
       // ── Director mode overlays (not playing) ──
+      railTimeLabelsRef.current = []
       const dirState = useDirectorStore.getState()
       if (dirState.directorMode && !dirState.directorPlaying) {
         // Ground grid for spatial orientation
@@ -414,7 +417,7 @@ export function useAnimateLoop({
         )
 
         // Camera icon + target marker + rails
-        drawDirectorCameraSetup(
+        const railLabels = drawDirectorCameraSetup(
           renderer.overlay,
           dirState.directorCameraPos,
           dirState.directorTargetPos,
@@ -426,6 +429,7 @@ export function useAnimateLoop({
           dpr,
           dirState.activeRailAxis,
         )
+        railTimeLabelsRef.current = railLabels
 
         // Camera axis move handles — only for non-extended axes
         // Extended axes use the rail slider instead of tunnels

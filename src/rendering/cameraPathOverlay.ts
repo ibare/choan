@@ -326,6 +326,17 @@ export function drawCameraMarks(
  * Draws the director camera object (frustum icon + rails + target marker).
  * Called every frame in director mode while NOT playing.
  */
+export interface RailTimeLabel {
+  anchorX: number  // screen px — handle position
+  anchorY: number
+  timeMs: number   // raw time in ms — used for sequence numbering
+  text: string
+  color: string
+  /** Screen-space rail direction (normalized) — used to compute perpendicular offset for label. */
+  railDirX: number
+  railDirY: number
+}
+
 export function drawDirectorCameraSetup(
   ov: OverlayRenderer,
   cameraPos: [number, number, number],
@@ -337,7 +348,7 @@ export function drawDirectorCameraSetup(
   fov: number,
   dpr: number,
   activeRailAxis?: AxisMarkChannel | null,
-): void {
+): RailTimeLabel[] {
   // Target marker (always visible in director mode)
   drawTargetMarker(ov, targetPos, isTargetAttached, dpr)
 
@@ -346,8 +357,9 @@ export function drawDirectorCameraSetup(
 
   // Rails (only when camera is selected)
   if (isSelected) {
-    drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr, activeRailAxis ?? null)
+    return drawRailAxes(ov, cameraPos, targetPos, rails, railWorldAnchor, dpr, activeRailAxis ?? null)
   }
+  return []
 }
 
 function drawTargetMarker(
@@ -391,9 +403,11 @@ function drawRailAxes(
   railWorldAnchor: [number, number, number],
   dpr: number,
   activeRailAxis: AxisMarkChannel | null,
-): void {
+): RailTimeLabel[] {
+  const labels: RailTimeLabel[] = []
   // Map axis index to channel for active comparison
   const AXIS_TO_CHANNEL: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
+  const AXIS_HEX: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55c055', dolly: '#5588dd' }
 
   // Helper: draw one sided rail segment.
   // If EITHER side of the axis is extended, both sides anchor in world space.
@@ -432,6 +446,29 @@ function drawRailAxes(
     const isExtended = extent > RAIL_MIN_STUB + 0.001
     const s = ov.projectToScreen(tipX, tipY, tipZ)
     ov.drawDiscScreen(s.px, s.py, 10 * dpr, isExtended ? HANDLE_COLOR : railColor)
+
+    // Collect time label if axis has timing (show on both sides, even stub)
+    const ext = rails[channel]
+    if (axisAnchored && ext.startTime !== ext.endTime) {
+      // Compute screen-space rail direction for leader line placement
+      const baseScreen = ov.projectToScreen(baseX, baseY, baseZ)
+      let rdx = s.px - baseScreen.px
+      let rdy = s.py - baseScreen.py
+      const rdl = Math.sqrt(rdx * rdx + rdy * rdy)
+      if (rdl > 0.01) { rdx /= rdl; rdy /= rdl } else { rdx = 0; rdy = -1 }
+
+      const timeVal = sign > 0 ? ext.endTime : ext.startTime
+      const timeSec = (timeVal / 1000).toFixed(1)
+      labels.push({
+        anchorX: s.px / dpr,
+        anchorY: s.py / dpr,
+        timeMs: timeVal,
+        text: `${timeSec}s`,
+        color: AXIS_HEX[channel],
+        railDirX: rdx,
+        railDirY: rdy,
+      })
+    }
   }
 
   // Per-axis "anchored" flag: true if either neg or pos is extended
@@ -463,6 +500,7 @@ function drawRailAxes(
   // ── Slider handles on extended rails (camera position on the rail) ──
   // These replace the axis tunnels for extended axes.
   drawRailSliderHandles(ov, cameraPos, rails, dpr)
+  return labels
 }
 
 /** Compute the sign (+1 or -1) for the slider offset: toward the more-extended side. */

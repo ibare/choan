@@ -15,6 +15,7 @@ import DistanceLabels from './DistanceLabels'
 import FrameIndicator from './FrameIndicator'
 import NavigationGizmo from './NavigationGizmo'
 import SplitLabels from './SplitLabels'
+import RailTimeLabels from './RailTimeLabels'
 import ContextToolbar from './ContextToolbar'
 import { onExportAnimStart } from '../animation/exportAnimation'
 import { useDirectorStore } from '../store/useDirectorStore'
@@ -31,6 +32,7 @@ export default function SDFCanvas() {
   const distMeasuresRef = useRef<(DistanceMeasure | null)[]>([])
   const animatedElementsRef = useRef<ChoanElement[]>([])
   const splitModeRef = useRef<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>({ active: false, count: 2, elementId: '', direction: 'horizontal' })
+  const railTimeLabelsRef = useRef<Array<{ anchorX: number; anchorY: number; timeMs: number; text: string; color: string; railDirX: number; railDirY: number }>>([])
   const { elements, selectedIds, tool } = useChoanStore()
   const [distanceLabels, setDistanceLabels] = useState<Array<{ x: number; y: number; text: string }>>([])
   const [altPressed, setAltPressed] = useState(false)
@@ -55,6 +57,7 @@ export default function SDFCanvas() {
     animatedElementsRef,
     splitModeRef,
     tunnelHoverRef,
+    railTimeLabelsRef,
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {
@@ -173,6 +176,7 @@ export default function SDFCanvas() {
       />
       <DragSelectBox box={dragSelectBox} />
       <DistanceLabels labels={distanceLabels} />
+      <RailTimeLabels labelsRef={railTimeLabelsRef} />
       <FrameIndicator zoomScaleRef={zoomScaleRef} />
       <RenderSettingsPanel />
       <NavigationGizmo controlsRef={controlsRef} />
