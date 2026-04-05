@@ -32,6 +32,7 @@ import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAx
 import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
+import { updateElevationLabel } from './elevationLabel'
 
 export function useAnimateLoop({
   rendererRef,
@@ -53,6 +54,8 @@ export function useAnimateLoop({
   splitModeRef,
   tunnelHoverRef,
   railTimeLabelsRef,
+  elevationAngleRef,
+  elevationLabelElRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
@@ -73,6 +76,8 @@ export function useAnimateLoop({
   splitModeRef: MutableRefObject<{ active: boolean; count: number; elementId: string; direction: 'horizontal' | 'vertical' }>
   tunnelHoverRef: MutableRefObject<AxisHover>
   railTimeLabelsRef: MutableRefObject<RailTimeLabel[]>
+  elevationAngleRef: MutableRefObject<{ deg: number; screenX: number; screenY: number } | null>
+  elevationLabelElRef: MutableRefObject<HTMLSpanElement | null>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -373,6 +378,8 @@ export function useAnimateLoop({
 
       // ── Director mode overlays (not playing) ──
       railTimeLabelsRef.current = []
+      elevationAngleRef.current = null
+      updateElevationLabel(elevationLabelElRef.current, null)
       const dirState = useDirectorStore.getState()
       if (dirState.directorMode && !dirState.directorPlaying) {
         // Ground grid for spatial orientation
@@ -431,6 +438,20 @@ export function useAnimateLoop({
               undefined, dirState.directorTargetMode,
             )
             railTimeLabelsRef.current = railLabels
+
+            // Elevation angle: viewport camera → director target
+            {
+              const [cx, cy, cz] = renderer.camera.position
+              const [tx, ty, tz] = dirState.directorTargetPos
+              const dx = tx - cx, dy = ty - cy, dz = tz - cz
+              const horizontal = Math.sqrt(dx * dx + dy * dy)
+              const elevDeg = Math.abs(Math.atan2(dz, horizontal) * (180 / Math.PI))
+              const tiltDeg = 90 - elevDeg  // 0°=top-down, 90°=side
+              const tScreen = renderer.overlay.projectToScreen(tx, ty, tz)
+              const elData = { deg: tiltDeg, screenX: tScreen.px, screenY: tScreen.py }
+              elevationAngleRef.current = elData
+              updateElevationLabel(elevationLabelElRef.current, elData)
+            }
 
             // Selected-only overlays
             const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)

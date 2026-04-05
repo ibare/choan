@@ -13,7 +13,7 @@ import { raycastElement, hitTestCorner, hitTestLayoutHandle, hitTestSizingIndica
 import { resolveGroup } from './elementHelpers'
 import type { ChoanElement } from '../store/useChoanStore'
 import { worldToPixel as worldToPixelCS, pixelToWorld, rayPlaneIntersect, rayAxisClosestT } from '../coords/coordinateSystem'
-import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING } from '../constants'
+import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING, TARGET_DRAG_MAX_TILT_DEG } from '../constants'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { getCameraRayParams } from '../engine/camera'
 import { screenToRay } from '../engine/sdf'
@@ -265,6 +265,15 @@ export function usePointerHandlers({
           director.directorTargetPos, 14,
         )
         if (targetHit) {
+          // Block drag when elevation angle is too shallow for meaningful XY control
+          const [vcx, vcy, vcz] = renderer.camera.position
+          const [vtx, vty, vtz] = director.directorTargetPos
+          const vdx = vtx - vcx, vdy = vty - vcy, vdz = vtz - vcz
+          const hLen = Math.sqrt(vdx * vdx + vdy * vdy)
+          const elevDeg = Math.abs(Math.atan2(vdz, hLen) * (180 / Math.PI))
+          const tiltDeg = 90 - elevDeg
+          if (tiltDeg > TARGET_DRAG_MAX_TILT_DEG) return
+
           // Drag on Z-fixed plane (XY movement only, no depth change)
           const rayP = getCameraRayParams(renderer.camera)
           const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)

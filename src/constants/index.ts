@@ -30,6 +30,9 @@ export const DEFAULT_LAYOUT_GAP = 8
 export const DEFAULT_LAYOUT_PADDING = 8
 export const DEFAULT_LAYOUT_COLUMNS = 2
 
+// ── Director camera target drag ──
+export const TARGET_DRAG_MAX_TILT_DEG = 15  // degrees — max tilt from top-down (0°=top, 90°=side) to allow target XY drag
+
 // ── Overlay geometry (pixel units, before zoom compensation) ──
 export const HANDLE_SIZE_PX = 8      // corner handle half-size
 export const DISTANCE_TICK_PX = 4    // distance measurement tick mark length
