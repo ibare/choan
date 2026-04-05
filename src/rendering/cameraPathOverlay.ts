@@ -15,7 +15,10 @@ const PATH_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 0.85]
 const KF_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 1.0]
 const KF_SELECTED_COLOR: [number, number, number, number] = [1.0, 0.85, 0.1, 1.0]
 const TARGET_LINE_COLOR: [number, number, number, number] = [1.0, 0.5, 0.1, 0.7]
-const FRUSTUM_COLOR: [number, number, number, number] = [0.2, 0.6, 1.0, 0.5]
+const FRUSTUM_COLOR: [number, number, number, number] = [0.15, 0.15, 0.15, 0.8]
+const FRUSTUM_SELECTED_COLOR: [number, number, number, number] = [0.2, 0.2, 0.2, 0.9]
+const TRIANGLE_COLOR: [number, number, number, number] = [0.15, 0.15, 0.15, 0.6]
+const TRIANGLE_SELECTED_COLOR: [number, number, number, number] = [1.0, 0.6, 0.1, 0.7]
 const CURRENT_POS_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
 
 // Rail UX colors
@@ -354,7 +357,7 @@ export function drawDirectorCameraSetup(
   targetMode?: 'fixed' | 'locked',
 ): RailTimeLabel[] {
   // Camera frustum icon (always visible for click targeting)
-  drawFrustum(ov, cameraPos, targetPos, fov, frustumColor)
+  drawFrustum(ov, cameraPos, targetPos, fov, frustumColor, isSelected)
 
   if (!isSelected) return []
 
@@ -719,6 +722,7 @@ function drawFrustum(
   target: [number, number, number],
   fov: number,
   color?: [number, number, number, number],
+  isSelected?: boolean,
 ) {
   // Compute camera basis vectors
   let fx = target[0] - pos[0]
@@ -759,22 +763,59 @@ function drawFrustum(
     [cx - rx * hw - ux * hh, cy - ry * hw - uy * hh, cz - rz * hw - uz * hh],  // bottom-left
   ]
 
+  const lineColor = color ?? (isSelected ? FRUSTUM_SELECTED_COLOR : FRUSTUM_COLOR)
+
   // Lines from position to each corner + edges of near plane
   const verts: number[] = []
-
-  // Rays from camera to corners
   for (const c of corners) {
     verts.push(pos[0], pos[1], pos[2], c[0], c[1], c[2])
   }
-
-  // Near plane rectangle
   for (let i = 0; i < 4; i++) {
     const a = corners[i]
     const b = corners[(i + 1) % 4]
     verts.push(a[0], a[1], a[2], b[0], b[1], b[2])
   }
+  ov.drawLines3D(new Float32Array(verts), lineColor)
 
-  ov.drawLines3D(new Float32Array(verts), color ?? FRUSTUM_COLOR)
+  // ── Triangle panel above near plane (Blender-style camera marker) ──
+  const triHeight = hh * 0.7
+  const triHalfW = hw * 0.8
+  // Triangle sits on top edge of near plane, offset upward
+  const topMid: [number, number, number] = [
+    (corners[0][0] + corners[1][0]) / 2,
+    (corners[0][1] + corners[1][1]) / 2,
+    (corners[0][2] + corners[1][2]) / 2,
+  ]
+  const triApex: [number, number, number] = [
+    topMid[0] + ux * triHeight,
+    topMid[1] + uy * triHeight,
+    topMid[2] + uz * triHeight,
+  ]
+  const triLeft: [number, number, number] = [
+    topMid[0] - rx * triHalfW,
+    topMid[1] - ry * triHalfW,
+    topMid[2] - rz * triHalfW,
+  ]
+  const triRight: [number, number, number] = [
+    topMid[0] + rx * triHalfW,
+    topMid[1] + ry * triHalfW,
+    topMid[2] + rz * triHalfW,
+  ]
+
+  // Filled triangle
+  const triColor = isSelected ? TRIANGLE_SELECTED_COLOR : TRIANGLE_COLOR
+  ov.drawTriangles3D(new Float32Array([
+    triLeft[0], triLeft[1], triLeft[2],
+    triRight[0], triRight[1], triRight[2],
+    triApex[0], triApex[1], triApex[2],
+  ]), triColor)
+
+  // Triangle outline
+  ov.drawLines3D(new Float32Array([
+    triLeft[0], triLeft[1], triLeft[2], triRight[0], triRight[1], triRight[2],
+    triRight[0], triRight[1], triRight[2], triApex[0], triApex[1], triApex[2],
+    triApex[0], triApex[1], triApex[2], triLeft[0], triLeft[1], triLeft[2],
+  ]), lineColor)
 }
 
 // ── Per-axis mark pipe rendering ────────────────────────────────────────────

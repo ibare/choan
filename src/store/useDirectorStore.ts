@@ -236,7 +236,10 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   // ── Director camera setup actions ──
 
   setDirectorCameraPos: (pos) => set({ directorCameraPos: pos }),
-  setDirectorTargetPos: (pos) => set({ directorTargetPos: pos }),
+  setDirectorTargetPos: (pos) => {
+    const z = get().directorTargetAttachedTo ? pos[2] : Math.max(0, pos[2])
+    set({ directorTargetPos: [pos[0], pos[1], z] })
+  },
 
   // ── Multi-camera CRUD ──
 

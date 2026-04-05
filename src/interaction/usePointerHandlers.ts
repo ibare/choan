@@ -341,7 +341,10 @@ export function usePointerHandlers({
             const testPos = cam.id === director.selectedCameraId
               ? director.directorCameraPos
               : cam.setup.cameraPos
-            if (hitTestDirectorCameraBody(e.clientX, e.clientY, rect, renderer.overlay, testPos, 16)) {
+            const testTarget = cam.id === director.selectedCameraId
+              ? director.directorTargetPos
+              : cam.setup.targetPos
+            if (hitTestDirectorCameraBody(e.clientX, e.clientY, rect, renderer.overlay, testPos, 16, testTarget)) {
               hitCamId = cam.id
               hitCamPos = testPos
               break

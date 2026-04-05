@@ -169,12 +169,54 @@ export function hitTestDirectorCameraBody(
   overlay: OverlayRenderer,
   cameraPos: [number, number, number],
   hitRadius: number,
+  targetPos?: [number, number, number],
 ): boolean {
   const dpr = window.devicePixelRatio || 1
   const mx = (clientX - canvasRect.left) * dpr
   const my = (clientY - canvasRect.top)  * dpr
+
+  // Hit test the triangle panel center (above near plane) if targetPos is available
+  if (targetPos) {
+    const triCenter = getCameraTriangleCenter(cameraPos, targetPos)
+    if (triCenter) {
+      const s = overlay.projectToScreen(triCenter[0], triCenter[1], triCenter[2])
+      return Math.sqrt((mx - s.px) ** 2 + (my - s.py) ** 2) < hitRadius * 1.5 * dpr
+    }
+  }
+
+  // Fallback: hit test camera position
   const s  = overlay.projectToScreen(cameraPos[0], cameraPos[1], cameraPos[2])
   return Math.sqrt((mx - s.px) ** 2 + (my - s.py) ** 2) < hitRadius * dpr
+}
+
+/** Compute the center of the triangle panel above the near plane. */
+function getCameraTriangleCenter(
+  pos: [number, number, number],
+  target: [number, number, number],
+): [number, number, number] | null {
+  let fx = target[0] - pos[0], fy = target[1] - pos[1], fz = target[2] - pos[2]
+  const fl = Math.sqrt(fx * fx + fy * fy + fz * fz)
+  if (fl < 0.001) return null
+  fx /= fl; fy /= fl; fz /= fl
+
+  let rx = -fz, ry = 0, rz = fx
+  const rl = Math.sqrt(rx * rx + ry * ry + rz * rz)
+  if (rl < 0.001) return null
+  rx /= rl; ry /= rl; rz /= rl
+
+  const ux = ry * fz - rz * fy, uy = rz * fx - rx * fz, uz = rx * fy - ry * fx
+
+  const DEPTH = 8  // must match FRUSTUM_DEPTH
+  const halfAngle = (45 * Math.PI / 180) / 2  // approximate FOV
+  const tanHalf = Math.tan(halfAngle)
+  const hh = DEPTH * tanHalf * 0.5625
+
+  // Near plane top-center + 1/3 of triangle height upward
+  const cx = pos[0] + fx * DEPTH
+  const cy = pos[1] + fy * DEPTH
+  const cz = pos[2] + fz * DEPTH
+  const triH = hh * 0.7 / 3
+  return [cx + ux * (hh + triH), cy + uy * (hh + triH), cz + uz * (hh + triH)]
 }
 
 export interface RailHandleHit { handleId: RailHandleId }
