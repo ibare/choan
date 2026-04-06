@@ -1032,7 +1032,8 @@ input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 .context-toolbar > :first-child { border-radius: 18px; }
 .context-toolbar > :last-child  { border-radius: 18px; }
 
-.ctx-btn:hover { background: var(--surface-3); color: var(--text-1); }
+.ctx-btn:disabled { opacity: 0.35; pointer-events: none; }
+.ctx-btn:hover:not(:disabled) { background: var(--surface-3); color: var(--text-1); }
 .ctx-btn.ui-btn--active { background: var(--accent); color: #fff; }
 
 @keyframes ctx-split-blink {

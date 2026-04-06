@@ -10,6 +10,8 @@ export interface OrbitControls {
   getAngles(): { theta: number; phi: number }
   setAngles(theta: number, phi: number): void
   resetView(): void
+  /** Smoothly frame a world-space AABB at ~80% canvas coverage in front (2D) view. */
+  frameTo(centerX: number, centerY: number, halfW: number, halfH: number): void
   wheelEnabled: boolean
   /** When true, update() is a no-op and pointer events are ignored (camera driven by keyframes). */
   disabled: boolean
@@ -256,11 +258,27 @@ export function createOrbitControls(canvas: HTMLCanvasElement, camera: Camera): 
     resetTarget = { theta: 0, phi: Math.PI / 2, radius: 20, panOffset: [0, 0, 0], startTime: performance.now(), duration: 3000 }
   }
 
+  function frameTo(centerX: number, centerY: number, halfW: number, halfH: number) {
+    thetaVel = 0; phiVel = 0; radiusVel = 0
+    const fovRad = camera.fov * Math.PI / 180
+    const tanHalf = Math.tan(fovRad / 2)
+    // Radius needed so the AABB fills 80% of the viewport
+    const rH = halfH / (tanHalf * 0.8)
+    const rW = halfW / (tanHalf * camera.aspect * 0.8)
+    const targetRadius = Math.max(rH, rW, 1)
+    resetTarget = {
+      theta: 0, phi: Math.PI / 2,
+      radius: targetRadius,
+      panOffset: [centerX, centerY, 0],
+      startTime: performance.now(), duration: 400,
+    }
+  }
+
   // Initialize camera position
   update()
 
   return {
-    update, dispose, getAngles, setAngles, resetView,
+    update, dispose, getAngles, setAngles, resetView, frameTo,
     get wheelEnabled() { return wheelEnabled },
     set wheelEnabled(v: boolean) { wheelEnabled = v },
     get disabled() { return controlsDisabled },

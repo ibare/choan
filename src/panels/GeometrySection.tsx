@@ -1,5 +1,6 @@
 import type { ChoanElement, LineStyle } from '../store/useChoanStore'
 import type { AnimatableProperty } from '../animation/types'
+import { pixelToWorld } from '../coords/coordinateSystem'
 import { Section } from '../components/ui/Section'
 import { PropRow } from '../components/ui/PropRow'
 import { Input } from '../components/ui/Input'
@@ -24,9 +25,15 @@ const LINE_STYLE_OPTIONS = [
 
 export default function GeometrySection({ el, isChild, isManaged, isContainer, onUpdate, onUpdateAnimatable, onRunLayout }: Props) {
   const maxRadius = Math.min(el.width, el.height) / 2
+  const [wx, wy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2)
 
   return (
     <Section title="Geometry">
+      <PropRow label="World">
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-2)', fontVariantNumeric: 'tabular-nums' }}>
+          {wx.toFixed(1)}, {wy.toFixed(1)}, {el.z.toFixed(1)}
+        </span>
+      </PropRow>
       {el.type === 'rectangle' && (
         <PropRow label="Radius">
           <Slider

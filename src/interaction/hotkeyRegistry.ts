@@ -34,6 +34,9 @@ const bindings: HotkeyBinding[] = [
   { code: 'KeyM', action: 'frame:mobile',        label: 'Mobile frame' },
   // S key handled at App level (Quick Skin Picker toggle)
 
+  // ── Camera ──
+  { code: 'KeyZ', action: 'frame-selection',     label: 'Frame selection (2D view)' },
+
   // ── Split ──
   { code: 'KeyN', action: 'split:enter',         label: 'Split selected element' },
   { code: 'ShiftLeft', shift: true, action: 'split:toggle-dir', label: 'Toggle split direction' },

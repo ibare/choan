@@ -210,7 +210,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       <div className="timeline-panel" style={height ? { height } : undefined}>
         <div className="timeline-header-bar">
           <SegmentedControl
-            options={[{ value: 'bundle', label: 'Bundle' }, { value: 'director', label: 'Director' }]}
+            options={[{ value: 'bundle', label: 'UI Sketch' }, { value: 'director', label: 'Director' }]}
             value="director"
             onChange={(v) => setDirectorMode(v === 'director')}
           />
@@ -231,7 +231,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
       {/* Header: playback controls + bundle tabs */}
       <div className="timeline-header-bar">
         <SegmentedControl
-          options={[{ value: 'bundle', label: 'Bundle' }, { value: 'director', label: 'Director' }]}
+          options={[{ value: 'bundle', label: 'UI Sketch' }, { value: 'director', label: 'Director' }]}
           value="bundle"
           onChange={(v) => setDirectorMode(v === 'director')}
         />

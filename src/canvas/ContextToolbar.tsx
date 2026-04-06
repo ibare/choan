@@ -17,13 +17,14 @@ import {
   SquareLogo, SquareSplitHorizontal, SquareSplitVertical, SquaresFour,
   Rectangle, RectangleDashed, Angle, ArrowsOutLineHorizontal, FrameCorners, Columns,
   ToggleRight, Percent, Hash, Star, ArrowsClockwise, Play, Pause,
-  Knife, RowsPlusBottom, LinkSimpleHorizontal,
+  Knife, RowsPlusBottom, LinkSimpleHorizontal, Crosshair,
 } from '@phosphor-icons/react'
 import ColorPicker from './ColorPicker'
 import { ICON_NAMES, ICON_PATHS } from '../engine/iconPaths'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Tooltip } from '../components/ui/Tooltip'
+import { frameSelectionToOrigin } from '../interaction/frameSelection'
 
 interface Props {
   canvasSizeRef: MutableRefObject<{ w: number; h: number }>
@@ -498,7 +499,8 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   const isFrame     = !!el?.frame
   const isSkin      = !!el?.skin
   const isContainer = el?.role === 'container' && !el?.skin
-  const isVisible   = !!el && !!pos && (isFrame || isSkin || isContainer)
+  const hasParent   = !!el?.parentId
+  const isVisible   = !!el && !!pos
 
   const dir         = el?.layoutDirection ?? 'free'
   const maxRadius   = el ? Math.min(el.width, el.height) / 2 : 0
@@ -734,6 +736,18 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Move to origin (Z) */}
+          {(isFrame || isSkin || isContainer) && <div className="ctx-sep" />}
+          <Tooltip content="Move to Origin (Z)">
+            <Button
+              className="ctx-btn"
+              disabled={hasParent}
+              onClick={() => controlsRef.current && frameSelectionToOrigin(controlsRef.current)}
+            >
+              <Crosshair size={15} />
+            </Button>
+          </Tooltip>
 
         </motion.div>
       )}

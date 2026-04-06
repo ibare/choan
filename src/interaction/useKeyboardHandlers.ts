@@ -6,7 +6,9 @@ import { nanoid } from '../utils/nanoid'
 import type { ChoanElement } from '../store/useChoanStore'
 import type { OrbitControls } from '../engine/controls'
 import { resolveHotkey } from './hotkeyRegistry'
+import { useDirectorStore } from '../store/useDirectorStore'
 import { splitElement } from './splitElement'
+import { frameSelectionToOrigin } from './frameSelection'
 import { undo, redo, pushSnapshot } from '../store/history'
 
 export type ActionHandler = () => void
@@ -115,6 +117,11 @@ export function useKeyboardHandlers(
       }
       store.selectElement(rootId)
       pushSnapshot()
+    },
+    'frame-selection': () => {
+      if (!controlsRef?.current) return
+      if (useDirectorStore.getState().directorMode) return
+      frameSelectionToOrigin(controlsRef.current)
     },
     'tool:select': () => { setTool('select'); setPendingSkin(null); setPendingFrame(null) },
     'tool:rectangle': () => { setTool('rectangle'); setPendingSkin(null); setPendingFrame(null) },
