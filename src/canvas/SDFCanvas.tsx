@@ -49,6 +49,7 @@ export default function SDFCanvas() {
     isDrawingRef, drawElIdRef,
     snapLinesRef,
     tunnelHoverRef,
+    alignMarkerHoveredRef,
   } = usePointerHandlers({ rendererRef, canvasSizeRef, zoomScaleRef, mountRef, animatedElementsRef })
 
   useKeyboardHandlers(colorPickerOpenRef, colorPickerHoverRef, splitModeRef, controlsRef)
@@ -63,6 +64,7 @@ export default function SDFCanvas() {
     railTimeLabelsRef,
     elevationAngleRef,
     elevationLabelElRef,
+    alignMarkerHoveredRef,
   })
 
   const worldToPixel = useCallback((wx: number, wy: number) => {

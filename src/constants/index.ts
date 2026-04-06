@@ -33,6 +33,13 @@ export const DEFAULT_LAYOUT_COLUMNS = 2
 // ── Director camera target drag ──
 export const TARGET_DRAG_MAX_TILT_DEG = 15  // degrees — max tilt from top-down (0°=top, 90°=side) to allow target XY drag
 
+// ── Director camera frustum ──
+export const FRUSTUM_DEPTH = 8           // world units forward from camera position
+export const FRUSTUM_ASPECT = 0.5625     // 16:9 = 9/16
+export const FRUSTUM_TRI_HEIGHT = 0.7    // triangle height as fraction of near-plane half-height
+export const FRUSTUM_TRI_HALF_W = 0.8    // triangle half-width as fraction of near-plane half-width
+export const FRUSTUM_INNER_TRI_SCALE = 0.4  // inner align-marker triangle scale relative to outer
+
 // ── Overlay geometry (pixel units, before zoom compensation) ──
 export const HANDLE_SIZE_PX = 8      // corner handle half-size
 export const DISTANCE_TICK_PX = 4    // distance measurement tick mark length

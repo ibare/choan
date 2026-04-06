@@ -31,7 +31,7 @@ import {
 import {
   hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
   hitTestDirectorCameraBody, hitTestDirectorTarget, hitTestRailHandle, computeRailHandleDrag,
-  hitTestRailSlider,
+  hitTestRailSlider, hitTestAlignMarker,
   type RailHandleHit, type RailSliderHit,
 } from './cameraPathHandlers'
 
@@ -154,6 +154,7 @@ export function usePointerHandlers({
   const dragPlaneNormalRef = useRef<[number, number, number]>([0, 0, 1])
   const dragStartWorldRef = useRef<[number, number, number]>([0, 0, 0])
   const tunnelHoverRef = useRef<AxisHover>(null)
+  const alignMarkerHoveredRef = useRef(false)
 
   // Rotation drag refs (Director mode)
   const isRotationDraggingRef = useRef(false)
@@ -337,6 +338,18 @@ export function usePointerHandlers({
           }
         }
 
+        // ── Align-to-front marker hit test (selected camera only) ──
+        {
+          const dirFov = 2 * Math.atan(36 / (2 * director.focalLengthMm)) * (180 / Math.PI)
+          if (director.selectedCameraId && hitTestAlignMarker(
+            e.clientX, e.clientY, rect, renderer.overlay,
+            director.directorCameraPos, director.directorTargetPos, 8, dirFov,
+          )) {
+            useDirectorStore.getState().alignCameraFront()
+            return
+          }
+        }
+
         // ── Director camera body hit test (all cameras) ──
         {
           const scHit = useSceneStore.getState()
@@ -353,7 +366,10 @@ export function usePointerHandlers({
             const testTarget = cam.id === director.selectedCameraId
               ? director.directorTargetPos
               : cam.setup.targetPos
-            if (hitTestDirectorCameraBody(e.clientX, e.clientY, rect, renderer.overlay, testPos, 16, testTarget)) {
+            const testFov = cam.id === director.selectedCameraId
+              ? 2 * Math.atan(36 / (2 * director.focalLengthMm)) * (180 / Math.PI)
+              : 2 * Math.atan(36 / (2 * cam.focalLengthMm)) * (180 / Math.PI)
+            if (hitTestDirectorCameraBody(e.clientX, e.clientY, rect, renderer.overlay, testPos, 16, testTarget, testFov)) {
               hitCamId = cam.id
               hitCamPos = testPos
               break
@@ -1044,6 +1060,12 @@ export function usePointerHandlers({
         const rect = renderer.canvas.getBoundingClientRect()
         const cpx = (e.clientX - rect.left) * dpr
         const cpy = (e.clientY - rect.top) * dpr
+        // Align marker hover
+        const dirMoveFov = 2 * Math.atan(36 / (2 * dirMoveState.focalLengthMm)) * (180 / Math.PI)
+        alignMarkerHoveredRef.current = hitTestAlignMarker(
+          e.clientX, e.clientY, rect, renderer.overlay,
+          dirMoveState.directorCameraPos, dirMoveState.directorTargetPos, 8, dirMoveFov,
+        )
         // Only check tunnels for non-extended axes (extended use rail slider)
         const r = dirMoveState.directorRails
         const stub = 0.501
@@ -1259,5 +1281,6 @@ export function usePointerHandlers({
     isDrawingRef, drawElIdRef,
     snapLinesRef,
     tunnelHoverRef,
+    alignMarkerHoveredRef,
   }
 }

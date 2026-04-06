@@ -56,6 +56,7 @@ export function useAnimateLoop({
   railTimeLabelsRef,
   elevationAngleRef,
   elevationLabelElRef,
+  alignMarkerHoveredRef,
 }: {
   rendererRef: MutableRefObject<SDFRenderer | null>
   controlsRef: MutableRefObject<OrbitControls | null>
@@ -78,6 +79,7 @@ export function useAnimateLoop({
   railTimeLabelsRef: MutableRefObject<RailTimeLabel[]>
   elevationAngleRef: MutableRefObject<{ deg: number; screenX: number; screenY: number } | null>
   elevationLabelElRef: MutableRefObject<HTMLSpanElement | null>
+  alignMarkerHoveredRef: MutableRefObject<boolean>
 }): void {
   useEffect(() => {
     kfAnimator.onComplete = (elementId, finalValues) => {
@@ -88,11 +90,15 @@ export function useAnimateLoop({
     const atlasDirty = new Map<string, string>() // id → stateKey for dirty tracking
     let frameId = 0
 
-    // Q key: frustum spotlight toggle
-    const onQDown = (e: KeyboardEvent) => {
-      if (e.code === 'KeyQ' && !e.repeat && useDirectorStore.getState().selectedCameraId) useDirectorStore.getState().toggleFrustumSpotlight()
+    // Director mode hotkeys
+    const onDirectorKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      const ds = useDirectorStore.getState()
+      if (!ds.selectedCameraId) return
+      if (e.code === 'KeyQ') ds.toggleFrustumSpotlight()
+      if (e.code === 'KeyF') ds.alignCameraFront()
     }
-    window.addEventListener('keydown', onQDown)
+    window.addEventListener('keydown', onDirectorKeyDown)
 
     const animate = () => {
       frameId = requestAnimationFrame(animate)
@@ -436,6 +442,7 @@ export function useAnimateLoop({
               dirState.directorTargetAttachedTo !== null,
               dirFov, dpr, dirState.activeRailAxis,
               undefined, dirState.directorTargetMode,
+              alignMarkerHoveredRef.current,
             )
             railTimeLabelsRef.current = railLabels
 
@@ -505,7 +512,7 @@ export function useAnimateLoop({
     return () => {
       cancelAnimationFrame(frameId)
       kfAnimator.stopAll()
-      window.removeEventListener('keydown', onQDown)
+      window.removeEventListener('keydown', onDirectorKeyDown)
     }
   }, [])
 }

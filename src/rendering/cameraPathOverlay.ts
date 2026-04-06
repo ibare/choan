@@ -37,7 +37,7 @@ const SLIDER_RING_Y: [number, number, number, number] = [0.3, 0.8, 0.3, 1.0]
 const SLIDER_RING_Z: [number, number, number, number] = [0.2, 0.5, 1.0, 1.0]
 const SLIDER_FILL:   [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
 const SLIDER_OFFSET = 2.4  // world units offset from camera along each axis
-const FRUSTUM_DEPTH = 8  // world units forward from camera position
+import { computeFrustumGeometry } from './frustumGeometry'
 
 export function drawCameraPathOverlay(
   ov: OverlayRenderer,
@@ -355,9 +355,10 @@ export function drawDirectorCameraSetup(
   activeRailAxis?: AxisMarkChannel | null,
   frustumColor?: [number, number, number, number],
   targetMode?: 'fixed' | 'locked',
+  alignMarkerHovered?: boolean,
 ): RailTimeLabel[] {
   // Camera frustum icon (always visible for click targeting)
-  drawFrustum(ov, cameraPos, targetPos, fov, frustumColor, isSelected)
+  drawFrustum(ov, cameraPos, targetPos, fov, frustumColor, isSelected, alignMarkerHovered)
 
   if (!isSelected) return []
 
@@ -723,46 +724,12 @@ function drawFrustum(
   fov: number,
   color?: [number, number, number, number],
   isSelected?: boolean,
+  alignMarkerHovered?: boolean,
 ) {
-  // Compute camera basis vectors
-  let fx = target[0] - pos[0]
-  let fy = target[1] - pos[1]
-  let fz = target[2] - pos[2]
-  const fl = Math.sqrt(fx * fx + fy * fy + fz * fz)
-  if (fl < 0.001) return
-  fx /= fl; fy /= fl; fz /= fl
+  const geo = computeFrustumGeometry(pos, target, fov)
+  if (!geo) return
 
-  // Right = forward × up (assuming up = [0,1,0])
-  let rx = fy * 0 - fz * 1
-  let ry = fz * 0 - fx * 0
-  let rz = fx * 1 - fy * 0
-  const rl = Math.sqrt(rx * rx + ry * ry + rz * rz)
-  if (rl < 0.001) return
-  rx /= rl; ry /= rl; rz /= rl
-
-  // Up = right × forward
-  const ux = ry * fz - rz * fy
-  const uy = rz * fx - rx * fz
-  const uz = rx * fy - ry * fx
-
-  const halfAngle = (fov * Math.PI / 180) / 2
-  const tanHalf = Math.tan(halfAngle)
-  const hw = FRUSTUM_DEPTH * tanHalf
-  const hh = hw * 0.5625  // 16:9 aspect
-
-  // Near plane center
-  const cx = pos[0] + fx * FRUSTUM_DEPTH
-  const cy = pos[1] + fy * FRUSTUM_DEPTH
-  const cz = pos[2] + fz * FRUSTUM_DEPTH
-
-  // Four corners of near plane
-  const corners: [number, number, number][] = [
-    [cx - rx * hw + ux * hh, cy - ry * hw + uy * hh, cz - rz * hw + uz * hh],  // top-left
-    [cx + rx * hw + ux * hh, cy + ry * hw + uy * hh, cz + rz * hw + uz * hh],  // top-right
-    [cx + rx * hw - ux * hh, cy + ry * hw - uy * hh, cz + rz * hw - uz * hh],  // bottom-right
-    [cx - rx * hw - ux * hh, cy - ry * hw - uy * hh, cz - rz * hw - uz * hh],  // bottom-left
-  ]
-
+  const { corners, triLeft, triRight, triApex, innerTriLeft, innerTriRight, innerTriApex } = geo
   const lineColor = color ?? (isSelected ? FRUSTUM_SELECTED_COLOR : FRUSTUM_COLOR)
 
   // Lines from position to each corner + edges of near plane
@@ -776,31 +743,6 @@ function drawFrustum(
     verts.push(a[0], a[1], a[2], b[0], b[1], b[2])
   }
   ov.drawLines3D(new Float32Array(verts), lineColor)
-
-  // ── Triangle panel above near plane (Blender-style camera marker) ──
-  const triHeight = hh * 0.7
-  const triHalfW = hw * 0.8
-  // Triangle sits on top edge of near plane, offset upward
-  const topMid: [number, number, number] = [
-    (corners[0][0] + corners[1][0]) / 2,
-    (corners[0][1] + corners[1][1]) / 2,
-    (corners[0][2] + corners[1][2]) / 2,
-  ]
-  const triApex: [number, number, number] = [
-    topMid[0] + ux * triHeight,
-    topMid[1] + uy * triHeight,
-    topMid[2] + uz * triHeight,
-  ]
-  const triLeft: [number, number, number] = [
-    topMid[0] - rx * triHalfW,
-    topMid[1] - ry * triHalfW,
-    topMid[2] - rz * triHalfW,
-  ]
-  const triRight: [number, number, number] = [
-    topMid[0] + rx * triHalfW,
-    topMid[1] + ry * triHalfW,
-    topMid[2] + rz * triHalfW,
-  ]
 
   // Filled triangle
   const triColor = isSelected ? TRIANGLE_SELECTED_COLOR : TRIANGLE_COLOR
@@ -816,6 +758,18 @@ function drawFrustum(
     triRight[0], triRight[1], triRight[2], triApex[0], triApex[1], triApex[2],
     triApex[0], triApex[1], triApex[2], triLeft[0], triLeft[1], triLeft[2],
   ]), lineColor)
+
+  // Align-to-front marker (small triangle inside the outer triangle)
+  if (isSelected) {
+    const innerColor: [number, number, number, number] = alignMarkerHovered
+      ? [0.3, 0.6, 1.0, 0.95]
+      : [0.2, 0.2, 0.2, 0.95]
+    ov.drawTriangles3D(new Float32Array([
+      innerTriLeft[0], innerTriLeft[1], innerTriLeft[2],
+      innerTriRight[0], innerTriRight[1], innerTriRight[2],
+      innerTriApex[0], innerTriApex[1], innerTriApex[2],
+    ]), innerColor)
+  }
 }
 
 // ── Per-axis mark pipe rendering ────────────────────────────────────────────

@@ -89,6 +89,7 @@ interface DirectorStore {
   setDirectorTargetAttachedTo: (id: string | null) => void
   setDirectorTargetMode: (mode: TargetMode) => void
   toggleDirectorTargetMode: () => void
+  alignCameraFront: () => void
   setActiveRailAxis: (axis: AxisMarkChannel | null) => void
   saveCameraSetup: () => void  // persist current camera rig to scene
 
@@ -367,6 +368,29 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   setDirectorTargetAttachedTo: (id) => set({ directorTargetAttachedTo: id }),
   setDirectorTargetMode: (mode) => set({ directorTargetMode: mode }),
   toggleDirectorTargetMode: () => set((s) => ({ directorTargetMode: s.directorTargetMode === 'fixed' ? 'locked' : 'fixed' })),
+
+  alignCameraFront: () => {
+    const s = get()
+    const [cx, cy, cz] = s.directorCameraPos
+    const [tx, ty, tz] = s.directorTargetPos
+    const dx = cx - tx, dy = cy - ty, dz = cz - tz
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz)
+    if (dist < 0.001) return
+    const newCamPos: [number, number, number] = [tx, ty, tz + dist]
+    const delta: [number, number, number] = [newCamPos[0] - cx, newCamPos[1] - cy, newCamPos[2] - cz]
+    set({
+      directorCameraPos: newCamPos,
+      railWorldAnchor: [
+        s.railWorldAnchor[0] + delta[0],
+        s.railWorldAnchor[1] + delta[1],
+        s.railWorldAnchor[2] + delta[2],
+      ],
+    })
+    if (s.directorTargetMode === 'locked') {
+      get().shiftAllMarks(delta)
+    }
+  },
+
   setActiveRailAxis: (axis) => set({ activeRailAxis: axis }),
 
   saveCameraSetup: () => {
