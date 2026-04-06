@@ -213,7 +213,7 @@ export function useAnimateLoop({
         editingBundleId: preview.editingBundleId, playheadTime: preview.playheadTime,
         animationBundles: state.animationBundles, kfAnimator, layoutAnimator: animator,
         springParams: { stiffness: rs.springStiffness, damping: rs.springDamping, squashIntensity: rs.squashIntensity },
-        manipulatedIds,
+        manipulatedIds, scrubHeldIds: preview.scrubHeldIds,
       })
 
       animatedElementsRef.current = animatedElements
@@ -369,7 +369,7 @@ export function useAnimateLoop({
 
       drawOverlay(
         renderer.overlay,
-        state.selectedIds,
+        preview.previewState === 'playing' ? [] : state.selectedIds,
         state.elements,
         snapLinesRef.current,
         distMeasuresRef.current,

@@ -485,6 +485,25 @@ body {
   white-space: nowrap;
 }
 
+/* Keyframe diamond button */
+.ui-kf-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: var(--radius-1);
+  flex-shrink: 0;
+}
+.ui-kf-btn:hover { color: var(--text-1); background: var(--surface-3); }
+.ui-kf-btn.ui-kf-btn--active { color: var(--yellow-500); }
+.ui-kf-btn.ui-kf-btn--active:hover { color: var(--yellow-500); background: var(--surface-3); }
+
 /* Popover (Radix) */
 .ui-popover {
   background: var(--surface-1);

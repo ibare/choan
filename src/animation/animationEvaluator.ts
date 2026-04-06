@@ -14,6 +14,7 @@ import type { LayoutAnimator, SpringParams } from '../layout/animator'
 import type { PreviewState } from '../store/usePreviewStore'
 import { evaluateTrack } from './interpolate'
 import { resolveEasing } from './easing'
+import { propagateParentDelta } from './propagateDelta'
 import type { AnimatableProperty } from './types'
 
 export interface AnimationEvalInput {
@@ -26,6 +27,7 @@ export interface AnimationEvalInput {
   layoutAnimator: LayoutAnimator
   springParams: SpringParams
   manipulatedIds: ReadonlySet<string>
+  scrubHeldIds: ReadonlySet<string>
 }
 
 /**
@@ -44,6 +46,7 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
     layoutAnimator,
     springParams,
     manipulatedIds,
+    scrubHeldIds,
   } = input
 
   // 1. Playback mode — keyframe engine drives all values
@@ -69,8 +72,11 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
         }
         overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
       }
+
+      propagateParentDelta(elements, overrides)
+
       const scrubbed = elements.map((el) => {
-        if (manipulatedIds.has(el.id)) return el
+        if (manipulatedIds.has(el.id) || scrubHeldIds.has(el.id)) return el
         const patch = overrides.get(el.id)
         return patch ? { ...el, ...patch } : el
       })

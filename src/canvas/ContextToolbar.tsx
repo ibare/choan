@@ -8,6 +8,7 @@ import { splitElement } from '../interaction/splitElement'
 import { PopoverPrimitive as RadixPopover } from '../components/ui/Popover'
 import { DEFAULT_LAYOUT_GAP, DEFAULT_LAYOUT_PADDING, DEFAULT_LAYOUT_COLUMNS } from '../constants'
 import { useElementStore } from '../store/useElementStore'
+import { usePreviewStore } from '../store/usePreviewStore'
 import { pixelToWorld as pixelToWorldCS } from '../coords/coordinateSystem'
 import { useRenderSettings } from '../store/useRenderSettings'
 // SKIN_REGISTRY no longer used — skin picker removed from toolbar
@@ -421,9 +422,9 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
   useEffect(() => {
     const tick = () => {
       rafRef.current = requestAnimationFrame(tick)
-      // Hide during drag, resize, draw, pan, or 3D rotate
+      // Hide during drag, resize, draw, pan, 3D rotate, or playback
       const interacting = isDraggingRef.current || isResizingRef.current || isDrawingRef.current || (controlsRef.current?.isInteracting ?? false)
-      if (interacting) { setPos(null); prevKeyRef.current = ''; return }
+      if (interacting || usePreviewStore.getState().previewState === 'playing') { setPos(null); prevKeyRef.current = ''; return }
 
       const { selectedIds: ids, elements: els } = useElementStore.getState()
       if (ids.length !== 1) { setPos(null); prevKeyRef.current = ''; return }

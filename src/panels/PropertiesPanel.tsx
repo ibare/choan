@@ -1,5 +1,5 @@
 import { useChoanStore } from '../store/useChoanStore'
-import { autoKeyframe } from '../animation/autoKeyframe'
+import { usePreviewStore } from '../store/usePreviewStore'
 import type { AnimatableProperty } from '../animation/types'
 import { useSelectedElement } from '../hooks/useSelectedElement'
 import { Section } from '../components/ui/Section'
@@ -33,9 +33,9 @@ export default function PropertiesPanel() {
   const onUpdate = (patch: Record<string, unknown>) => updateElement(el.id, patch)
 
   const onUpdateAnimatable = (prop: AnimatableProperty, value: number) => {
-    const old = (el as unknown as Record<string, unknown>)[prop] as number | undefined
     updateElement(el.id, { [prop]: value })
-    autoKeyframe(el.id, prop, value, old ?? 0)
+    const ps = usePreviewStore.getState()
+    if (ps.editingBundleId && ps.previewState === 'stopped') ps.holdScrub([el.id])
   }
 
   const onContainerChange = (patch: Record<string, unknown>) => {

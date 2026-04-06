@@ -6,7 +6,6 @@ import type { SDFRenderer } from '../engine/renderer'
 import type { SnapLine } from '../utils/snapUtils'
 import { useChoanStore } from '../store/useChoanStore'
 import { usePreviewStore } from '../store/usePreviewStore'
-import { autoKeyframe } from '../animation/autoKeyframe'
 import { nanoid } from '../utils/nanoid'
 import { kfAnimator } from '../rendering/kfAnimator'
 import { raycastElement, hitTestCorner, hitTestLayoutHandle, hitTestSizingIndicator } from './hitTest'
@@ -629,18 +628,32 @@ export function usePointerHandlers({
 
       const hitId = rendererRef.current ? raycastElement(e.clientX, e.clientY, rendererRef.current, canvasSizeRef.current, animatedElementsRef.current) : null
       if (hitId) {
-        const freshEls = useChoanStore.getState().elements
+        const choanState = useChoanStore.getState()
+        const freshEls = choanState.elements
         const animEls = animatedElementsRef.current
-        const currentSelectedIds = useChoanStore.getState().selectedIds
+        const currentSelectedIds = choanState.selectedIds
         const pixel = screenToPixel(e.clientX, e.clientY)
         const startMap = new Map<string, { x: number; y: number }>()
+
+        // Scrub mode: sync store with animated values before drag starts to prevent snap
+        const { editingBundleId: scrubBundleId, previewState: scrubState } = usePreviewStore.getState()
+        const inScrubMode = !!scrubBundleId && scrubState === 'stopped'
+
         if (currentSelectedIds.includes(hitId)) {
           // Resolve group to include children even when already selected
           const groupIds = resolveGroup(freshEls, hitId)
           if (pixel) dragStartPixelRef.current = pixel
           for (const gid of groupIds) {
             const ge = animEls.find((el) => el.id === gid)
-            if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
+            if (ge) {
+              startMap.set(gid, { x: ge.x, y: ge.y })
+              if (inScrubMode) {
+                const se = freshEls.find((el) => el.id === gid)
+                if (se && (ge.x !== se.x || ge.y !== se.y || ge.width !== se.width || ge.height !== se.height)) {
+                  choanState.updateElement(gid, { x: ge.x, y: ge.y, width: ge.width, height: ge.height })
+                }
+              }
+            }
           }
           isDraggingRef.current = true
           dragGroupIdsRef.current = groupIds
@@ -652,7 +665,15 @@ export function usePointerHandlers({
           if (pixel) dragStartPixelRef.current = pixel
           for (const gid of groupIds) {
             const ge = animEls.find((el) => el.id === gid)
-            if (ge) startMap.set(gid, { x: ge.x, y: ge.y })
+            if (ge) {
+              startMap.set(gid, { x: ge.x, y: ge.y })
+              if (inScrubMode) {
+                const se = freshEls.find((el) => el.id === gid)
+                if (se && (ge.x !== se.x || ge.y !== se.y || ge.width !== se.width || ge.height !== se.height)) {
+                  choanState.updateElement(gid, { x: ge.x, y: ge.y, width: ge.width, height: ge.height })
+                }
+              }
+            }
           }
           isDraggingRef.current = true
           dragGroupIdsRef.current = groupIds
@@ -1216,40 +1237,14 @@ export function usePointerHandlers({
       finalizeDrag(selIds[0], selIds, els, reparentElement, runLayout)
     }
 
-    // Auto-keyframe when editing a bundle — use animated (scrub) coordinates
-    const { editingBundleId } = usePreviewStore.getState()
-    if (editingBundleId) {
-      const animEls = animatedElementsRef.current
-      const selId = selIds[0] ?? null
-      if (isDraggingRef.current && selId) {
-        const orig = dragGroupStartRef.current.get(selId)
-        if (orig) {
-          const endPixel = screenToPixel(e.clientX, e.clientY)
-          const startPixel = dragStartPixelRef.current
-          const hasMoved = endPixel && (Math.abs(endPixel.x - startPixel.x) > 2 || Math.abs(endPixel.y - startPixel.y) > 2)
-          if (hasMoved) {
-            const el = animEls.find((el) => el.id === selId)
-            if (el) { autoKeyframe(selId, 'x', el.x, orig.x); autoKeyframe(selId, 'y', el.y, orig.y) }
-          } else {
-            // Click only — keyframe at current scrub position (no jump)
-            autoKeyframe(selId, 'x', orig.x, orig.x)
-            autoKeyframe(selId, 'y', orig.y, orig.y)
-          }
-        }
-      }
-      if (isResizingRef.current && resizeElIdRef.current) {
-        const el = animEls.find((el) => el.id === resizeElIdRef.current)
-        if (el) {
-          autoKeyframe(resizeElIdRef.current, 'x', el.x)
-          autoKeyframe(resizeElIdRef.current, 'y', el.y)
-          autoKeyframe(resizeElIdRef.current, 'width', el.width)
-          autoKeyframe(resizeElIdRef.current, 'height', el.height)
-        }
-      }
-      if (isRadiusDragRef.current && selId) {
-        const el = animEls.find((el) => el.id === selId)
-        if (el) autoKeyframe(selId, 'radius', el.radius ?? 0, radiusStartRef.current)
-      }
+    // Hold scrub override so evaluator doesn't snap element back to keyframe value
+    const previewSnap = usePreviewStore.getState()
+    if (previewSnap.editingBundleId && previewSnap.previewState === 'stopped') {
+      const heldIds: string[] = []
+      if (isDraggingRef.current) heldIds.push(...dragGroupIdsRef.current)
+      if (isResizingRef.current && resizeElIdRef.current) heldIds.push(resizeElIdRef.current)
+      if (isRadiusDragRef.current && resizeElIdRef.current) heldIds.push(resizeElIdRef.current)
+      if (heldIds.length > 0) previewSnap.holdScrub(heldIds)
     }
 
     // Snapshot for undo after any meaningful interaction

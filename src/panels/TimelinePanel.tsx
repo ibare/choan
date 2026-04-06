@@ -11,7 +11,7 @@ import { SegmentedControl } from '../components/ui/SegmentedControl'
 import type { DisplayLayer, RenderOptions } from '../engine/timeline2d'
 import type { AnimationClip, AnimationBundle } from '../animation/types'
 import { nanoid } from '../utils/nanoid'
-import { Play, Pause, Stop, Plus, X, FilmStrip, Export } from '@phosphor-icons/react'
+import { Play, Stop, Plus, X, FilmStrip, Export } from '@phosphor-icons/react'
 import { Button } from '../components/ui/Button'
 import { Tooltip } from '../components/ui/Tooltip'
 import { track } from '../utils/analytics'
@@ -42,7 +42,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
     addAnimationBundle, updateAnimationBundle, removeAnimationBundle,
     updateClipInBundle, removeClipFromBundle,
   } = useChoanStore()
-  const { previewState, play, pause, stop, playheadTime, setPlayheadTime, editingBundleId, setEditingBundle, ghostPreview, toggleGhostPreview } = usePreviewStore()
+  const { previewState, play, stop, playheadTime, setPlayheadTime, editingBundleId, setEditingBundle, ghostPreview, toggleGhostPreview } = usePreviewStore()
 
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null)
   const [editingBundleName, setEditingBundleName] = useState<string | null>(null)
@@ -109,10 +109,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
 
   // ── Create bundle ──
   const handleCreateBundle = () => {
-    const clips: AnimationClip[] = buildLayerTree(elements).map(({ el }) => ({
-      id: nanoid(), elementId: el.id, duration: 300, easing: 'ease' as const, tracks: [],
-    }))
-    const bundle: AnimationBundle = { id: nanoid(), name: `Animation ${animationBundles.length + 1}`, clips }
+    const bundle: AnimationBundle = { id: nanoid(), name: `Animation ${animationBundles.length + 1}`, clips: [] }
     addAnimationBundle(bundle)
     track('create-animation')
     setSelectedBundleId(bundle.id)
@@ -127,21 +124,22 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
   }
 
   // ── Playback ──
-  const handlePlayPause = () => {
-    if (previewState === 'playing') { pause(); return }
-    if (previewState === 'stopped') kfAnimator.saveSnapshot(useChoanStore.getState().elements)
-    play()
-  }
-
-  const handleStop = () => {
-    kfAnimator.stopAll()
-    const snapshot = kfAnimator.getSnapshot()
-    if (snapshot) {
-      const state = useChoanStore.getState()
-      state.loadFile({ elements: snapshot, animationClips: state.animationClips, animationBundles: state.animationBundles })
-      kfAnimator.clearSnapshot()
+  const handleTogglePlay = () => {
+    if (previewState === 'playing') {
+      // Stop: restore snapshot and reset
+      kfAnimator.stopAll()
+      const snapshot = kfAnimator.getSnapshot()
+      if (snapshot) {
+        const state = useChoanStore.getState()
+        state.loadFile({ elements: snapshot, animationClips: state.animationClips, animationBundles: state.animationBundles })
+        kfAnimator.clearSnapshot()
+      }
+      stop()
+    } else {
+      // Play: save snapshot and start
+      kfAnimator.saveSnapshot(useChoanStore.getState().elements)
+      play()
     }
-    stop()
   }
 
   // ── Video export ──
@@ -171,6 +169,7 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           layoutAnimator: exportAnimator,
           springParams: { stiffness: rs.springStiffness, damping: rs.springDamping, squashIntensity: 0 },
           manipulatedIds: new Set(),
+          scrubHeldIds: new Set(),
         })
 
         renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
@@ -236,19 +235,18 @@ export default function TimelinePanel({ visible, height }: TimelinePanelProps) {
           onChange={(v) => setDirectorMode(v === 'director')}
         />
         <div className="playback-controls">
-          <Tooltip content={previewState === 'playing' ? 'Pause' : 'Play'}>
-            <Button className="btn-small" onClick={handlePlayPause}>
-              {previewState === 'playing' ? <Pause size={14} weight="fill" /> : <Play size={14} weight="fill" />}
+          <Tooltip content={previewState === 'playing' ? 'Stop' : 'Play'}>
+            <Button className="btn-small" onClick={handleTogglePlay}>
+              {previewState === 'playing' ? <Stop size={14} weight="fill" /> : <Play size={14} weight="fill" />}
             </Button>
           </Tooltip>
-          <Tooltip content="Stop"><Button className="btn-small" onClick={handleStop}><Stop size={14} weight="fill" /></Button></Tooltip>
           <Tooltip content="New Animation"><Button className="btn-small" onClick={handleCreateBundle}><Plus size={14} /></Button></Tooltip>
           <Tooltip content="Ghost Preview"><Button className="btn-small" active={ghostPreview} onClick={toggleGhostPreview}><FilmStrip size={14} /></Button></Tooltip>
           <Tooltip content="Export Video">
             <Button className="btn-small" onClick={() => setExportDialogOpen(true)}><Export size={14} /></Button>
           </Tooltip>
-          {previewState !== 'stopped' && (
-            <span className="preview-state-label">{previewState === 'playing' ? 'Playing' : 'Paused'}</span>
+          {previewState === 'playing' && (
+            <span className="preview-state-label">Playing</span>
           )}
         </div>
         <div className="timeline-tabs">

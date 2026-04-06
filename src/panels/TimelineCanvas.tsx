@@ -112,12 +112,10 @@ export default function TimelineCanvas({
       if (!entry) return
       const kf = entry.clip.tracks[hit.trackIdx].keyframes[hit.kfIdx]
       dragRef.current = { layerIdx: hit.layerIdx, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx, startX: e.clientX, startTime: kf.time, bundleId: entry.bundleId }
-      const panelRect = canvasWrapRef.current?.getBoundingClientRect()
-      const canvasRect = tl.canvas.getBoundingClientRect()
       setSelectedKf({
         layerIdx: hit.layerIdx, trackIdx: hit.trackIdx, kfIdx: hit.kfIdx,
-        screenX: e.clientX - (panelRect?.left ?? canvasRect.left),
-        screenY: e.clientY - (panelRect?.top ?? canvasRect.top),
+        screenX: e.clientX,
+        screenY: e.clientY,
       })
       tl.canvas.setPointerCapture(e.pointerId)
       e.stopPropagation()

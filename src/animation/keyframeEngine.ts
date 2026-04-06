@@ -4,6 +4,7 @@
 import type { ChoanElement } from '../store/useChoanStore'
 import type { AnimationClip } from './types'
 import { evaluateTrack } from './interpolate'
+import { propagateParentDelta } from './propagateDelta'
 
 interface RunningAnimation {
   clip: AnimationClip
@@ -101,12 +102,16 @@ export function createKeyframeAnimator(): KeyframeAnimator {
       overrides.set(clip.elementId, { ...existing, ...patch })
     }
 
-    // Remove completed animations and persist final values
+    // Propagate parent delta BEFORE persisting so children get final positions
+    propagateParentDelta(elements, overrides)
+
+    // Remove completed animations and persist final values + descendant positions
     for (const id of completed) {
       const anim = running.get(id)
       if (anim && onComplete) {
         const finalValues = overrides.get(anim.clip.elementId)
         if (finalValues) onComplete(anim.clip.elementId, finalValues)
+        persistDescendantOverrides(elements, anim.clip.elementId, overrides, onComplete)
       }
       running.delete(id)
     }
@@ -137,5 +142,20 @@ export function createKeyframeAnimator(): KeyframeAnimator {
     saveSnapshot, getSnapshot, clearSnapshot,
     get onComplete() { return onComplete },
     set onComplete(cb: OnAnimationComplete | null) { onComplete = cb },
+  }
+}
+
+/** Persist inherited x/y overrides for descendants of a completed animation. */
+function persistDescendantOverrides(
+  elements: readonly ChoanElement[],
+  parentId: string,
+  overrides: Map<string, Partial<ChoanElement>>,
+  cb: OnAnimationComplete,
+) {
+  for (const el of elements) {
+    if (el.parentId !== parentId) continue
+    const patch = overrides.get(el.id)
+    if (patch) cb(el.id, patch)
+    persistDescendantOverrides(elements, el.id, overrides, cb)
   }
 }

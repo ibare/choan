@@ -7,6 +7,7 @@ import { Input } from '../components/ui/Input'
 import { Select } from '../components/ui/Select'
 import { Slider } from '../components/ui/Slider'
 import { Checkbox } from '../components/ui/Checkbox'
+import { KeyframeButton } from '../components/panels/KeyframeButton'
 
 interface Props {
   el: ChoanElement
@@ -36,12 +37,15 @@ export default function GeometrySection({ el, isChild, isManaged, isContainer, o
       </PropRow>
       {el.type === 'rectangle' && (
         <PropRow label="Radius">
-          <Slider
-            value={Math.round((el.radius ?? 0) * maxRadius)}
-            min={0} max={maxRadius} step={1}
-            formatValue={(v) => `${v}px`}
-            onChange={(v) => onUpdateAnimatable('radius', maxRadius > 0 ? v / maxRadius : 0)}
-          />
+          <div className="ui-row-gap-2" style={{ alignItems: 'center' }}>
+            <Slider
+              value={Math.round((el.radius ?? 0) * maxRadius)}
+              min={0} max={maxRadius} step={1}
+              formatValue={(v) => `${v}px`}
+              onChange={(v) => onUpdateAnimatable('radius', maxRadius > 0 ? v / maxRadius : 0)}
+            />
+            <KeyframeButton elementId={el.id} property="radius" value={el.radius ?? 0} />
+          </div>
         </PropRow>
       )}
 
@@ -83,11 +87,13 @@ export default function GeometrySection({ el, isChild, isManaged, isContainer, o
             value={String(Math.round(el.x))} disabled={isManaged}
             onChange={(e) => onUpdateAnimatable('x', Number(e.target.value))}
           />
+          <KeyframeButton elementId={el.id} property="x" value={el.x} />
           <Input
             type="number" inputSize="sm" placeholder="Y"
             value={String(Math.round(el.y))} disabled={isManaged}
             onChange={(e) => onUpdateAnimatable('y', Number(e.target.value))}
           />
+          <KeyframeButton elementId={el.id} property="y" value={el.y} />
         </div>
       </PropRow>
 
@@ -98,11 +104,13 @@ export default function GeometrySection({ el, isChild, isManaged, isContainer, o
             value={String(Math.round(el.width))} disabled={isManaged}
             onChange={(e) => onUpdateAnimatable('width', Number(e.target.value))}
           />
+          <KeyframeButton elementId={el.id} property="width" value={el.width} />
           <Input
             type="number" inputSize="sm" placeholder="H"
             value={String(Math.round(el.height))} disabled={isManaged}
             onChange={(e) => onUpdateAnimatable('height', Number(e.target.value))}
           />
+          <KeyframeButton elementId={el.id} property="height" value={el.height} />
         </div>
       </PropRow>
     </Section>

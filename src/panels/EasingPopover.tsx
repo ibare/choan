@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { Button } from '../components/ui/Button'
 import type { EasingType } from '../animation/types'
 import type { DisplayClipEntry } from './timelineTypes'
-import { LEFT_WIDTH, RULER_HEIGHT, LAYER_HEADER_HEIGHT, TRACK_HEIGHT } from './timelineTypes'
+// screenX/screenY are viewport coordinates (clientX/clientY)
 
 interface Props {
   layerIdx: number
@@ -23,8 +23,8 @@ export default function EasingPopover({ layerIdx, trackIdx, kfIdx, screenX, scre
   const entry = displayClips[layerIdx]
   const currentEasing = entry?.clip.tracks[trackIdx]?.keyframes[kfIdx]?.easing
 
-  const left = screenX + LEFT_WIDTH
-  const top = screenY + RULER_HEIGHT + LAYER_HEADER_HEIGHT + TRACK_HEIGHT
+  const left = screenX
+  const top = screenY
 
   return createPortal(
     <>
