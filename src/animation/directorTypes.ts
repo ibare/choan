@@ -28,10 +28,9 @@ export interface DirectorRails {
   boom:      RailExtents  // Y axis (up / down)
   truckMode: RailMode     // X axis rail mode
   boomMode:  RailMode     // Y axis rail mode
-  sphere:    number       // (legacy) orbit radius around target
 }
 
-export type RailAxis = 'dolly' | 'truck' | 'boom' | 'sphere'
+export type RailAxis = 'dolly' | 'truck' | 'boom'
 export type RailDir  = 'neg' | 'pos'
 export interface RailHandleId { axis: RailAxis; dir: RailDir }
 
@@ -46,7 +45,6 @@ export function createDefaultRails(): DirectorRails {
     boom:      defaultExtents(),
     truckMode: 'linear',
     boomMode:  'linear',
-    sphere:    RAIL_MIN_STUB,
   }
 }
 

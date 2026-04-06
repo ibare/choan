@@ -29,7 +29,6 @@ const TARGET_ATTACHED_COLOR:  [number, number, number, number] = [0.2, 0.9, 0.4,
 const HANDLE_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]        // white handle
 
 const TARGET_CROSS_LEN = 0.4  // world units for target cross arms
-const SPHERE_SEGMENTS  = 36   // line segments for sphere circle
 
 // Slider handle colors per axis (matching 3D convention: X=red, Y=green, Z=blue)
 const SLIDER_RING_X: [number, number, number, number] = [0.9, 0.3, 0.3, 1.0]
@@ -520,9 +519,6 @@ function drawRailAxes(
   drawOneSide(2,  1, rails.dolly.pos, dollyAnchored)
   drawOneSide(2, -1, rails.dolly.neg, dollyAnchored)
 
-  // Sphere rail — horizontal circle (XZ plane) around target
-  drawSphereRail(ov, cameraPos, targetPos, rails.sphere, dpr)
-
   // ── Slider handles on extended rails (camera position on the rail) ──
   // These replace the axis tunnels for extended axes.
   drawRailSliderHandles(ov, cameraPos, rails, dpr)
@@ -677,42 +673,6 @@ function drawArcSide(
   // Collect time label
   const basePt = pointFn(baseAngle)
   collectRailTimeLabel(labels, ov, s, ov.projectToScreen(basePt[0], basePt[1], basePt[2]), channel, sign, rails, dpr, axisAnchored)
-}
-
-function drawSphereRail(
-  ov: OverlayRenderer,
-  cameraPos: [number, number, number],
-  targetPos: [number, number, number],
-  radius: number,
-  dpr: number,
-): void {
-  const [tx, ty, tz] = targetPos
-  const isExtended = radius > RAIL_MIN_STUB + 0.001
-  // Sphere rail uses a neutral blue-ish color (not axis-specific)
-  const bodyColor: [number, number, number, number] = isExtended
-    ? [0.2, 0.5, 1.0, 0.15]
-    : [0.9, 0.2, 0.2, 0.2]
-
-  // Draw horizontal circle at target's Y height as tube
-  const path: [number, number, number][] = []
-  for (let i = 0; i <= SPHERE_SEGMENTS; i++) {
-    const a = (i / SPHERE_SEGMENTS) * Math.PI * 2
-    path.push([tx + Math.cos(a) * radius, ty, tz + Math.sin(a) * radius])
-  }
-  if (path.length >= 2) {
-    drawTubeAlongPathColored(ov, path, bodyColor, bodyColor)
-  }
-
-  // Handle: point on the circle closest to the camera (in XZ projection)
-  const dx = cameraPos[0] - tx
-  const dz = cameraPos[2] - tz
-  const dist = Math.sqrt(dx * dx + dz * dz)
-  if (dist > 0.001) {
-    const hx = tx + (dx / dist) * radius
-    const hz = tz + (dz / dist) * radius
-    const s = ov.projectToScreen(hx, ty, hz)
-    ov.drawDiscScreen(s.px, s.py, 8 * dpr, isExtended ? HANDLE_COLOR : RAIL_STUB_COLOR)
-  }
 }
 
 // ── Frustum wireframe helper (shared by keyframe rendering + rail UX) ────────

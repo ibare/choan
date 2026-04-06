@@ -125,18 +125,6 @@ function getRailHandlePositions(
   // Dolly (Z) handles — always linear
   handles.push({ handleId: { axis: 'dolly', dir: 'pos' }, wx: cx, wy: cy, wz: bz + o + rails.dolly.pos })
   handles.push({ handleId: { axis: 'dolly', dir: 'neg' }, wx: cx, wy: cy, wz: bz - o - rails.dolly.neg })
-  // Sphere handle: point on circle toward camera (XZ projection)
-  const dx = cx - tx
-  const dz = cz - tz
-  const dist = Math.sqrt(dx * dx + dz * dz)
-  if (dist > 0.001) {
-    handles.push({
-      handleId: { axis: 'sphere', dir: 'pos' },
-      wx: tx + (dx / dist) * rails.sphere,
-      wy: cy,
-      wz: tz + (dz / dist) * rails.sphere,
-    })
-  }
   return handles
 }
 
@@ -260,7 +248,6 @@ export function computeRailHandleDrag(
   origCanvasY: number,  // for dolly (Y-drag → Z extent)
 ): number {
   const [cx, cy, cz] = cameraPos
-  const [tx, , tz] = targetPos
   const [wx, wy] = pixelToWorld(canvasX, canvasY)
 
   const o = RAIL_OFFSET
@@ -274,12 +261,6 @@ export function computeRailHandleDrag(
       const [, origWy] = pixelToWorld(canvasX, origCanvasY)
       const delta = (wy - origWy) * (handle.dir === 'neg' ? 1 : -1)
       return Math.max(RAIL_MIN_STUB, origExtent + delta)
-    }
-    case 'sphere': {
-      // Distance from target in XZ plane
-      const dx = wx - tx
-      const dz = wy - tz  // wy used as Z (top-down XZ view)
-      return Math.max(RAIL_MIN_STUB, Math.sqrt(dx * dx + dz * dz))
     }
     default:
       return Math.max(RAIL_MIN_STUB, origExtent)

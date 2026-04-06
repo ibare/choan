@@ -334,33 +334,29 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   extendRail: (axis, dir, newExtent) => {
     const extent = Math.max(RAIL_MIN_STUB, newExtent)
     const { directorRails, activeClipId } = get()
-    if (axis === 'sphere') {
-      set({ directorRails: { ...directorRails, sphere: extent } })
-    } else {
-      const oldExtent = directorRails[axis][dir]
-      const isNewlyExtended = oldExtent <= RAIL_MIN_STUB + 0.001 && extent > RAIL_MIN_STUB + 0.001
-      let timingPatch: Partial<import('../animation/directorTypes').RailExtents> = {}
-      if (isNewlyExtended) {
-        // Auto-set timing when rail transitions from stub to extended
-        let clipDuration = 3000
-        if (activeClipId) {
-          const { scenes, activeSceneId } = useSceneStore.getState()
-          const scene = scenes.find((sc) => sc.id === activeSceneId)
-          const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
-          const clip = dt.cameraClips.find((c) => c.id === activeClipId)
-          if (clip) clipDuration = clip.duration
-        }
-        timingPatch = { startTime: 0, endTime: clipDuration }
+    const oldExtent = directorRails[axis][dir]
+    const isNewlyExtended = oldExtent <= RAIL_MIN_STUB + 0.001 && extent > RAIL_MIN_STUB + 0.001
+    let timingPatch: Partial<import('../animation/directorTypes').RailExtents> = {}
+    if (isNewlyExtended) {
+      // Auto-set timing when rail transitions from stub to extended
+      let clipDuration = 3000
+      if (activeClipId) {
+        const { scenes, activeSceneId } = useSceneStore.getState()
+        const scene = scenes.find((sc) => sc.id === activeSceneId)
+        const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+        const clip = dt.cameraClips.find((c) => c.id === activeClipId)
+        if (clip) clipDuration = clip.duration
       }
-      set({
-        directorRails: {
-          ...directorRails,
-          [axis]: { ...directorRails[axis], [dir]: extent, ...timingPatch },
-        },
-        // Auto-select the axis being extended for M key stamping
-        activeRailAxis: axis as AxisMarkChannel,
-      })
+      timingPatch = { startTime: 0, endTime: clipDuration }
     }
+    set({
+      directorRails: {
+        ...directorRails,
+        [axis]: { ...directorRails[axis], [dir]: extent, ...timingPatch },
+      },
+      // Auto-select the axis being extended for M key stamping
+      activeRailAxis: axis as AxisMarkChannel,
+    })
   },
 
   setDirectorCameraAxisHover: (hover) => set({ directorCameraAxisHover: hover }),
