@@ -21,7 +21,7 @@ import type { RenderOptions } from '../engine/timeline2dTypes'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { generateCameraPreset, CAMERA_PRESET_OPTIONS, type CameraPresetType } from '../animation/cameraPresets'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
-import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
+import { evaluateBundles } from '../animation/animationEvaluator'
 import { createVideoExporter } from '../engine/videoExporter'
 import { applyMultiSelectTint } from '../rendering/multiSelectTint'
 import VideoExportDialog, { type VideoExportSettings } from './VideoExportDialog'
@@ -422,7 +422,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     }
     ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
     ctx.font = '500 11px Inter, system-ui, sans-serif'
-    ctx.fillText('⚡ Events', 8, RULER_H + camAreaH + TRACK_H / 2 + 4)
+    ctx.fillText('⚡ Animations', 8, RULER_H + camAreaH + TRACK_H / 2 + 4)
   }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId, axisMarksData, hasAxisMarks, selectedAxisMarkId, selectedAxisMarkChannel, cameraClips, isDetailView, activeClip, viewDuration, selectedClipId, activeRailAxis, directorRails, hasRailTiming, hasAnyExtendedRail])
 
   useEffect(() => { draw() }, [draw])
@@ -943,11 +943,12 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
           renderer.camera.fov = camState.fov
         }
 
-        // Events — clip-local when active, else top-level
-        const evMarkers = activeClipForFrame ? activeClipForFrame.eventMarkers : dt.eventMarkers
-        const evTime = activeClipForFrame ? timeMs - activeClipForFrame.timelineStart : timeMs
-        const activeEvents = evaluateDirectorEvents(evMarkers, evTime, state.animationBundles)
-        const animated = evaluateDirectorFrame(state.elements, activeEvents)
+        // Animation events — always top-level at absolute time
+        const activeEvents = evaluateDirectorEvents(dt.eventMarkers, timeMs, state.animationBundles)
+        const activeBundles = activeEvents.map((e) => ({ bundle: e.bundle, localTime: e.localTime }))
+        const animated = activeBundles.length > 0
+          ? evaluateBundles(state.elements, activeBundles)
+          : state.elements
 
         renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
         renderer.applyPendingResize()
@@ -1091,7 +1092,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
             options={bundleOptions}
             value=""
             onChange={handleAddEvent}
-            placeholder="+ Event"
+            placeholder="+ Animation"
             size="sm"
           />
         )}

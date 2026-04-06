@@ -17,6 +17,11 @@ import { resolveEasing } from './easing'
 import { propagateParentDelta } from './propagateDelta'
 import type { AnimatableProperty } from './types'
 
+export interface ActiveBundleInput {
+  bundle: AnimationBundle
+  localTime: number
+}
+
 export interface AnimationEvalInput {
   elements: ChoanElement[]
   previewState: PreviewState
@@ -28,6 +33,8 @@ export interface AnimationEvalInput {
   springParams: SpringParams
   manipulatedIds: ReadonlySet<string>
   scrubHeldIds: ReadonlySet<string>
+  /** Director mode: multiple bundles evaluated simultaneously */
+  activeBundles?: ActiveBundleInput[]
 }
 
 /**
@@ -47,7 +54,13 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
     springParams,
     manipulatedIds,
     scrubHeldIds,
+    activeBundles,
   } = input
+
+  // 0. Director mode — multiple bundles evaluated simultaneously
+  if (activeBundles && activeBundles.length > 0) {
+    return evaluateBundles(elements, activeBundles)
+  }
 
   // 1. Playback mode — keyframe engine drives all values
   if (previewState === 'playing') {
@@ -60,18 +73,7 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
   if (editingBundleId && previewState === 'stopped') {
     const bundle = animationBundles.find((b) => b.id === editingBundleId)
     if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
-      const overrides = new Map<string, Partial<ChoanElement>>()
-      for (const clip of bundle.clips) {
-        if (clip.tracks.length === 0) continue
-        const easingFn = resolveEasing(clip.easing)
-        const patch: Partial<ChoanElement> = {}
-        for (const track of clip.tracks) {
-          ;(patch as Record<string, number>)[track.property] = evaluateTrack(
-            track.keyframes, playheadTime, easingFn, track.property as AnimatableProperty,
-          )
-        }
-        overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
-      }
+      const overrides = collectBundleOverrides([{ bundle, localTime: playheadTime }])
 
       propagateParentDelta(elements, overrides)
 
@@ -89,4 +91,36 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
 
   // 3. Editing mode — spring physics
   return layoutAnimator.tick(elements, springParams, manipulatedIds.size > 0 ? manipulatedIds : undefined)
+}
+
+/** Collect property overrides from multiple bundles. Last-write-wins for conflicts. */
+function collectBundleOverrides(bundles: ActiveBundleInput[]): Map<string, Partial<ChoanElement>> {
+  const overrides = new Map<string, Partial<ChoanElement>>()
+  for (const { bundle, localTime } of bundles) {
+    for (const clip of bundle.clips) {
+      if (clip.tracks.length === 0) continue
+      const easingFn = resolveEasing(clip.easing)
+      const patch: Partial<ChoanElement> = {}
+      for (const track of clip.tracks) {
+        ;(patch as Record<string, number>)[track.property] = evaluateTrack(
+          track.keyframes, localTime, easingFn, track.property as AnimatableProperty,
+        )
+      }
+      overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
+    }
+  }
+  return overrides
+}
+
+/** Evaluate multiple bundles and apply overrides with parent-child propagation. */
+export function evaluateBundles(elements: ChoanElement[], bundles: ActiveBundleInput[]): ChoanElement[] {
+  const overrides = collectBundleOverrides(bundles)
+  if (overrides.size === 0) return elements
+
+  propagateParentDelta(elements, overrides)
+
+  return elements.map((el) => {
+    const patch = overrides.get(el.id)
+    return patch ? { ...el, ...patch } : el
+  })
 }

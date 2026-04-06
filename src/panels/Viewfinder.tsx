@@ -6,9 +6,11 @@ import { useRef, useEffect } from 'react'
 import { useDirectorStore } from '../store/useDirectorStore'
 import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
+import { useSceneStore } from '../store/useSceneStore'
+import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
-import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
+import { evaluateBundles } from '../animation/animationEvaluator'
 import { Section } from '../components/ui/Section'
 
 export default function Viewfinder() {
@@ -61,11 +63,15 @@ export default function Viewfinder() {
     renderer.resizeViewport(cssW, cssH)
     renderer.applyPendingResize()
 
-    // Evaluate top-level events at playhead time
+    // Evaluate animation events at playhead time
     const state = useChoanStore.getState()
-    const activeEvents = evaluateDirectorEvents([], directorPlayheadTime, state.animationBundles)
-    const animated = activeEvents.length > 0
-      ? evaluateDirectorFrame(state.elements, activeEvents)
+    const sceneState = useSceneStore.getState()
+    const activeScene = sceneState.scenes.find((s) => s.id === sceneState.activeSceneId)
+    const dt = activeScene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const activeEvents = evaluateDirectorEvents(dt.eventMarkers, directorPlayheadTime, state.animationBundles)
+    const activeBundles = activeEvents.map((e) => ({ bundle: e.bundle, localTime: e.localTime }))
+    const animated = activeBundles.length > 0
+      ? evaluateBundles(state.elements, activeBundles)
       : state.elements
 
     // Render one frame

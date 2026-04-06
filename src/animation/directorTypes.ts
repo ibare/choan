@@ -205,7 +205,6 @@ export interface CameraClip {
   duration: number         // clip length in ms (default 3000)
   cameraSetup: DirectorCameraSetup
   focalLengthMm: number   // per-clip focal length
-  eventMarkers: EventMarker[]  // clip-local times (0 to duration)
 }
 
 const DEFAULT_CLIP_DURATION = 3000
@@ -226,7 +225,6 @@ export function createDefaultCameraClip(setup?: DirectorCameraSetup, cameraId?: 
       targetAttachedTo: null,
     },
     focalLengthMm: 38,
-    eventMarkers: [],
   }
 }
 
@@ -300,7 +298,6 @@ export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline 
     const camId = result.cameras[0]?.id ?? ''
     const clip = createDefaultCameraClip(result.cameraSetup, camId)
     clip.id = 'migrated-clip'
-    clip.eventMarkers = (result.eventMarkers ?? []).map(e => ({ ...e }))
     result.cameraClips = [clip]
   }
 

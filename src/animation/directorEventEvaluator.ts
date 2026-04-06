@@ -32,12 +32,14 @@ export function evaluateDirectorEvents(
     const effectiveDuration = marker.durationOverride ?? bundleDuration
     const markerEnd = marker.time + effectiveDuration
 
-    if (absoluteTime >= marker.time && absoluteTime < markerEnd) {
-      let localTime = absoluteTime - marker.time
+    if (absoluteTime >= marker.time) {
+      let localTime = Math.min(absoluteTime - marker.time, effectiveDuration)
 
-      // If durationOverride is set, scale local time to match original bundle duration
+      // Scale local time to match original bundle duration
       if (marker.durationOverride && marker.durationOverride !== bundleDuration) {
         localTime = (localTime / marker.durationOverride) * bundleDuration
+      } else if (localTime >= effectiveDuration) {
+        localTime = bundleDuration  // clamp to end
       }
 
       result.push({ bundleId: marker.bundleId, localTime, bundle })

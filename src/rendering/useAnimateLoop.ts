@@ -24,7 +24,7 @@ import { tickExportAnim, getExportAnim, phaseProgress } from '../animation/expor
 import { useDirectorStore } from '../store/useDirectorStore'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
-import { evaluateDirectorFrame } from '../animation/directorAnimationEvaluator'
+import type { ActiveBundleInput } from '../animation/animationEvaluator'
 import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, type CameraMark, type AxisMarkChannel, type CameraClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { nanoid } from '../utils/nanoid'
@@ -115,6 +115,7 @@ export function useAnimateLoop({
       const preview = usePreviewStore.getState()
 
       // ── Director mode playback ──
+      let directorBundles: ActiveBundleInput[] | undefined
       const director = useDirectorStore.getState()
       if (director.directorMode && director.directorPlaying) {
         // Advance playhead
@@ -175,20 +176,10 @@ export function useAnimateLoop({
             cam.fov = camState.fov
           }
 
-          // Event evaluation — clip-local markers when active, else top-level
-          if (activeClip) {
-            const localTime = elapsed - activeClip.timelineStart
-            const activeEvents = evaluateDirectorEvents(activeClip.eventMarkers, localTime, state.animationBundles)
-            if (activeEvents.length > 0) {
-              const animated = evaluateDirectorFrame(state.elements, activeEvents)
-              animatedElementsRef.current = animated
-            }
-          } else {
-            const activeEvents = evaluateDirectorEvents(dt.eventMarkers, elapsed, state.animationBundles)
-            if (activeEvents.length > 0) {
-              const animated = evaluateDirectorFrame(state.elements, activeEvents)
-              animatedElementsRef.current = animated
-            }
+          // Animation events — always evaluated at absolute time from top-level markers
+          const activeEvents = evaluateDirectorEvents(dt.eventMarkers, elapsed, state.animationBundles)
+          if (activeEvents.length > 0) {
+            directorBundles = activeEvents.map((e) => ({ bundle: e.bundle, localTime: e.localTime }))
           }
         }
 
@@ -214,6 +205,7 @@ export function useAnimateLoop({
         animationBundles: state.animationBundles, kfAnimator, layoutAnimator: animator,
         springParams: { stiffness: rs.springStiffness, damping: rs.springDamping, squashIntensity: rs.squashIntensity },
         manipulatedIds, scrubHeldIds: preview.scrubHeldIds,
+        activeBundles: directorBundles,
       })
 
       animatedElementsRef.current = animatedElements
