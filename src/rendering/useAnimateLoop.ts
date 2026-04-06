@@ -446,14 +446,14 @@ export function useAnimateLoop({
             )
             railTimeLabelsRef.current = railLabels
 
-            // Elevation angle: viewport camera → director target
+            // Tilt angle: view camera forward vs Z axis (0°=top-down, 90°=side)
             {
-              const [cx, cy, cz] = renderer.camera.position
+              const camPos = renderer.camera.position
+              const camTgt = renderer.camera.target
+              const fwdX = camTgt[0] - camPos[0], fwdY = camTgt[1] - camPos[1], fwdZ = camTgt[2] - camPos[2]
+              const fwdLen = Math.sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ)
+              const tiltDeg = fwdLen > 0.001 ? Math.acos(Math.min(1, Math.abs(fwdZ) / fwdLen)) * (180 / Math.PI) : 0
               const [tx, ty, tz] = dirState.directorTargetPos
-              const dx = tx - cx, dy = ty - cy, dz = tz - cz
-              const horizontal = Math.sqrt(dx * dx + dy * dy)
-              const elevDeg = Math.abs(Math.atan2(dz, horizontal) * (180 / Math.PI))
-              const tiltDeg = 90 - elevDeg  // 0°=top-down, 90°=side
               const tScreen = renderer.overlay.projectToScreen(tx, ty, tz)
               const elData = { deg: tiltDeg, screenX: tScreen.px, screenY: tScreen.py }
               elevationAngleRef.current = elData

@@ -238,9 +238,7 @@ export function usePointerHandlers({
             lastRailClickAxisRef.current = axisKey
 
             const rails = director.directorRails
-            const origExtent = axis === 'sphere'
-              ? rails.sphere
-              : rails[axis][dir]
+            const origExtent = rails[axis][dir]
             // Compute ray T at drag start for ray-based rail drag
             const railAxisIdx = axis === 'truck' ? 0 : axis === 'boom' ? 1 : 2
             const railSign = dir === 'pos' ? 1 : -1
@@ -266,13 +264,12 @@ export function usePointerHandlers({
           director.directorTargetPos, 14,
         )
         if (targetHit) {
-          // Block drag when elevation angle is too shallow for meaningful XY control
-          const [vcx, vcy, vcz] = renderer.camera.position
-          const [vtx, vty, vtz] = director.directorTargetPos
-          const vdx = vtx - vcx, vdy = vty - vcy, vdz = vtz - vcz
-          const hLen = Math.sqrt(vdx * vdx + vdy * vdy)
-          const elevDeg = Math.abs(Math.atan2(vdz, hLen) * (180 / Math.PI))
-          const tiltDeg = 90 - elevDeg
+          // Block drag when view camera is too tilted for meaningful XY control
+          const camPos = renderer.camera.position
+          const camTgt = renderer.camera.target
+          const fwdX = camTgt[0] - camPos[0], fwdY = camTgt[1] - camPos[1], fwdZ = camTgt[2] - camPos[2]
+          const fwdLen = Math.sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ)
+          const tiltDeg = fwdLen > 0.001 ? Math.acos(Math.min(1, Math.abs(fwdZ) / fwdLen)) * (180 / Math.PI) : 0
           if (tiltDeg > TARGET_DRAG_MAX_TILT_DEG) return
 
           // Drag on Z-fixed plane (XY movement only, no depth change)
@@ -729,21 +726,19 @@ export function usePointerHandlers({
         const rect = renderer.canvas.getBoundingClientRect()
         const { w, h } = canvasSizeRef.current
         const { axis, dir } = dragRailHandleRef.current.handleId
-        if (axis !== 'sphere') {
-          const railAxisIdx = axis === 'truck' ? 0 : axis === 'boom' ? 1 : 2
-          const railSign = dir === 'pos' ? 1 : -1
-          const railAxisDir: [number, number, number] = [0, 0, 0]; railAxisDir[railAxisIdx] = railSign
-          const director = useDirectorStore.getState()
-          const railBase: [number, number, number] = [...director.directorCameraPos]
-          railBase[railAxisIdx] += railSign * RAIL_OFFSET
-          const rayP = getCameraRayParams(renderer.camera)
-          const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
-          const currentT = rayAxisClosestT(ro, rd, railBase, railAxisDir)
-          if (currentT !== null) {
-            const delta = currentT - dragRailStartTRef.current
-            const newExtent = Math.max(0.5, dragRailOrigExtentRef.current + delta)
-            useDirectorStore.getState().extendRail(axis, dir, newExtent)
-          }
+        const railAxisIdx = axis === 'truck' ? 0 : axis === 'boom' ? 1 : 2
+        const railSign = dir === 'pos' ? 1 : -1
+        const railAxisDir: [number, number, number] = [0, 0, 0]; railAxisDir[railAxisIdx] = railSign
+        const director = useDirectorStore.getState()
+        const railBase: [number, number, number] = [...director.directorCameraPos]
+        railBase[railAxisIdx] += railSign * RAIL_OFFSET
+        const rayP = getCameraRayParams(renderer.camera)
+        const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+        const currentT = rayAxisClosestT(ro, rd, railBase, railAxisDir)
+        if (currentT !== null) {
+          const delta = currentT - dragRailStartTRef.current
+          const newExtent = Math.max(0.5, dragRailOrigExtentRef.current + delta)
+          useDirectorStore.getState().extendRail(axis, dir, newExtent)
         }
       }
       return
