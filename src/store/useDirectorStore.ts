@@ -14,6 +14,7 @@ import {
   ensureAxisMarks,
   AXIS_MARK_IDX,
   RAIL_MIN_STUB,
+  assignLane,
   type CameraClip,
   type CameraMark,
   type CameraViewKeyframe,
@@ -445,6 +446,11 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     clip.name = `Camera ${clipCount + 1}`
     clip.timelineStart = s.directorPlayheadTime
     clip.focalLengthMm = s.focalLengthMm
+    clip.lane = assignLane(
+      dt.cameraClips.map((c) => ({ time: c.timelineStart, duration: c.duration, lane: c.lane })),
+      clip.timelineStart,
+      clip.duration,
+    )
 
     updateActiveSceneDirectorTimeline((prev) => ({
       ...prev,

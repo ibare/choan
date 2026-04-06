@@ -13,7 +13,7 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
-import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark, type CameraClip } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, assignLane, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark, type CameraClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
@@ -92,7 +92,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     id: string; mode: 'move' | 'resize'
     channel?: AxisMarkChannel
     edge?: 'start' | 'end' | 'body' | 'left' | 'right'
-    startX: number; startTime: number; startDuration: number
+    startX: number; startY: number; startTime: number; startDuration: number
+    startLane?: number
   } | null>(null)
 
   const scene = scenes.find((s) => s.id === activeSceneId)
@@ -108,12 +109,29 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     cameraClips.length > 0 ? Math.max(...cameraClips.map(c => c.timelineStart + c.duration)) : sceneDuration
   )
 
+  // Lane-based track count: derive from max lane used by camera clips
+  const camTrackCount = !isDetailView && cameraClips.length > 0
+    ? Math.max(0, ...cameraClips.map((c) => c.lane ?? 0)) + 1
+    : 0
+
   const hasRailTiming = hasActiveRailTiming(directorRails)
   const hasAnyExtendedRail = (() => {
     const stub = RAIL_MIN_STUB + 0.001
     const { truck, boom, dolly } = directorRails
     return truck.neg > stub || truck.pos > stub || boom.neg > stub || boom.pos > stub || dolly.neg > stub || dolly.pos > stub
   })()
+  const showAxisTracks = isDetailView || hasAxisMarks || hasRailTiming || hasAnyExtendedRail
+  const camAreaH = isDetailView
+    ? AXIS_TRACK_H * 3
+    : camTrackCount > 0
+      ? TRACK_H * camTrackCount
+      : showAxisTracks ? AXIS_TRACK_H * 3 : TRACK_H
+
+  // Animation (event marker) lane count
+  const evtTrackCount = dt.eventMarkers.length > 0
+    ? Math.max(0, ...dt.eventMarkers.map((m) => m.lane ?? 0)) + 1
+    : 1
+  const evtAreaH = TRACK_H * evtTrackCount
 
   // ── Canvas rendering ──
   const draw = useCallback(() => {
@@ -129,6 +147,12 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     canvas.height = Math.round(h * dpr)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, w, h)
+
+    // Resolve CSS custom properties for canvas rendering
+    const cs = getComputedStyle(canvas)
+    const colorSurface2 = cs.getPropertyValue('--surface-2').trim() || '#1e1e3a'
+    const colorBg = cs.getPropertyValue('--bg').trim() || '#141428'
+    const colorBorder = cs.getPropertyValue('--border').trim() || '#333'
 
     // Adjust playhead display for detail view (clip-local time)
     const displayPlayhead = isDetailView && activeClip
@@ -159,53 +183,52 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ctx.restore()
 
     // ── Camera track ──
-    // Clip view: camera clips as horizontal bars
-    // Detail view: axis sub-tracks (rail timing bars)
-    const showAxisTracks = isDetailView || hasAxisMarks || hasRailTiming || hasAnyExtendedRail
-    const camAreaH = isDetailView ? AXIS_TRACK_H * 3 : (
-      !isDetailView && cameraClips.length > 0 ? TRACK_H : (showAxisTracks ? AXIS_TRACK_H * 3 : TRACK_H)
-    )
+    // Lane-to-Y: highest lane at top, lane 0 at bottom
+    const camLaneToY = (lane: number) => RULER_H + (camTrackCount - 1 - lane) * TRACK_H
 
-    if (!isDetailView && cameraClips.length > 0) {
-      // ── Clip View: camera clips as bars ──
-      const camTrackY = RULER_H
-      ctx.fillStyle = 'var(--surface-2)'
-      ctx.fillRect(SIDEBAR_W, camTrackY, w - SIDEBAR_W, TRACK_H)
-      ctx.strokeStyle = 'var(--border)'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.moveTo(SIDEBAR_W, Math.round(camTrackY + TRACK_H) - 0.5)
-      ctx.lineTo(w, Math.round(camTrackY + TRACK_H) - 0.5)
-      ctx.stroke()
-
+    if (camTrackCount > 0) {
+      // ── Clip View: lane-based NLE layout ──
       const CLIP_COLOR = '#5b4fcf'
+      for (let lane = 0; lane < camTrackCount; lane++) {
+        const trackY = camLaneToY(lane)
+        // Track background
+        ctx.fillStyle = lane % 2 === 0 ? colorSurface2 : colorBg
+        ctx.fillRect(SIDEBAR_W, trackY, w - SIDEBAR_W, TRACK_H)
+        // Track border
+        ctx.strokeStyle = colorBorder
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(SIDEBAR_W, Math.round(trackY + TRACK_H) - 0.5)
+        ctx.lineTo(w, Math.round(trackY + TRACK_H) - 0.5)
+        ctx.stroke()
+      }
+
+      // Draw clips by lane
       for (const clip of cameraClips) {
+        const lane = clip.lane ?? 0
+        const trackY = camLaneToY(lane)
         const x0 = msToX(clip.timelineStart)
         const x1 = msToX(clip.timelineStart + clip.duration)
-        const barY = camTrackY + 4
+        const barY = trackY + 4
         const barH = TRACK_H - 8
         const isSelected = clip.id === selectedClipId
 
-        // Clip bar body
         ctx.fillStyle = isSelected ? CLIP_COLOR + 'aa' : CLIP_COLOR + '55'
         ctx.beginPath()
-        const r = 4
-        ctx.roundRect(x0, barY, x1 - x0, barH, r)
+        ctx.roundRect(x0, barY, x1 - x0, barH, 4)
         ctx.fill()
 
-        // Border
         ctx.strokeStyle = isSelected ? '#fff' : CLIP_COLOR + 'cc'
         ctx.lineWidth = isSelected ? 2 : 1
         ctx.beginPath()
-        ctx.roundRect(x0, barY, x1 - x0, barH, r)
+        ctx.roundRect(x0, barY, x1 - x0, barH, 4)
         ctx.stroke()
 
-        // Clip name
         if (x1 - x0 > 60) {
           ctx.fillStyle = '#fff'
           ctx.font = '11px system-ui'
           ctx.textBaseline = 'middle'
-          ctx.fillText(clip.name, x0 + 8, camTrackY + TRACK_H / 2, x1 - x0 - 16)
+          ctx.fillText(clip.name, x0 + 8, trackY + TRACK_H / 2, x1 - x0 - 16)
         }
       }
     } else if (showAxisTracks) {
@@ -219,7 +242,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
         // Track background
         const isExtended = ext.neg > RAIL_MIN_STUB + 0.001 || ext.pos > RAIL_MIN_STUB + 0.001
-        ctx.fillStyle = ci % 2 === 0 ? 'var(--surface-2)' : 'var(--bg)'
+        ctx.fillStyle = ci % 2 === 0 ? colorSurface2 : colorBg
         ctx.fillRect(SIDEBAR_W, trackY, w - SIDEBAR_W, AXIS_TRACK_H)
 
         // Dimmed if rail not extended
@@ -280,7 +303,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         }
       }
       // Bottom border
-      ctx.strokeStyle = 'var(--border)'
+      ctx.strokeStyle = colorBorder
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(SIDEBAR_W, Math.round(RULER_H + camAreaH) - 0.5)
@@ -289,9 +312,9 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     } else {
       // Unified camera track (legacy)
       const camY = RULER_H + TRACK_H / 2
-      ctx.fillStyle = 'var(--surface-2)'
+      ctx.fillStyle = colorSurface2
       ctx.fillRect(SIDEBAR_W, RULER_H, w - SIDEBAR_W, TRACK_H)
-      ctx.strokeStyle = 'var(--border)'
+      ctx.strokeStyle = colorBorder
       ctx.lineWidth = 1
       ctx.beginPath()
       ctx.moveTo(SIDEBAR_W, Math.round(RULER_H + TRACK_H) - 0.5)
@@ -332,10 +355,20 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       }
     }
 
-    // ── Events track ──
-    const evtY = RULER_H + camAreaH
-    ctx.fillStyle = 'var(--bg)'
-    ctx.fillRect(SIDEBAR_W, evtY, w - SIDEBAR_W, TRACK_H)
+    // ── Animations track (lane-based, highest lane at top) ──
+    const evtBaseY = RULER_H + camAreaH
+    const evtLaneToY = (lane: number) => evtBaseY + (evtTrackCount - 1 - lane) * TRACK_H
+    for (let lane = 0; lane < evtTrackCount; lane++) {
+      const trackY = evtLaneToY(lane)
+      ctx.fillStyle = lane % 2 === 0 ? colorBg : colorSurface2
+      ctx.fillRect(SIDEBAR_W, trackY, w - SIDEBAR_W, TRACK_H)
+      ctx.strokeStyle = colorBorder
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(SIDEBAR_W, Math.round(trackY + TRACK_H) - 0.5)
+      ctx.lineTo(w, Math.round(trackY + TRACK_H) - 0.5)
+      ctx.stroke()
+    }
 
     const BUNDLE_COLORS = ['#5b4fcf', '#cf5b4f', '#4fcf5b', '#cf9f4f', '#4f9fcf', '#9f4fcf']
     for (let i = 0; i < dt.eventMarkers.length; i++) {
@@ -344,6 +377,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       if (!bundle) continue
       const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
       const effectiveDur = marker.durationOverride ?? bundleDur
+      const lane = marker.lane ?? 0
+      const trackY = evtLaneToY(lane)
       const x = msToX(marker.time)
       const barW = effectiveDur * PX_PER_MS
       const color = BUNDLE_COLORS[i % BUNDLE_COLORS.length]
@@ -353,19 +388,19 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
       ctx.fillStyle = isSelected ? color + 'cc' : color + '88'
       ctx.beginPath()
-      ctx.roundRect(x, evtY + 4, drawBarW, TRACK_H - 8, 3)
+      ctx.roundRect(x, trackY + 4, drawBarW, TRACK_H - 8, 3)
       ctx.fill()
 
       ctx.strokeStyle = isSelected ? '#fff' : color
       ctx.lineWidth = isSelected ? 2 : 1
       ctx.beginPath()
-      ctx.roundRect(x, evtY + 4, drawBarW, TRACK_H - 8, 3)
+      ctx.roundRect(x, trackY + 4, drawBarW, TRACK_H - 8, 3)
       ctx.stroke()
       ctx.lineWidth = 1
 
       if (isSelected) {
         ctx.fillStyle = '#fff'
-        ctx.fillRect(x + drawBarW - 3, evtY + 8, 2, TRACK_H - 16)
+        ctx.fillRect(x + drawBarW - 3, trackY + 8, 2, TRACK_H - 16)
       }
 
       ctx.fillStyle = '#fff'
@@ -373,7 +408,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       ctx.textAlign = 'left'
       const labelX = x + 4
       if (labelX + 20 < x + drawBarW) {
-        ctx.fillText(bundle.name, labelX, evtY + TRACK_H / 2 + 3, drawBarW - 8)
+        ctx.fillText(bundle.name, labelX, trackY + TRACK_H / 2 + 3, drawBarW - 8)
       }
     }
 
@@ -408,8 +443,9 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         ctx.fillStyle = AXIS_COLORS[ch]
         ctx.fillText(AXIS_LABELS[ch], 8, RULER_H + ci * AXIS_TRACK_H + AXIS_TRACK_H / 2 + 4)
       }
-    } else if (!isDetailView && cameraClips.length > 0) {
-      ctx.fillText('🎥 Cameras', 8, RULER_H + TRACK_H / 2 + 4)
+    } else if (camTrackCount > 0) {
+      // First track gets the section label; additional lanes are unlabelled
+      ctx.fillText('Camera', 8, RULER_H + TRACK_H / 2 + 4)
     } else if (showAxisTracks) {
       ctx.font = '500 10px Inter, system-ui, sans-serif'
       for (let ci = 0; ci < AXIS_CHANNELS.length; ci++) {
@@ -422,8 +458,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     }
     ctx.fillStyle = sidebarStyle.getPropertyValue('--text-2').trim() || '#aaa'
     ctx.font = '500 11px Inter, system-ui, sans-serif'
-    ctx.fillText('⚡ Animations', 8, RULER_H + camAreaH + TRACK_H / 2 + 4)
-  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId, axisMarksData, hasAxisMarks, selectedAxisMarkId, selectedAxisMarkChannel, cameraClips, isDetailView, activeClip, viewDuration, selectedClipId, activeRailAxis, directorRails, hasRailTiming, hasAnyExtendedRail])
+    ctx.fillText('Animations', 8, RULER_H + camAreaH + TRACK_H / 2 + 4)
+  }, [dt, sceneDuration, directorPlayheadTime, animationBundles, selectedMarkerId, selectedCameraKfId, selectedCameraMarkId, axisMarksData, hasAxisMarks, selectedAxisMarkId, selectedAxisMarkChannel, cameraClips, isDetailView, activeClip, viewDuration, selectedClipId, activeRailAxis, directorRails, hasRailTiming, hasAnyExtendedRail, camTrackCount, camAreaH, evtTrackCount, evtAreaH])
 
   useEffect(() => { draw() }, [draw])
 
@@ -474,11 +510,15 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   const EDGE_ZONE = 8  // px from edge for resize handle
 
+  const camLaneToYHit = (lane: number) => RULER_H + (camTrackCount - 1 - lane) * TRACK_H
+  const evtLaneToYHit = (lane: number) => RULER_H + camAreaH + (evtTrackCount - 1 - lane) * TRACK_H
+
   const hitTestCameraClip = (localX: number, localY: number): { clip: CameraClip; edge: 'left' | 'right' | 'body' } | null => {
-    if (isDetailView || cameraClips.length === 0) return null
-    const camTrackY = RULER_H
-    if (localY < camTrackY + 4 || localY >= camTrackY + TRACK_H - 4) return null
+    if (isDetailView || camTrackCount === 0) return null
     for (const clip of cameraClips) {
+      const lane = clip.lane ?? 0
+      const trackY = camLaneToYHit(lane)
+      if (localY < trackY + 4 || localY >= trackY + TRACK_H - 4) continue
       const x0 = SIDEBAR_W + LEFT_PAD + clip.timelineStart * PX_PER_MS
       const x1 = SIDEBAR_W + LEFT_PAD + (clip.timelineStart + clip.duration) * PX_PER_MS
       if (Math.abs(localX - x0) < EDGE_ZONE) return { clip, edge: 'left' }
@@ -524,10 +564,12 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   const hitTestEventBar = (localX: number, localY: number): { marker: EventMarker; isEdge: boolean } | null => {
-    const camAreaH = (hasAxisMarks || hasRailTiming) ? AXIS_TRACK_H * 3 : TRACK_H
-    const evtY = RULER_H + camAreaH
-    if (localY < evtY || localY >= evtY + TRACK_H) return null
+    const evtBaseY = RULER_H + camAreaH
+    if (localY < evtBaseY || localY >= evtBaseY + evtAreaH) return null
     for (const marker of dt.eventMarkers) {
+      const lane = marker.lane ?? 0
+      const trackY = evtLaneToYHit(lane)
+      if (localY < trackY || localY >= trackY + TRACK_H) continue
       const bundle = animationBundles.find((b) => b.id === marker.bundleId)
       if (!bundle) continue
       const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
@@ -584,8 +626,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         edge: clipHit.edge,
         mode: clipHit.edge === 'body' ? 'move' : 'resize',
         startX: e.clientX,
+        startY: e.clientY,
         startTime: startVal,
         startDuration: clipHit.clip.duration,
+        startLane: clipHit.clip.lane ?? 0,
       }
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
       return
@@ -608,6 +652,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         channel: railHit.channel,
         mode: railHit.edge === 'body' ? 'move' : 'resize',
         startX: e.clientX,
+        startY: e.clientY,
         startTime: railHit.edge === 'end' ? tMax : tMin,
         startDuration: tMax - tMin,
       }
@@ -628,6 +673,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         channel: axisHit.channel,
         mode: 'move',
         startX: e.clientX,
+        startY: e.clientY,
         startTime: axisHit.mark.time,
         startDuration: 0,
       }
@@ -647,6 +693,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         id: markHit.id,
         mode: 'move',
         startX: e.clientX,
+        startY: e.clientY,
         startTime: markHit.time,
         startDuration: 0,
       }
@@ -665,6 +712,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         id: camHit.id,
         mode: 'move',
         startX: e.clientX,
+        startY: e.clientY,
         startTime: camHit.time,
         startDuration: 0,
       }
@@ -687,8 +735,10 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         id: marker.id,
         mode: isEdge ? 'resize' : 'move',
         startX: e.clientX,
+        startY: e.clientY,
         startTime: marker.time,
         startDuration: effectiveDur,
+        startLane: marker.lane ?? 0,
       }
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
       return
@@ -716,6 +766,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         if (dragRef.current.edge === 'body') {
           const newStart = clamp(dragRef.current.startTime + dtMs)
           moveCameraClip(dragRef.current.id, newStart)
+          // Vertical drag → lane change (reversed: up = higher lane)
+          const dy = e.clientY - dragRef.current.startY
+          const laneDelta = -Math.round(dy / TRACK_H)
+          const newLane = Math.max(0, (dragRef.current.startLane ?? 0) + laneDelta)
+          updateCameraClip(dragRef.current.id, { lane: newLane })
         } else if (dragRef.current.edge === 'left') {
           // Resize from left: move start, keep end fixed
           const origStart = dragRef.current.startTime
@@ -757,7 +812,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         updateCameraKeyframe(dragRef.current.id, { time: Math.round(newTime) })
       } else if (dragRef.current.mode === 'move') {
         const newTime = Math.max(0, Math.min(sceneDuration, dragRef.current.startTime + dtMs))
-        updateEventMarker(dragRef.current.id, { time: Math.round(newTime) })
+        // Vertical drag → lane change for event markers
+        const dy = e.clientY - dragRef.current.startY
+        const laneDelta = -Math.round(dy / TRACK_H)
+        const newLane = Math.max(0, (dragRef.current.startLane ?? 0) + laneDelta)
+        updateEventMarker(dragRef.current.id, { time: Math.round(newTime), lane: newLane })
       } else {
         const newDur = Math.max(50, dragRef.current.startDuration + dtMs)
         updateEventMarker(dragRef.current.id, { durationOverride: Math.round(newDur) })
@@ -815,21 +874,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       }
     }
 
-    // Double-click event bar → enter bundle editing
-    const evtY = RULER_H + (isDetailView ? AXIS_TRACK_H * 3 : (!isDetailView && cameraClips.length > 0 ? TRACK_H : TRACK_H))
-    if (localY >= evtY && localY < evtY + TRACK_H) {
-      for (const marker of dt.eventMarkers) {
-        const bundle = animationBundles.find((b) => b.id === marker.bundleId)
-        if (!bundle) continue
-        const bundleDur = Math.max(1, ...bundle.clips.map((c) => c.duration))
-        const effectiveDur = marker.durationOverride ?? bundleDur
-        const mx = SIDEBAR_W + LEFT_PAD + marker.time * PX_PER_MS
-        const mw = effectiveDur * PX_PER_MS
-        if (localX >= mx && localX <= mx + mw) {
-          onSwitchToBundle(marker.bundleId)
-          return
-        }
-      }
+    // Double-click event bar → enter bundle editing (use hitTestEventBar for lane support)
+    const evtHit = hitTestEventBar(localX, localY)
+    if (evtHit) {
+      onSwitchToBundle(evtHit.marker.bundleId)
+      return
     }
   }
 
@@ -864,10 +913,19 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   }
 
   const handleAddEvent = (bundleId: string) => {
+    const bundle = animationBundles.find((b) => b.id === bundleId)
+    const bundleDur = bundle ? Math.max(1, ...bundle.clips.map((c) => c.duration)) : 1000
+    const existingItems = dt.eventMarkers.map((m) => {
+      const b = animationBundles.find((ab) => ab.id === m.bundleId)
+      const dur = m.durationOverride ?? (b ? Math.max(1, ...b.clips.map((c) => c.duration)) : 1000)
+      return { time: m.time, duration: dur, lane: m.lane }
+    })
+    const lane = assignLane(existingItems, Math.round(directorPlayheadTime), bundleDur)
     const marker: EventMarker = {
       id: nanoid(),
       time: Math.round(directorPlayheadTime),
       bundleId,
+      lane,
     }
     addEventMarker(marker)
   }

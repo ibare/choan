@@ -155,6 +155,7 @@ export interface EventMarker {
   time: number            // absolute start ms
   bundleId: string        // references existing AnimationBundle
   durationOverride?: number  // optional: override bundle's natural duration
+  lane?: number           // track lane index (default 0)
 }
 
 export type TargetMode = 'fixed' | 'locked'
@@ -205,6 +206,7 @@ export interface CameraClip {
   duration: number         // clip length in ms (default 3000)
   cameraSetup: DirectorCameraSetup
   focalLengthMm: number   // per-clip focal length
+  lane?: number            // track lane index (default 0)
 }
 
 const DEFAULT_CLIP_DURATION = 3000
@@ -302,6 +304,23 @@ export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline 
   }
 
   return result
+}
+
+/** Assign the lowest lane that doesn't overlap with existing items. */
+export function assignLane(
+  existing: readonly { time: number; duration: number; lane?: number }[],
+  newStart: number,
+  newDuration: number,
+): number {
+  for (let lane = 0; ; lane++) {
+    const newEnd = newStart + newDuration
+    const conflict = existing.some((item) => {
+      if ((item.lane ?? 0) !== lane) return false
+      const itemEnd = item.time + item.duration
+      return newStart < itemEnd && newEnd > item.time
+    })
+    if (!conflict) return lane
+  }
 }
 
 /** Ensure axisMarks exists on a loaded timeline (backward compat). */
