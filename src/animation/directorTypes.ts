@@ -414,3 +414,9 @@ export function ensureAxisMarks(dt: DirectorTimeline): DirectorTimeline & { axis
   if (dt.axisMarks) return dt as DirectorTimeline & { axisMarks: Record<AxisMarkChannel, AxisMark[]> }
   return { ...dt, axisMarks: createDefaultAxisMarks() }
 }
+
+/** Returns true iff the clip set satisfies the zero-coverage invariant:
+ *  either empty, or at least one clip has timelineStart === 0. */
+export function hasZeroCoverage(clips: readonly { timelineStart: number }[]): boolean {
+  return clips.length === 0 || clips.some((c) => c.timelineStart === 0)
+}

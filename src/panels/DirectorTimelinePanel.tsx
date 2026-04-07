@@ -74,7 +74,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     selectedAxisMarkId, selectedAxisMarkChannel,
     setSelectedAxisMark, updateAxisMark, removeAxisMark, markActiveAxis, activeRailAxis,
     detailClipId, selectedClipId, activeClipId,
-    addCameraClip, removeCameraClip, updateCameraClipsBatch,
+    addCameraClip, removeCameraClip, selectCameraClip, updateCameraClipsBatch,
     enterClipDetail, exitClipDetail,
     addCamera, removeCamera, selectCamera,
     directorTargetMode, toggleDirectorTargetMode,
@@ -620,7 +620,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     // Check camera clip hit (clip view only)
     const clipHit = hitTestCameraClip(localX, localY)
     if (clipHit) {
-      useDirectorStore.setState({ selectedClipId: clipHit.clip.id })
+      selectCameraClip(clipHit.clip.id)
       setSelectedMarkerId(null)
       const startVal = clipHit.edge === 'right'
         ? clipHit.clip.timelineStart + clipHit.clip.duration
@@ -885,6 +885,27 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       finalDuration = Math.max(MIN_CLIP_DURATION_MS, fixedRight - finalStart)
     } else if (kind === 'resize-right') {
       finalStart = snappedStart
+    }
+
+    // Enforce zero-coverage invariant in the UI so the store doesn't silently reject.
+    // If the dragged clip was at 0 and would leave 0 with no other clip filling it,
+    // snap finalStart back to 0 (and adjust resize-left duration accordingly).
+    const draggedSnap = snapshot.get(draggedId)
+    if (draggedSnap && draggedSnap.start === 0 && finalStart > 0) {
+      let othersCoverZero = false
+      for (const [id, s] of snapshot) {
+        if (id === draggedId) continue
+        const rippled = s.lane === lane ? positions.get(id) : undefined
+        const newStart = rippled ?? s.start
+        if (newStart === 0) { othersCoverZero = true; break }
+      }
+      if (!othersCoverZero) {
+        finalStart = 0
+        if (kind === 'resize-left') {
+          const fixedRight = proposedStart + proposedDuration
+          finalDuration = Math.max(MIN_CLIP_DURATION_MS, fixedRight - finalStart)
+        }
+      }
     }
 
     // Build batch: reset every non-dragged clip to its snapshot, then overwrite

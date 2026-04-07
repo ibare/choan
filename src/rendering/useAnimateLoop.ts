@@ -27,6 +27,7 @@ import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import type { ActiveBundleInput } from '../animation/animationEvaluator'
 import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, type CameraMark, type AxisMarkChannel, type CameraClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
+import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
 import { nanoid } from '../utils/nanoid'
 import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes, type RailTimeLabel } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
@@ -302,23 +303,36 @@ export function useAnimateLoop({
 
       renderer.updateScene(applyMultiSelectTint(animatedElements, state.selectedIds), rs.extrudeDepth, hoveredHistoryColor)
 
-      // Pre-compute director camera viewProj for frustum mask (Q key toggle)
+      // Pre-compute director camera viewProj for frustum mask (Q key toggle).
+      // Mirrors the selected-camera render policy: transient while editing,
+      // derived pose while scrubbing so the spotlight tracks the frustum.
       let dirCamStateForMask: Float32Array | null = null
       const dirForMask = useDirectorStore.getState()
       if (dirForMask.frustumSpotlightOn && dirForMask.directorMode && !dirForMask.directorPlaying && dirForMask.selectedCameraId) {
-        {
-          const camPos = dirForMask.directorCameraPos
-          const camTgt = dirForMask.directorTargetPos
-          if (camPos && camTgt) {
-            const focalMm = dirForMask.focalLengthMm
-            const fovMask = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
-            const [vfaw, vfah] = dirForMask.viewfinderAspect.split(':').map(Number)
-            dirCamStateForMask = buildViewProjMatrix(
-              camPos, camTgt, [0, 1, 0],
-              fovMask, vfaw / vfah, 0.1, 500,
-            )
+        let maskPos: [number, number, number] = dirForMask.directorCameraPos
+        let maskTgt: [number, number, number] = dirForMask.directorTargetPos
+        let maskFov = 2 * Math.atan(36 / (2 * dirForMask.focalLengthMm)) * (180 / Math.PI)
+        if (dirForMask.lastInteraction === 'playhead') {
+          const scStateMask = useSceneStore.getState()
+          const actSceneMask = scStateMask.scenes.find((s) => s.id === scStateMask.activeSceneId)
+          const dtMask = actSceneMask?.directorTimeline ?? createDefaultDirectorTimeline()
+          const pose = findCameraDerivedPose(
+            dirForMask.selectedCameraId,
+            dtMask.cameraClips,
+            dirForMask.directorPlayheadTime,
+            dirForMask.directorTargetMode,
+          )
+          if (pose) {
+            maskPos = pose.position
+            maskTgt = pose.target
+            maskFov = pose.fov
           }
         }
+        const [vfaw, vfah] = dirForMask.viewfinderAspect.split(':').map(Number)
+        dirCamStateForMask = buildViewProjMatrix(
+          maskPos, maskTgt, [0, 1, 0],
+          maskFov, vfaw / vfah, 0.1, 500,
+        )
       }
 
       // ── Scene transition rendering ──
@@ -419,15 +433,36 @@ export function useAnimateLoop({
 
         for (const cam of allCameras) {
           const isSelected = cam.id === dirState.selectedCameraId
+          // Policy: the selected camera is the only one whose view maps to the
+          // viewfinder. Non-selected cameras render as static frustums from
+          // their stored setup. The selected camera always keeps its full
+          // editing UI (rails, handles, footprint, marks) so the user retains
+          // a clear selection indicator; only the camera pose itself swaps to
+          // the time-derived pose while `lastInteraction === 'playhead'`, so
+          // scrubbing moves the frustum without dropping the selection visuals.
           if (isSelected) {
-            // Selected camera: use live transient state
-            const focalMm = dirState.focalLengthMm
-            const dirFov = 2 * Math.atan(36 / (2 * focalMm)) * (180 / Math.PI)
+            // Resolve pose: transient while editing, derived while scrubbing.
+            let camPos: [number, number, number] = dirState.directorCameraPos
+            let camTgt: [number, number, number] = dirState.directorTargetPos
+            let dirFov = 2 * Math.atan(36 / (2 * dirState.focalLengthMm)) * (180 / Math.PI)
+            if (dirState.lastInteraction === 'playhead') {
+              const pose = findCameraDerivedPose(
+                cam.id,
+                dirTl.cameraClips,
+                dirState.directorPlayheadTime,
+                dirState.directorTargetMode,
+              )
+              if (pose) {
+                camPos = pose.position
+                camTgt = pose.target
+                dirFov = pose.fov
+              }
+            }
 
             const railLabels = drawDirectorCameraSetup(
               renderer.overlay,
-              dirState.directorCameraPos,
-              dirState.directorTargetPos,
+              camPos,
+              camTgt,
               dirState.directorRails,
               dirState.railWorldAnchor,
               true,
@@ -440,12 +475,12 @@ export function useAnimateLoop({
 
             // Tilt angle: view camera forward vs Z axis (0°=top-down, 90°=side)
             {
-              const camPos = renderer.camera.position
-              const camTgt = renderer.camera.target
-              const fwdX = camTgt[0] - camPos[0], fwdY = camTgt[1] - camPos[1], fwdZ = camTgt[2] - camPos[2]
+              const vcPos = renderer.camera.position
+              const vcTgt = renderer.camera.target
+              const fwdX = vcTgt[0] - vcPos[0], fwdY = vcTgt[1] - vcPos[1], fwdZ = vcTgt[2] - vcPos[2]
               const fwdLen = Math.sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ)
               const tiltDeg = fwdLen > 0.001 ? Math.acos(Math.min(1, Math.abs(fwdZ) / fwdLen)) * (180 / Math.PI) : 0
-              const [tx, ty, tz] = dirState.directorTargetPos
+              const [tx, ty, tz] = camTgt
               const tScreen = renderer.overlay.projectToScreen(tx, ty, tz)
               const elData = { deg: tiltDeg, screenX: tScreen.px, screenY: tScreen.py }
               elevationAngleRef.current = elData
@@ -456,7 +491,7 @@ export function useAnimateLoop({
             const [vfaw, vfah] = dirState.viewfinderAspect.split(':').map(Number)
             drawCameraFootprint(
               renderer.overlay,
-              dirState.directorCameraPos, dirState.directorTargetPos,
+              camPos, camTgt,
               dirFov, vfaw / vfah, false,
             )
 
@@ -469,7 +504,7 @@ export function useAnimateLoop({
             if (tunnelAxes.length > 0) {
               drawCameraAxisHandles(
                 renderer.overlay,
-                dirState.directorCameraPos,
+                camPos,
                 tunnelAxes,
                 dirState.directorCameraAxisHover,
               )
@@ -478,7 +513,7 @@ export function useAnimateLoop({
             if (!hasActiveRailTiming(dirState.directorRails)) {
               const marks = dirTl.cameraMarks ?? []
               if (marks.length > 0) {
-                drawCameraMarks(renderer.overlay, marks, dirState.directorRails, dirState.railWorldAnchor, dirState.directorCameraPos)
+                drawCameraMarks(renderer.overlay, marks, dirState.directorRails, dirState.railWorldAnchor, camPos)
               }
             }
 
@@ -487,7 +522,7 @@ export function useAnimateLoop({
               drawCameraPathOverlay(renderer.overlay, dirTl.cameraKeyframes, curCamState, dirState.selectedCameraKeyframeId ?? null, 0.5, dpr)
             }
           } else {
-            // Non-selected camera: frustum icon only (muted color)
+            // Non-selected camera: static frustum from the stored setup only.
             const camFov = 2 * Math.atan(36 / (2 * cam.focalLengthMm)) * (180 / Math.PI)
             drawDirectorCameraSetup(
               renderer.overlay,

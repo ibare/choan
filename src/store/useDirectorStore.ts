@@ -12,6 +12,7 @@ import {
   findActiveClip,
   migrateDirectorTimeline,
   ensureAxisMarks,
+  hasZeroCoverage,
   AXIS_MARK_IDX,
   RAIL_MIN_STUB,
   assignLane,
@@ -63,11 +64,17 @@ interface DirectorStore {
   selectedClipId: string | null   // selected clip in clip view
   activeClipId: string | null     // currently editing clip
 
+  // Last interaction priority — decides whether to follow camera edits or playhead time
+  // 'playhead': time-based derived pose drives the canvas frustum
+  // 'camera':   user-edited cameraSetup is authoritative
+  lastInteraction: 'camera' | 'playhead'
+
   // Mode controls
   setDirectorMode: (on: boolean) => void
   setDirectorPlayheadTime: (ms: number) => void
   startPlaying: () => void
   stopPlaying: () => void
+  setLastInteraction: (kind: 'camera' | 'playhead') => void
   setSelectedCameraKeyframeId: (id: string | null) => void
   setFocalLengthMm: (mm: number) => void
   toggleFrustumSpotlight: () => void
@@ -97,6 +104,7 @@ interface DirectorStore {
   // Camera clip CRUD
   addCameraClip: () => string
   removeCameraClip: (id: string) => void
+  selectCameraClip: (clipId: string) => void
   updateCameraClip: (id: string, patch: Partial<CameraClip>) => void
   /** Apply patches to multiple camera clips in a single store update. */
   updateCameraClipsBatch: (patches: readonly { id: string; patch: Partial<CameraClip> }[]) => void
@@ -188,6 +196,9 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   selectedClipId: null,
   activeClipId: null,
 
+  // Last interaction defaults to playhead so entering director mode starts in time-tracking
+  lastInteraction: 'playhead',
+
   setDirectorMode: (on) => {
     if (on) {
       // Ensure at least one camera exists in the scene
@@ -207,6 +218,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
         frustumSpotlightOn: false,
         selectedCameraId: firstCamId,
         selectedRailHandle: null,
+        lastInteraction: 'playhead',
       })
       get().loadCameraSetup(firstCamId)
     } else {
@@ -225,17 +237,23 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   toggleFrustumSpotlight: () => set((s) => ({ frustumSpotlightOn: !s.frustumSpotlightOn })),
   setViewfinderAspect: (aspect) => set({ viewfinderAspect: aspect }),
 
-  setDirectorPlayheadTime: (ms) => set({ directorPlayheadTime: Math.max(0, ms) }),
+  setDirectorPlayheadTime: (ms) => set({
+    directorPlayheadTime: Math.max(0, ms),
+    lastInteraction: 'playhead',
+  }),
 
   startPlaying: () => {
     const current = get().directorPlayheadTime
     set({
       directorPlaying: true,
       playStartTime: performance.now() - current,
+      lastInteraction: 'playhead',
     })
   },
 
   stopPlaying: () => set({ directorPlaying: false }),
+
+  setLastInteraction: (kind) => set({ lastInteraction: kind }),
 
   // ── Director camera setup actions ──
 
@@ -266,7 +284,15 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       cameras: [...(prev.cameras ?? []), cam],
     }))
 
-    set({ selectedCameraId: camId })
+    // 새 카메라 = 편집 컨텍스트 초기화. activeClipId가 잔존하면 자동 저장 subscribe가
+    // 새 카메라의 transient를 stale 클립에 덮어써서 ID drift가 발생한다.
+    set({
+      selectedCameraId: camId,
+      activeClipId: null,
+      selectedClipId: null,
+      detailClipId: null,
+      lastInteraction: 'camera',
+    })
     get().loadCameraSetup(camId)
     return camId
   },
@@ -288,10 +314,20 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     if (s.selectedCameraId === id) {
       const remaining = cameras.filter((c) => c.id !== id)
       if (remaining.length > 0) {
-        set({ selectedCameraId: remaining[0].id })
+        set({
+          selectedCameraId: remaining[0].id,
+          activeClipId: null,
+          selectedClipId: null,
+          detailClipId: null,
+        })
         get().loadCameraSetup(remaining[0].id)
       } else {
-        set({ selectedCameraId: null })
+        set({
+          selectedCameraId: null,
+          activeClipId: null,
+          selectedClipId: null,
+          detailClipId: null,
+        })
       }
     }
   },
@@ -302,10 +338,24 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     // Save current camera before switching
     if (s.selectedCameraId) get().saveCameraSetup()
     if (id) {
-      set({ selectedCameraId: id })
+      // 카메라 선택 = 편집 의도. lastInteraction='camera'로 전환해 selected 편집 UI가 보이게 한다.
+      // activeClipId 등 클립 편집 컨텍스트는 reset해야 자동 저장 subscribe가
+      // 새 카메라 transient를 stale 클립에 덮어쓰는 ID drift를 막을 수 있다.
+      set({
+        selectedCameraId: id,
+        lastInteraction: 'camera',
+        activeClipId: null,
+        selectedClipId: null,
+        detailClipId: null,
+      })
       get().loadCameraSetup(id)
     } else {
-      set({ selectedCameraId: null })
+      set({
+        selectedCameraId: null,
+        activeClipId: null,
+        selectedClipId: null,
+        detailClipId: null,
+      })
     }
   },
 
@@ -446,7 +496,8 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     const clip = createDefaultCameraClip(setup, s.selectedCameraId ?? '')
     clip.id = clipId
     clip.name = `Camera ${clipCount + 1}`
-    clip.timelineStart = s.directorPlayheadTime
+    // Enforce zero-coverage invariant: the very first clip must start at 0.
+    clip.timelineStart = clipCount === 0 ? 0 : s.directorPlayheadTime
     clip.focalLengthMm = s.focalLengthMm
     clip.lane = assignLane(
       dt.cameraClips.map((c) => ({ time: c.timelineStart, duration: c.duration, lane: c.lane })),
@@ -464,9 +515,23 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   },
 
   removeCameraClip: (id) => {
-    updateActiveSceneDirectorTimeline((dt) => ({
-      ...dt,
-      cameraClips: dt.cameraClips.filter((c) => c.id !== id),
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const target = dt.cameraClips.find((c) => c.id === id)
+    if (!target) return  // already gone
+
+    // Allow removing the very last clip (so the user can wipe everything).
+    // Otherwise refuse silently if removing this clip would break 0s coverage.
+    const isLastClip = dt.cameraClips.length === 1
+    if (!isLastClip && target.timelineStart === 0) {
+      const otherCovers = dt.cameraClips.some((c) => c.id !== id && c.timelineStart === 0)
+      if (!otherCovers) return  // silent reject
+    }
+
+    updateActiveSceneDirectorTimeline((prev) => ({
+      ...prev,
+      cameraClips: prev.cameraClips.filter((c) => c.id !== id),
     }))
     const s = get()
     const patch: Partial<DirectorStore> = {}
@@ -474,6 +539,24 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
     if (s.activeClipId === id) patch.activeClipId = null
     if (s.detailClipId === id) patch.detailClipId = null
     if (Object.keys(patch).length > 0) set(patch)
+  },
+
+  selectCameraClip: (clipId) => {
+    const s = get()
+    if (s.selectedClipId === clipId) return
+    // 이전 편집 저장 (activeClipId가 있으면 saveCameraSetup이 saveClipSetup으로 위임)
+    get().saveCameraSetup()
+    // 클릭한 클립의 부모 카메라 조회
+    const { scenes, activeSceneId } = useSceneStore.getState()
+    const scene = scenes.find((sc) => sc.id === activeSceneId)
+    const dt = scene?.directorTimeline ?? createDefaultDirectorTimeline()
+    const clip = dt.cameraClips.find((c) => c.id === clipId)
+    if (!clip) return
+    // 부모 카메라로 전환. 클립 선택은 편집 의도이므로 lastInteraction='camera'로 전환해
+    // selected 편집 UI(레일/핸들/footprint)가 캔버스에 그려지도록 한다.
+    set({ selectedCameraId: clip.cameraId, selectedClipId: clipId, lastInteraction: 'camera' })
+    // loadClipSetup이 director* 상태와 activeClipId를 적용
+    get().loadClipSetup(clipId)
   },
 
   updateCameraClip: (id, patch) => {
@@ -492,13 +575,15 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       const existing = patchById.get(id)
       patchById.set(id, existing ? { ...existing, ...patch } : patch)
     }
-    updateActiveSceneDirectorTimeline((dt) => ({
-      ...dt,
-      cameraClips: dt.cameraClips.map((c) => {
+    updateActiveSceneDirectorTimeline((dt) => {
+      const next = dt.cameraClips.map((c) => {
         const p = patchById.get(c.id)
         return p ? { ...c, ...p } : c
-      }),
-    }))
+      })
+      // Enforce zero-coverage invariant: silently reject if it would break.
+      if (!hasZeroCoverage(next)) return dt
+      return { ...dt, cameraClips: next }
+    })
   },
 
   resizeCameraClip: (id, newDuration) => {
@@ -535,12 +620,14 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   },
 
   moveCameraClip: (id, newStart) => {
-    updateActiveSceneDirectorTimeline((dt) => ({
-      ...dt,
-      cameraClips: dt.cameraClips.map((c) =>
+    updateActiveSceneDirectorTimeline((dt) => {
+      const next = dt.cameraClips.map((c) =>
         c.id === id ? { ...c, timelineStart: newStart } : c,
-      ),
-    }))
+      )
+      // Enforce zero-coverage invariant: silently reject if it would break.
+      if (!hasZeroCoverage(next)) return dt
+      return { ...dt, cameraClips: next }
+    })
   },
 
   enterClipDetail: (clipId) => {
@@ -842,6 +929,7 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       detailClipId: null,
       selectedClipId: null,
       activeClipId: null,
+      lastInteraction: 'playhead',
     })
     updateActiveSceneDirectorTimeline(() => createDefaultDirectorTimeline())
   },

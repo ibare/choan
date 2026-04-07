@@ -33,6 +33,7 @@ import {
   hitTestRailSlider, hitTestAlignMarker,
   type RailHandleHit, type RailSliderHit,
 } from './cameraPathHandlers'
+import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
 
 const AXIS_IDX_MAP = { x: 0, y: 1, z: 2 } as const
 const RAIL_OFFSET = 4.5  // must match cameraPathOverlay.ts / cameraPathHandlers.ts
@@ -252,6 +253,7 @@ export function usePointerHandlers({
             dragRailOrigExtentRef.current = origExtent
             dragRailStartTRef.current = startT ?? 0
             useDirectorStore.getState().setSelectedRailHandle(railHit.handleId)
+            useDirectorStore.getState().setLastInteraction('camera')
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -281,6 +283,7 @@ export function usePointerHandlers({
           isDraggingDirTargetRef.current = true
           dragDirTargetOrigPosRef.current = [...director.directorTargetPos]
           useDirectorStore.getState().setDirectorTargetAttachedTo(null)
+          useDirectorStore.getState().setLastInteraction('camera')
           ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
           return
         }
@@ -307,6 +310,7 @@ export function usePointerHandlers({
             axisDragTargetRef.current = 'camera'
             const sliderChannel = sliderHit.axis === 'x' ? 'truck' : sliderHit.axis === 'y' ? 'boom' : 'dolly' as const
             useDirectorStore.getState().setActiveRailAxis(sliderChannel)
+            useDirectorStore.getState().setLastInteraction('camera')
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -329,6 +333,7 @@ export function usePointerHandlers({
             axisDragTargetRef.current = 'camera'
             const tunnelChannel = camHover.axis === 'x' ? 'truck' : camHover.axis === 'y' ? 'boom' : 'dolly' as const
             useDirectorStore.getState().setActiveRailAxis(tunnelChannel)
+            useDirectorStore.getState().setLastInteraction('camera')
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return
           }
@@ -355,16 +360,31 @@ export function usePointerHandlers({
           let hitCamId: string | null = null
           let hitCamPos: [number, number, number] | null = null
 
+          // Match canvas rendering: non-selected cameras are static from their
+          // stored setup; the selected camera uses transient state while editing
+          // and the time-derived pose while the playhead is the last interaction.
+          // Hit test must agree with what the user actually sees.
           for (const cam of allCams) {
-            const testPos = cam.id === director.selectedCameraId
-              ? director.directorCameraPos
-              : cam.setup.cameraPos
-            const testTarget = cam.id === director.selectedCameraId
-              ? director.directorTargetPos
-              : cam.setup.targetPos
-            const testFov = cam.id === director.selectedCameraId
-              ? 2 * Math.atan(36 / (2 * director.focalLengthMm)) * (180 / Math.PI)
-              : 2 * Math.atan(36 / (2 * cam.focalLengthMm)) * (180 / Math.PI)
+            const isSelected = cam.id === director.selectedCameraId
+            let testPos: [number, number, number]
+            let testTarget: [number, number, number]
+            let testFov: number
+            if (isSelected && director.lastInteraction !== 'playhead') {
+              testPos = director.directorCameraPos
+              testTarget = director.directorTargetPos
+              testFov = 2 * Math.atan(36 / (2 * director.focalLengthMm)) * (180 / Math.PI)
+            } else if (isSelected) {
+              const pose = findCameraDerivedPose(
+                cam.id, dtHit.cameraClips, director.directorPlayheadTime, director.directorTargetMode,
+              )
+              testPos = pose?.position ?? cam.setup.cameraPos
+              testTarget = pose?.target ?? cam.setup.targetPos
+              testFov = pose?.fov ?? (2 * Math.atan(36 / (2 * cam.focalLengthMm)) * (180 / Math.PI))
+            } else {
+              testPos = cam.setup.cameraPos
+              testTarget = cam.setup.targetPos
+              testFov = 2 * Math.atan(36 / (2 * cam.focalLengthMm)) * (180 / Math.PI)
+            }
             if (hitTestDirectorCameraBody(e.clientX, e.clientY, rect, renderer.overlay, testPos, 16, testTarget, testFov)) {
               hitCamId = cam.id
               hitCamPos = testPos
@@ -385,6 +405,7 @@ export function usePointerHandlers({
               dragStartWorldRef.current = startHit ?? [...hitCamPos]
               isDraggingDirCameraRef.current = true
               dragDirCameraOrigPosRef.current = [...hitCamPos]
+              useDirectorStore.getState().setLastInteraction('camera')
             }
             ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
             return

@@ -11,6 +11,7 @@ import { createDefaultDirectorTimeline } from '../animation/directorTypes'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import { evaluateBundles } from '../animation/animationEvaluator'
+import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
 import { Section } from '../components/ui/Section'
 
 export default function Viewfinder() {
@@ -20,6 +21,7 @@ export default function Viewfinder() {
     selectedCameraId,
     focalLengthMm, viewfinderAspect,
     directorCameraPos, directorTargetPos,
+    lastInteraction, directorTargetMode,
   } = useDirectorStore()
 
   const visible = directorMode && !directorPlaying && selectedCameraId !== null
@@ -50,24 +52,45 @@ export default function Viewfinder() {
     const savedFov = cam.fov
     const savedSize = renderer.getCssSize()
 
-    // Apply director camera from current transient state
-    cam.position[0] = directorCameraPos[0]
-    cam.position[1] = directorCameraPos[1]
-    cam.position[2] = directorCameraPos[2]
-    cam.target[0] = directorTargetPos[0]
-    cam.target[1] = directorTargetPos[1]
-    cam.target[2] = directorTargetPos[2]
-    cam.fov = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
+    // Policy: the selected camera's view is what the viewfinder shows. When the
+    // user edits the camera directly (`lastInteraction === 'camera'`), live
+    // transient state drives the pose. When the playhead moved last
+    // (`lastInteraction === 'playhead'`), evaluate the selected camera's clips
+    // at the playhead time — the derived pose handles gaps by holding the last
+    // clip's end pose. If there are no clips for the selected camera, fall back
+    // to the transient state so a freshly added camera still shows something.
+    const state = useChoanStore.getState()
+    const sceneState = useSceneStore.getState()
+    const activeScene = sceneState.scenes.find((s) => s.id === sceneState.activeSceneId)
+    const dt = activeScene?.directorTimeline ?? createDefaultDirectorTimeline()
+
+    let camPos: [number, number, number] = directorCameraPos
+    let camTgt: [number, number, number] = directorTargetPos
+    let camFov = 2 * Math.atan(36 / (2 * focalLengthMm)) * (180 / Math.PI)
+    if (lastInteraction === 'playhead' && selectedCameraId) {
+      const pose = findCameraDerivedPose(
+        selectedCameraId, dt.cameraClips, directorPlayheadTime, directorTargetMode,
+      )
+      if (pose) {
+        camPos = pose.position
+        camTgt = pose.target
+        camFov = pose.fov
+      }
+    }
+
+    cam.position[0] = camPos[0]
+    cam.position[1] = camPos[1]
+    cam.position[2] = camPos[2]
+    cam.target[0] = camTgt[0]
+    cam.target[1] = camTgt[1]
+    cam.target[2] = camTgt[2]
+    cam.fov = camFov
 
     // Resize renderer to viewfinder aspect
     renderer.resizeViewport(cssW, cssH)
     renderer.applyPendingResize()
 
     // Evaluate animation events at playhead time
-    const state = useChoanStore.getState()
-    const sceneState = useSceneStore.getState()
-    const activeScene = sceneState.scenes.find((s) => s.id === sceneState.activeSceneId)
-    const dt = activeScene?.directorTimeline ?? createDefaultDirectorTimeline()
     const activeEvents = evaluateDirectorEvents(dt.eventMarkers, directorPlayheadTime, state.animationBundles)
     const activeBundles = activeEvents.map((e) => ({ bundle: e.bundle, localTime: e.localTime }))
     const animated = activeBundles.length > 0
@@ -100,7 +123,7 @@ export default function Viewfinder() {
     renderer.updateScene(state.elements, rs.extrudeDepth)
     renderer.renderPipeline(rs)
     renderer.blitAndOverlay()
-  }, [visible, directorPlayheadTime, focalLengthMm, viewfinderAspect, directorCameraPos, directorTargetPos])
+  }, [visible, directorPlayheadTime, focalLengthMm, viewfinderAspect, directorCameraPos, directorTargetPos, lastInteraction, directorTargetMode, selectedCameraId])
 
   if (!visible) return null
 
