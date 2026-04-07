@@ -98,6 +98,8 @@ interface DirectorStore {
   addCameraClip: () => string
   removeCameraClip: (id: string) => void
   updateCameraClip: (id: string, patch: Partial<CameraClip>) => void
+  /** Apply patches to multiple camera clips in a single store update. */
+  updateCameraClipsBatch: (patches: readonly { id: string; patch: Partial<CameraClip> }[]) => void
   resizeCameraClip: (id: string, newDuration: number) => void
   moveCameraClip: (id: string, newStart: number) => void
   enterClipDetail: (clipId: string) => void
@@ -480,6 +482,22 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
       cameraClips: dt.cameraClips.map((c) =>
         c.id === id ? { ...c, ...patch } : c,
       ),
+    }))
+  },
+
+  updateCameraClipsBatch: (patches) => {
+    if (patches.length === 0) return
+    const patchById = new Map<string, Partial<CameraClip>>()
+    for (const { id, patch } of patches) {
+      const existing = patchById.get(id)
+      patchById.set(id, existing ? { ...existing, ...patch } : patch)
+    }
+    updateActiveSceneDirectorTimeline((dt) => ({
+      ...dt,
+      cameraClips: dt.cameraClips.map((c) => {
+        const p = patchById.get(c.id)
+        return p ? { ...c, ...p } : c
+      }),
     }))
   },
 

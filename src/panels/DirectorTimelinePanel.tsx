@@ -13,7 +13,7 @@ import { useChoanStore } from '../store/useChoanStore'
 import { useRenderSettings } from '../store/useRenderSettings'
 import { rendererSingleton } from '../rendering/rendererRef'
 import { nanoid } from '../utils/nanoid'
-import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, assignLane, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark, type CameraClip } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, ensureAxisMarks, hasActiveRailTiming, findActiveClip, assignLane, resolveLane, RAIL_MIN_STUB, type CameraMark, type CameraViewKeyframe, type EventMarker, type AxisMarkChannel, type AxisMark, type CameraClip, type LaneClip } from '../animation/directorTypes'
 import { evaluateCameraMarks, evaluateAxisMarks, evaluateRailAnimation } from '../animation/cameraMarkEvaluator'
 import { renderRuler, renderPlayhead } from '../engine/timeline2dRenderer'
 import { drawDiamond } from '../engine/timeline2dPrimitives'
@@ -40,6 +40,8 @@ const AXIS_TRACK_H = 24
 const RULER_H = 35  // Match bundle timeline ruler height
 const SIDEBAR_W = 120
 const LEFT_PAD = 24  // Match bundle timeline left padding
+const SNAP_THRESHOLD_PX = 10  // Magnetic snap distance for clip edges
+const MIN_CLIP_DURATION_MS = 100  // Minimum duration of a camera clip
 
 const AXIS_CHANNELS: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
 const AXIS_COLORS: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55c055', dolly: '#5588dd' }
@@ -72,7 +74,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     selectedAxisMarkId, selectedAxisMarkChannel,
     setSelectedAxisMark, updateAxisMark, removeAxisMark, markActiveAxis, activeRailAxis,
     detailClipId, selectedClipId, activeClipId,
-    addCameraClip, removeCameraClip, updateCameraClip, resizeCameraClip, moveCameraClip,
+    addCameraClip, removeCameraClip, updateCameraClipsBatch,
     enterClipDetail, exitClipDetail,
     addCamera, removeCamera, selectCamera,
     directorTargetMode, toggleDirectorTargetMode,
@@ -87,6 +89,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const scrubRef = useRef(false)
+  interface ClipSnapshot { start: number; duration: number; lane: number }
   const dragRef = useRef<{
     type: 'event' | 'camera-kf' | 'camera-mark' | 'axis-mark' | 'rail-timing' | 'camera-clip'
     id: string; mode: 'move' | 'resize'
@@ -94,6 +97,8 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     edge?: 'start' | 'end' | 'body' | 'left' | 'right'
     startX: number; startY: number; startTime: number; startDuration: number
     startLane?: number
+    /** Snapshot of all camera clips at drag start, used to recompute ripple from a stable baseline. */
+    clipSnapshot?: Map<string, ClipSnapshot>
   } | null>(null)
 
   const scene = scenes.find((s) => s.id === activeSceneId)
@@ -620,6 +625,11 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
       const startVal = clipHit.edge === 'right'
         ? clipHit.clip.timelineStart + clipHit.clip.duration
         : clipHit.clip.timelineStart
+      // Snapshot all camera clips so each frame can recompute ripple from a stable baseline
+      const snapshot = new Map<string, ClipSnapshot>()
+      for (const c of cameraClips) {
+        snapshot.set(c.id, { start: c.timelineStart, duration: c.duration, lane: c.lane ?? 0 })
+      }
       dragRef.current = {
         type: 'camera-clip',
         id: clipHit.clip.id,
@@ -630,6 +640,7 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
         startTime: startVal,
         startDuration: clipHit.clip.duration,
         startLane: clipHit.clip.lane ?? 0,
+        clipSnapshot: snapshot,
       }
       ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
       return
@@ -757,33 +768,194 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
 
+  // ── Snap + ripple helpers (camera clip drag) ──
+
+  /** Find the nearest snap candidate to target within thresholdMs. Returns null if none. */
+  const snapToCandidates = (
+    candidates: readonly number[],
+    target: number,
+    thresholdMs: number,
+  ): { value: number; dist: number } | null => {
+    let best: { value: number; dist: number } | null = null
+    for (const c of candidates) {
+      const d = Math.abs(target - c)
+      if (d <= thresholdMs && (best === null || d < best.dist)) {
+        best = { value: c, dist: d }
+      }
+    }
+    return best
+  }
+
+  /**
+   * Compute snap-adjusted left edge for a clip whose left edge is at `proposedLeft`
+   * with given duration. Snaps either the left or right edge — whichever is closer
+   * to a candidate within threshold. Returns the new left-edge time.
+   */
+  const snapClipLeftEdge = (
+    proposedLeft: number,
+    duration: number,
+    leftCandidates: readonly number[],
+    rightCandidates: readonly number[],
+  ): number => {
+    const thresholdMs = SNAP_THRESHOLD_PX / PX_PER_MS
+    const snapL = snapToCandidates(leftCandidates, proposedLeft, thresholdMs)
+    const snapR = snapToCandidates(rightCandidates, proposedLeft + duration, thresholdMs)
+    if (snapL && (!snapR || snapL.dist <= snapR.dist)) return snapL.value
+    if (snapR) return snapR.value - duration
+    return proposedLeft
+  }
+
+  /**
+   * Apply snap + resolveLane for a camera clip drag or edge resize.
+   *
+   * Handles three drag kinds in a unified way:
+   * - 'move'         — body drag, both left and right edges can snap
+   * - 'resize-left'  — left edge moves, right edge fixed at proposedStart + proposedDuration
+   * - 'resize-right' — right edge moves, left edge fixed at proposedStart
+   *
+   * Builds the same-lane snapshot baseline, snaps the active edge(s), runs ripple
+   * via resolveLane, then writes a batch update covering all changed clips and
+   * resetting any clips on the previous source lane that should no longer be pushed.
+   */
+  const applyCameraClipDragFrame = (params: {
+    draggedId: string
+    lane: number
+    kind: 'move' | 'resize-left' | 'resize-right'
+    proposedStart: number
+    proposedDuration: number
+    snapshot: Map<string, ClipSnapshot>
+  }): void => {
+    const { draggedId, lane, kind, proposedStart, proposedDuration, snapshot } = params
+
+    // Build snap candidates from same-lane snapshot clips + 0 + playhead
+    const sameLaneOthers: { id: string; snap: ClipSnapshot }[] = []
+    for (const [id, s] of snapshot) {
+      if (id !== draggedId && s.lane === lane) sameLaneOthers.push({ id, snap: s })
+    }
+    const leftCandidates: number[] = [0, directorPlayheadTime]
+    const rightCandidates: number[] = [0, directorPlayheadTime]
+    for (const o of sameLaneOthers) {
+      // dragged left edge can snap to others' right edges
+      leftCandidates.push(o.snap.start + o.snap.duration)
+      // dragged right edge can snap to others' left edges
+      rightCandidates.push(o.snap.start)
+    }
+
+    const thresholdMs = SNAP_THRESHOLD_PX / PX_PER_MS
+
+    // Snap based on drag kind
+    let snappedStart = proposedStart
+    let snappedDuration = proposedDuration
+
+    if (kind === 'move') {
+      snappedStart = snapClipLeftEdge(proposedStart, proposedDuration, leftCandidates, rightCandidates)
+      snappedStart = Math.max(0, snappedStart)
+    } else if (kind === 'resize-left') {
+      // Right edge fixed; only the left edge snaps to leftCandidates.
+      const fixedRight = proposedStart + proposedDuration
+      const snap = snapToCandidates(leftCandidates, proposedStart, thresholdMs)
+      if (snap) snappedStart = snap.value
+      // Clamp left edge: not below 0, not so far right that duration < MIN_CLIP_DURATION_MS
+      if (snappedStart < 0) snappedStart = 0
+      if (snappedStart > fixedRight - MIN_CLIP_DURATION_MS) snappedStart = fixedRight - MIN_CLIP_DURATION_MS
+      snappedDuration = fixedRight - snappedStart
+    } else {
+      // resize-right: left edge fixed at proposedStart; only the right edge snaps.
+      const proposedRight = proposedStart + proposedDuration
+      const snap = snapToCandidates(rightCandidates, proposedRight, thresholdMs)
+      if (snap) snappedDuration = snap.value - proposedStart
+      if (snappedDuration < MIN_CLIP_DURATION_MS) snappedDuration = MIN_CLIP_DURATION_MS
+    }
+
+    // Resolve ripple on target lane
+    const laneClips: LaneClip[] = sameLaneOthers.map((o) => ({
+      id: o.id, start: o.snap.start, duration: o.snap.duration,
+    }))
+    laneClips.push({ id: draggedId, start: snappedStart, duration: snappedDuration })
+    const { positions, constrainedStart } = resolveLane(laneClips, draggedId, snappedStart, snappedDuration)
+
+    // Determine final dragged-clip placement.
+    // - move: use constrainedStart, duration unchanged
+    // - resize-left: re-shrink duration if constrainedStart shifted right (right edge stays fixed)
+    // - resize-right: ignore constrainedStart, left edge must remain fixed
+    let finalStart = constrainedStart
+    let finalDuration = snappedDuration
+    if (kind === 'resize-left') {
+      const fixedRight = proposedStart + proposedDuration
+      finalDuration = Math.max(MIN_CLIP_DURATION_MS, fixedRight - finalStart)
+    } else if (kind === 'resize-right') {
+      finalStart = snappedStart
+    }
+
+    // Build batch: reset every non-dragged clip to its snapshot, then overwrite
+    // target-lane changes from ripple. This guarantees the previous source lane
+    // (if dragged just crossed lanes) is reverted in the same frame.
+    const patches: { id: string; patch: Partial<CameraClip> }[] = []
+    for (const [id, snap] of snapshot) {
+      if (id === draggedId) continue
+      const rippled = snap.lane === lane ? positions.get(id) : undefined
+      const newStart = rippled ?? snap.start
+      patches.push({ id, patch: { timelineStart: newStart } })
+    }
+    const draggedPatch: Partial<CameraClip> = { timelineStart: finalStart, lane }
+    if (kind !== 'move') draggedPatch.duration = finalDuration
+    patches.push({ id: draggedId, patch: draggedPatch })
+    updateCameraClipsBatch(patches)
+  }
+
   const handlePointerMove = (e: React.PointerEvent) => {
     if (dragRef.current) {
       const dx = e.clientX - dragRef.current.startX
       const dtMs = dx / PX_PER_MS
       if (dragRef.current.type === 'camera-clip') {
-        const clamp = (v: number) => Math.max(0, Math.round(v))
-        if (dragRef.current.edge === 'body') {
-          const newStart = clamp(dragRef.current.startTime + dtMs)
-          moveCameraClip(dragRef.current.id, newStart)
-          // Vertical drag → lane change (reversed: up = higher lane)
-          const dy = e.clientY - dragRef.current.startY
-          const laneDelta = -Math.round(dy / TRACK_H)
-          const newLane = Math.max(0, (dragRef.current.startLane ?? 0) + laneDelta)
-          updateCameraClip(dragRef.current.id, { lane: newLane })
-        } else if (dragRef.current.edge === 'left') {
-          // Resize from left: move start, keep end fixed
-          const origStart = dragRef.current.startTime
-          const origEnd = origStart + dragRef.current.startDuration
-          const newStart = clamp(origStart + dtMs)
-          const newDuration = Math.max(100, Math.round(origEnd - newStart))
-          moveCameraClip(dragRef.current.id, Math.round(origEnd - newDuration))
-          resizeCameraClip(dragRef.current.id, newDuration)
-        } else if (dragRef.current.edge === 'right') {
-          // Resize from right: keep start fixed, change end
-          const origStart = dragRef.current.startTime - dragRef.current.startDuration
-          const newDuration = Math.max(100, clamp(dragRef.current.startDuration + dtMs))
-          resizeCameraClip(dragRef.current.id, newDuration)
+        const snapshot = dragRef.current.clipSnapshot
+        const draggedSnap = snapshot?.get(dragRef.current.id)
+        if (snapshot && draggedSnap) {
+          if (dragRef.current.edge === 'body') {
+            // Vertical drag → lane change (reversed: up = higher lane)
+            const dy = e.clientY - dragRef.current.startY
+            const laneDelta = -Math.round(dy / TRACK_H)
+            const newLane = Math.max(0, draggedSnap.lane + laneDelta)
+            const proposedStart = Math.round(draggedSnap.start + dtMs)
+            applyCameraClipDragFrame({
+              draggedId: dragRef.current.id,
+              lane: newLane,
+              kind: 'move',
+              proposedStart,
+              proposedDuration: draggedSnap.duration,
+              snapshot,
+            })
+          } else if (dragRef.current.edge === 'left') {
+            // Resize from left: right edge fixed at original right
+            const fixedRight = draggedSnap.start + draggedSnap.duration
+            let proposedStart = Math.round(draggedSnap.start + dtMs)
+            if (proposedStart < 0) proposedStart = 0
+            if (proposedStart > fixedRight - MIN_CLIP_DURATION_MS) {
+              proposedStart = fixedRight - MIN_CLIP_DURATION_MS
+            }
+            applyCameraClipDragFrame({
+              draggedId: dragRef.current.id,
+              lane: draggedSnap.lane,
+              kind: 'resize-left',
+              proposedStart,
+              proposedDuration: fixedRight - proposedStart,
+              snapshot,
+            })
+          } else if (dragRef.current.edge === 'right') {
+            // Resize from right: left edge fixed at original start
+            const proposedDuration = Math.max(
+              MIN_CLIP_DURATION_MS,
+              Math.round(draggedSnap.duration + dtMs),
+            )
+            applyCameraClipDragFrame({
+              draggedId: dragRef.current.id,
+              lane: draggedSnap.lane,
+              kind: 'resize-right',
+              proposedStart: draggedSnap.start,
+              proposedDuration,
+              snapshot,
+            })
+          }
         }
       } else if (dragRef.current.type === 'rail-timing' && dragRef.current.channel) {
         const { setRailTiming } = useDirectorStore.getState()

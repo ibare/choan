@@ -306,6 +306,92 @@ export function migrateDirectorTimeline(dt: DirectorTimeline): DirectorTimeline 
   return result
 }
 
+// ── Lane resolution (overlap prevention + ripple) ──────────────────────
+
+export interface LaneClip {
+  id: string
+  start: number
+  duration: number
+}
+
+export interface LaneResolution {
+  /** id → new start time. Only includes clips whose position changed. */
+  positions: Map<string, number>
+  /** Possibly adjusted start for the dragged clip if left-cascade hit time 0. */
+  constrainedStart: number
+}
+
+/**
+ * Resolve overlaps on a single lane by pushing neighbors away from the
+ * dragged clip. Clips are categorized by their center relative to the
+ * dragged clip's center: those to the left are packed leftward, those to
+ * the right are packed rightward. Cascading push is handled by walking
+ * outward from the dragged clip.
+ *
+ * If the left-side cascade would push a clip below time 0, the dragged
+ * clip is constrained rightward so the chain fits.
+ */
+export function resolveLane(
+  laneClips: readonly LaneClip[],
+  draggedId: string,
+  draggedStart: number,
+  draggedDuration: number,
+): LaneResolution {
+  const positions = new Map<string, number>()
+  const others = laneClips.filter((c) => c.id !== draggedId)
+
+  const draggedCenter = draggedStart + draggedDuration / 2
+  const leftSide = others
+    .filter((c) => c.start + c.duration / 2 < draggedCenter)
+    .sort((a, b) => b.start - a.start)  // closest to dragged first
+  const rightSide = others
+    .filter((c) => c.start + c.duration / 2 >= draggedCenter)
+    .sort((a, b) => a.start - b.start)  // closest to dragged first
+
+  let constrainedStart = Math.max(0, draggedStart)
+
+  // Pack left side: each leftClip's right edge ≤ rightLimit
+  const packLeft = (leftEdge: number): { positions: Map<string, number>; minStart: number } => {
+    const out = new Map<string, number>()
+    let rightLimit = leftEdge
+    let minStart = leftEdge
+    for (const c of leftSide) {
+      const cEnd = c.start + c.duration
+      if (cEnd > rightLimit) {
+        const newStart = rightLimit - c.duration
+        out.set(c.id, newStart)
+        rightLimit = newStart
+        if (newStart < minStart) minStart = newStart
+      } else {
+        rightLimit = c.start
+        if (c.start < minStart) minStart = c.start
+      }
+    }
+    return { positions: out, minStart }
+  }
+
+  let leftPack = packLeft(constrainedStart)
+  if (leftPack.minStart < 0) {
+    // Constrain dragged clip rightward so leftmost left-clip lands at 0
+    constrainedStart = constrainedStart + (0 - leftPack.minStart)
+    leftPack = packLeft(constrainedStart)
+  }
+  for (const [id, start] of leftPack.positions) positions.set(id, start)
+
+  // Pack right side: each rightClip's left edge ≥ leftLimit
+  let leftLimit = constrainedStart + draggedDuration
+  for (const c of rightSide) {
+    if (c.start < leftLimit) {
+      positions.set(c.id, leftLimit)
+      leftLimit = leftLimit + c.duration
+    } else {
+      leftLimit = c.start + c.duration
+    }
+  }
+
+  return { positions, constrainedStart }
+}
+
 /** Assign the lowest lane that doesn't overlap with existing items. */
 export function assignLane(
   existing: readonly { time: number; duration: number; lane?: number }[],
