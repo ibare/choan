@@ -115,6 +115,11 @@ export function SkinEditor({ skin, state: cs, onChange }: SkinEditorProps) {
             onChange={(v) => set({ align: v })}
           />
           {toggle('bold')}
+          <Input
+            type="color"
+            value={(cs.textColor as string) || '#333333'}
+            onChange={(e) => set({ textColor: e.target.value })}
+          />
         </>
       )
     case 'table-skeleton':

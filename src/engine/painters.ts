@@ -370,7 +370,7 @@ function paintText(ctx: OffscreenCanvasRenderingContext2D, w: number, h: number,
   const align = (state.align as string) || 'center'
   const bold = !!state.bold
 
-  ctx.fillStyle = stroke.color
+  ctx.fillStyle = (state.textColor as string) || stroke.color
   ctx.font = `${bold ? '700' : '400'} ${fontSize}px Inter, system-ui, sans-serif`
   ctx.textAlign = align as CanvasTextAlign
   ctx.textBaseline = 'middle'
