@@ -73,10 +73,11 @@ export default function GeometrySection({ el, isChild, isManaged, isContainer, o
             type="number" inputSize="sm"
             value={String(el.z)} disabled={isChild}
             onChange={(e) => {
-              onUpdate({ z: Number(e.target.value) })
+              onUpdateAnimatable('z', Number(e.target.value))
               if (isContainer) queueMicrotask(onRunLayout)
             }}
           />
+          <KeyframeButton elementId={el.id} property="z" value={el.z} />
         </div>
       </PropRow>
 

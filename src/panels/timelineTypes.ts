@@ -10,7 +10,7 @@ export const INDENT_PX = 16
 export const PX_PER_MS = 0.4
 
 export const ANIMATABLE_PROPERTIES: AnimatableProperty[] = [
-  'x', 'y', 'width', 'height', 'color', 'radius',
+  'x', 'y', 'z', 'width', 'height', 'color', 'radius',
 ]
 
 export interface DisplayClipEntry {
