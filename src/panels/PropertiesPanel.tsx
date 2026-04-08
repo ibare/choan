@@ -4,6 +4,7 @@ import type { AnimatableProperty } from '../animation/types'
 import { useSelectedElement } from '../hooks/useSelectedElement'
 import { Section } from '../components/ui/Section'
 import { PropRow } from '../components/ui/PropRow'
+import { MotionPathEditor } from '../components/panels/MotionPathEditor'
 import ElementSection from './ElementSection'
 import SkinSection from './SkinSection'
 import ContainerLayoutSection from './ContainerLayoutSection'
@@ -12,7 +13,8 @@ import TriggersSection from './TriggersSection'
 import Viewfinder from './Viewfinder'
 
 export default function PropertiesPanel() {
-  const { updateElement, runLayout, elements, animationBundles } = useChoanStore()
+  const { updateElement, runLayout, elements, animationBundles, updateClipInBundle } = useChoanStore()
+  const editingBundleId = usePreviewStore((s) => s.editingBundleId)
   const el = useSelectedElement()
 
   if (!el) {
@@ -29,6 +31,13 @@ export default function PropertiesPanel() {
   const isManaged   = isChild && parentEl?.layoutDirection !== 'free' && parentEl?.layoutDirection !== undefined
   const isContainer = el.role === 'container'
   const childCount  = isContainer ? elements.filter((e) => e.parentId === el.id).length : 0
+
+  // Motion Path editor is only shown while a bundle is being edited and the
+  // selected element has a clip in that bundle.
+  const editingBundle = editingBundleId
+    ? animationBundles.find((b) => b.id === editingBundleId)
+    : null
+  const currentClip = editingBundle?.clips.find((c) => c.elementId === el.id) ?? null
 
   const onUpdate = (patch: Record<string, unknown>) => updateElement(el.id, patch)
 
@@ -81,6 +90,13 @@ export default function PropertiesPanel() {
         animationBundles={animationBundles}
         onUpdate={(triggers) => updateElement(el.id, { triggers })}
       />
+
+      {editingBundle && currentClip && (
+        <MotionPathEditor
+          motionPath={currentClip.motionPath}
+          onChange={(patch) => updateClipInBundle(editingBundle.id, currentClip.id, patch)}
+        />
+      )}
 
     </div>
   )
