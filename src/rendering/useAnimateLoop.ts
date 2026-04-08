@@ -30,6 +30,7 @@ import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
 import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, type RailTimeLabel } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
+import { drawMotionPathOverlay } from './motionPathOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
 import { updateElevationLabel } from './elevationLabel'
 
@@ -346,6 +347,18 @@ export function useAnimateLoop({
         splitModeRef.current,
         renderer.colorWheel,
       )
+
+      // ── Motion path overlay — only while editing a bundle with a single selection ──
+      if (preview.editingBundleId && state.selectedIds.length === 1) {
+        const bundle = state.animationBundles.find((b) => b.id === preview.editingBundleId)
+        const selEl = state.elements.find((e) => e.id === state.selectedIds[0])
+        if (bundle && selEl) {
+          const clip = bundle.clips.find((c) => c.elementId === selEl.id)
+          if (clip?.motionPath) {
+            drawMotionPathOverlay(renderer.overlay, clip.motionPath, selEl, rs.extrudeDepth, dpr)
+          }
+        }
+      }
 
       // ── Director mode overlays (not playing) ──
       railTimeLabelsRef.current = []
