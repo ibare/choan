@@ -1,6 +1,6 @@
 // Viewfinder — shows the director camera view in the inspector panel.
-// Renders by temporarily overriding the main camera, rendering one frame
-// to the WebGL canvas, and copying to a 2D preview canvas.
+// Uses a dedicated vf FBO (renderer.renderViewfinderFrame) so the main camera
+// and GBuffer are never touched. Works during both edit and playback.
 
 import { useRef, useEffect } from 'react'
 import { useDirectorStore } from '../store/useDirectorStore'
@@ -17,14 +17,14 @@ import { Section } from '../components/ui/Section'
 export default function Viewfinder() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const {
-    directorMode, directorPlaying, directorPlayheadTime,
+    directorMode, directorPlayheadTime,
     selectedCameraId,
     focalLengthMm, viewfinderAspect,
     directorCameraPos, directorTargetPos,
     lastInteraction, directorTargetMode,
   } = useDirectorStore()
 
-  const visible = directorMode && !directorPlaying && selectedCameraId !== null
+  const visible = directorMode && selectedCameraId !== null
 
   const [aw, ah] = viewfinderAspect.split(':').map(Number)
   const vfAspectRatio = aw / ah
@@ -44,13 +44,6 @@ export default function Viewfinder() {
 
     vfCanvas.width = Math.round(cssW * dpr)
     vfCanvas.height = Math.round(cssH * dpr)
-
-    // Save camera + renderer CSS size
-    const cam = renderer.camera
-    const savedPos: [number, number, number] = [...cam.position]
-    const savedTarget: [number, number, number] = [...cam.target]
-    const savedFov = cam.fov
-    const savedSize = renderer.getCssSize()
 
     // Policy: the selected camera's view is what the viewfinder shows. When the
     // user edits the camera directly (`lastInteraction === 'camera'`), live
@@ -78,18 +71,6 @@ export default function Viewfinder() {
       }
     }
 
-    cam.position[0] = camPos[0]
-    cam.position[1] = camPos[1]
-    cam.position[2] = camPos[2]
-    cam.target[0] = camTgt[0]
-    cam.target[1] = camTgt[1]
-    cam.target[2] = camTgt[2]
-    cam.fov = camFov
-
-    // Resize renderer to viewfinder aspect
-    renderer.resizeViewport(cssW, cssH)
-    renderer.applyPendingResize()
-
     // Evaluate animation events at playhead time
     const activeEvents = evaluateDirectorEvents(dt.eventMarkers, directorPlayheadTime, state.animationBundles)
     const activeBundles = activeEvents.map((e) => ({ bundle: e.bundle, localTime: e.localTime }))
@@ -97,32 +78,14 @@ export default function Viewfinder() {
       ? evaluateBundles(state.elements, activeBundles)
       : state.elements
 
-    // Render one frame
+    // Render to dedicated vf FBO — does NOT touch renderer.camera or main GBuffer
     const rs = useRenderSettings.getState()
     renderer.updateScene(animated, rs.extrudeDepth)
-    renderer.renderPipeline(rs)
-    renderer.blitAndOverlay()
+    renderer.renderViewfinderFrame(camPos, camTgt, camFov, cssW, cssH, rs)
 
-    // Copy to viewfinder
+    // Copy vf FBO to preview canvas
     ctx.clearRect(0, 0, vfCanvas.width, vfCanvas.height)
-    ctx.drawImage(renderer.canvas, 0, 0, vfCanvas.width, vfCanvas.height)
-
-    // Restore renderer size and camera
-    renderer.resize(savedSize.w, savedSize.h)
-    renderer.applyPendingResize()
-
-    cam.position[0] = savedPos[0]
-    cam.position[1] = savedPos[1]
-    cam.position[2] = savedPos[2]
-    cam.target[0] = savedTarget[0]
-    cam.target[1] = savedTarget[1]
-    cam.target[2] = savedTarget[2]
-    cam.fov = savedFov
-
-    // Re-render main view with restored camera
-    renderer.updateScene(state.elements, rs.extrudeDepth)
-    renderer.renderPipeline(rs)
-    renderer.blitAndOverlay()
+    renderer.blitViewfinderToCtx(ctx, vfCanvas.width, vfCanvas.height)
   }, [visible, directorPlayheadTime, focalLengthMm, viewfinderAspect, directorCameraPos, directorTargetPos, lastInteraction, directorTargetMode, selectedCameraId])
 
   if (!visible) return null

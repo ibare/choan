@@ -1184,16 +1184,6 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
                 ? evaluateCameraMarks(dt.cameraMarks, timeMs, dirState.directorRails)
                 : evaluateDirectorCamera(dt.cameraKeyframes, timeMs)
         }
-        if (camState) {
-          renderer.camera.position[0] = camState.position[0]
-          renderer.camera.position[1] = camState.position[1]
-          renderer.camera.position[2] = camState.position[2]
-          renderer.camera.target[0] = camState.target[0]
-          renderer.camera.target[1] = camState.target[1]
-          renderer.camera.target[2] = camState.target[2]
-          renderer.camera.fov = camState.fov
-        }
-
         // Animation events — always top-level at absolute time
         const activeEvents = evaluateDirectorEvents(dt.eventMarkers, timeMs, state.animationBundles)
         const activeBundles = activeEvents.map((e) => ({ bundle: e.bundle, localTime: e.localTime }))
@@ -1203,17 +1193,19 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
 
         renderer.updateScene(applyMultiSelectTint(animated, []), rs.extrudeDepth)
         renderer.applyPendingResize()
-        renderer.renderPipeline(rs)
 
-        // Bokeh DoF — focus at camera target distance
-        const cam = renderer.camera
-        const ddx = cam.position[0] - cam.target[0]
-        const ddy = cam.position[1] - cam.target[1]
-        const ddz = cam.position[2] - cam.target[2]
-        const focusDist = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz)
-        renderer.applyDoF({ focusDist, aperture: 25.0, maxBlurPx: 40 })
+        // 카메라 포즈 — camState가 없으면 현재 renderer.camera 위치 유지
+        const exportPos: [number, number, number] = camState
+          ? camState.position
+          : [renderer.camera.position[0], renderer.camera.position[1], renderer.camera.position[2]]
+        const exportTgt: [number, number, number] = camState
+          ? camState.target
+          : [renderer.camera.target[0], renderer.camera.target[1], renderer.camera.target[2]]
+        const exportFov = camState ? camState.fov : renderer.camera.fov
 
-        renderer.blitAndOverlay()
+        // vf FBO로 렌더링 후 메인 캔버스(=캡처 스트림 소스)로 복사
+        renderer.renderViewfinderFrame(exportPos, exportTgt, exportFov, settings.width, settings.height, rs)
+        renderer.blitViewfinderToMainCanvas()
       },
     )
     exporter.onProgress = (p) => setExportProgress(p)

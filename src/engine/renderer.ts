@@ -14,7 +14,7 @@ import { createTextureAtlas, type TextureAtlas } from './textureAtlas'
 import { createColorWheel, type ColorWheelTexture } from './colorWheel'
 import { createOverlayRenderer, type OverlayRenderer } from './overlay'
 import { buildViewProjMatrix } from './camera'
-import { createGBuffer } from './fbo'
+import { createGBuffer, type GBuffer } from './fbo'
 import type { ChoanElement } from '../store/useChoanStore'
 import type { RenderSettings } from '../store/useRenderSettings'
 
@@ -63,6 +63,15 @@ export interface SDFRenderer {
   applyDoF(params: DoFParams): void
   /** Darken pixels outside the director camera frustum. */
   applyFrustumMask(dirViewProj: Float32Array, darken?: number): void
+  /**
+   * Render the scene from a given camera pose into the dedicated viewfinder FBO.
+   * Does NOT touch renderer.camera or the main GBuffer.
+   */
+  renderViewfinderFrame(pos: [number, number, number], tgt: [number, number, number], fov: number, cssW: number, cssH: number, s: RenderSettings): void
+  /** Copy viewfinder FBO result into a 2D canvas context (Y-flipped, scaled to dstW×dstH). */
+  blitViewfinderToCtx(ctx: CanvasRenderingContext2D, dstW: number, dstH: number): void
+  /** Blit viewfinder FBO → main canvas (for video export frames). */
+  blitViewfinderToMainCanvas(): void
   dispose(): void
 }
 
@@ -247,17 +256,24 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     }
   }
 
-  /** Pass 1 (geometry → GBuffer) + Pass 2 (edge detection → resolveFB). */
-  function renderPipeline(s: RenderSettings) {
-    const ray = getCameraRayParams(camera)
+  /** Internal: Pass 1 (geometry → gbuf) + Pass 2 (edge → resolveFB) using explicit targets. */
+  function _renderPipelineInternal(
+    targetCam: Camera,
+    targetGbuf: GBuffer,
+    targetResolveFB: WebGLFramebuffer,
+    targetSsW: number,
+    targetSsH: number,
+    s: RenderSettings,
+  ) {
+    const ray = getCameraRayParams(targetCam)
 
-    // ── Pass 1: Geometry → GBuffer (2x) ──
+    // ── Pass 1: Geometry → GBuffer ──
     gl.disable(gl.BLEND)
-    gbuffer.bind(gl)
-    gl.viewport(0, 0, ssW, ssH)
+    targetGbuf.bind(gl)
+    gl.viewport(0, 0, targetSsW, targetSsH)
 
     gl.useProgram(geoProgram)
-    gl.uniform2f(uResolution, ssW, ssH)
+    gl.uniform2f(uResolution, targetSsW, targetSsH)
     gl.uniform3f(uBgColor, s.bgColor[0], s.bgColor[1], s.bgColor[2])
     gl.uniform3f(uCamPos, ray.ro[0], ray.ro[1], ray.ro[2])
     gl.uniform3f(uCamForward, ray.forward[0], ray.forward[1], ray.forward[2])
@@ -283,22 +299,22 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
 
     drawFullscreenQuad(gl, quad)
 
-    // ── Pass 2: Edge detection → resolve FBO (2x) ──
-    gbuffer.unbind(gl)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, resolveFB)
-    gl.viewport(0, 0, ssW, ssH)
+    // ── Pass 2: Edge detection → resolve FBO ──
+    targetGbuf.unbind(gl)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, targetResolveFB)
+    gl.viewport(0, 0, targetSsW, targetSsH)
 
     gl.useProgram(edgeProgram)
 
     gl.activeTexture(gl.TEXTURE0)
-    gl.bindTexture(gl.TEXTURE_2D, gbuffer.colorTex)
+    gl.bindTexture(gl.TEXTURE_2D, targetGbuf.colorTex)
     gl.uniform1i(uColorTex, 0)
 
     gl.activeTexture(gl.TEXTURE1)
-    gl.bindTexture(gl.TEXTURE_2D, gbuffer.normalIdTex)
+    gl.bindTexture(gl.TEXTURE_2D, targetGbuf.normalIdTex)
     gl.uniform1i(uNormalIdTex, 1)
 
-    gl.uniform2f(uTexelSize, 1 / ssW, 1 / ssH)
+    gl.uniform2f(uTexelSize, 1 / targetSsW, 1 / targetSsH)
     gl.uniform1f(uOutlineWidth, s.outlineWidth)
     gl.uniform3f(uEdgeColor, s.edgeColor[0], s.edgeColor[1], s.edgeColor[2])
     gl.uniform3f(uEdgeBgColor, s.bgColor[0], s.bgColor[1], s.bgColor[2])
@@ -306,6 +322,110 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     gl.uniform2f(uIdEdgeThreshold, s.idEdgeThreshold[0], s.idEdgeThreshold[1])
 
     drawFullscreenQuad(gl, quad)
+  }
+
+  /** Pass 1 (geometry → GBuffer) + Pass 2 (edge detection → resolveFB). */
+  function renderPipeline(s: RenderSettings) {
+    _renderPipelineInternal(camera, gbuffer, resolveFB, ssW, ssH, s)
+  }
+
+  // ── Viewfinder FBO (separate from main pipeline) ──
+  const vfCamera = createCamera()
+  let vfGBuffer: GBuffer | null = null
+  let vfResolveFB: WebGLFramebuffer | null = null
+  let vfResolveTex: WebGLTexture | null = null
+  let vfSsW = 0, vfSsH = 0
+  let vfPixelBuf: Uint8Array | null = null
+  let vfOffscreen: OffscreenCanvas | null = null
+
+  function _ensureVfFBO(cssW: number, cssH: number) {
+    const dpr = window.devicePixelRatio || 1
+    const ss = dpr >= 2 ? 1 : 2
+    const pw = Math.round(cssW * dpr) * ss
+    const ph = Math.round(cssH * dpr) * ss
+    if (pw === vfSsW && ph === vfSsH) return
+
+    if (vfGBuffer) vfGBuffer.dispose(gl)
+    vfGBuffer = createGBuffer(gl, pw, ph)
+
+    if (vfResolveTex) gl.deleteTexture(vfResolveTex)
+    vfResolveTex = gl.createTexture()!
+    gl.bindTexture(gl.TEXTURE_2D, vfResolveTex)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, pw, ph, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+
+    if (!vfResolveFB) vfResolveFB = gl.createFramebuffer()!
+    gl.bindFramebuffer(gl.FRAMEBUFFER, vfResolveFB)
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, vfResolveTex, 0)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+
+    vfSsW = pw
+    vfSsH = ph
+
+    const needed = pw * ph * 4
+    if (!vfPixelBuf || vfPixelBuf.length !== needed) vfPixelBuf = new Uint8Array(needed)
+    if (!vfOffscreen || vfOffscreen.width !== pw || vfOffscreen.height !== ph) {
+      vfOffscreen = new OffscreenCanvas(pw, ph)
+    }
+  }
+
+  function renderViewfinderFrame(
+    pos: [number, number, number],
+    tgt: [number, number, number],
+    fov: number,
+    cssW: number,
+    cssH: number,
+    s: RenderSettings,
+  ) {
+    _ensureVfFBO(cssW, cssH)
+    vfCamera.position[0] = pos[0]
+    vfCamera.position[1] = pos[1]
+    vfCamera.position[2] = pos[2]
+    vfCamera.target[0] = tgt[0]
+    vfCamera.target[1] = tgt[1]
+    vfCamera.target[2] = tgt[2]
+    vfCamera.fov = fov
+    vfCamera.aspect = cssW / cssH
+    _renderPipelineInternal(vfCamera, vfGBuffer!, vfResolveFB!, vfSsW, vfSsH, s)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+  }
+
+  function blitViewfinderToCtx(ctx: CanvasRenderingContext2D, dstW: number, dstH: number) {
+    if (!vfResolveFB || !vfPixelBuf || !vfOffscreen) return
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, vfResolveFB)
+    gl.readPixels(0, 0, vfSsW, vfSsH, gl.RGBA, gl.UNSIGNED_BYTE, vfPixelBuf)
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
+
+    // Y-flip (WebGL origin is bottom-left, canvas is top-left)
+    const rowBytes = vfSsW * 4
+    const flipped = new Uint8ClampedArray(vfPixelBuf.length)
+    for (let y = 0; y < vfSsH; y++) {
+      flipped.set(
+        new Uint8ClampedArray(vfPixelBuf.buffer, (vfSsH - 1 - y) * rowBytes, rowBytes),
+        y * rowBytes,
+      )
+    }
+
+    const offCtx = vfOffscreen.getContext('2d')!
+    offCtx.putImageData(new ImageData(flipped, vfSsW, vfSsH), 0, 0)
+    ctx.drawImage(vfOffscreen, 0, 0, dstW, dstH)
+  }
+
+  function blitViewfinderToMainCanvas() {
+    if (!vfResolveFB) return
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, vfResolveFB)
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
+    gl.blitFramebuffer(
+      0, 0, vfSsW, vfSsH,
+      0, 0, canvas.width, canvas.height,
+      gl.COLOR_BUFFER_BIT, gl.LINEAR,
+    )
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null)
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null)
   }
 
   // ── DoF pass (lazy init — zero overhead when unused) ──
@@ -450,6 +570,9 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     if (fmProgram) gl.deleteProgram(fmProgram)
     if (dofTex) gl.deleteTexture(dofTex)
     if (dofFB) gl.deleteFramebuffer(dofFB)
+    if (vfGBuffer) vfGBuffer.dispose(gl)
+    if (vfResolveTex) gl.deleteTexture(vfResolveTex)
+    if (vfResolveFB) gl.deleteFramebuffer(vfResolveFB)
     sceneUBO.dispose(gl)
     atlas.dispose(gl)
     colorWheel.dispose(gl)
@@ -466,6 +589,7 @@ export function createSDFRenderer(container: HTMLElement): SDFRenderer {
     get bvhData() { return currentBVH },
     resize, updateScene, setSmoothK(k: number) { currentSmoothK = k },
     render, renderPipeline, blitAndOverlay, applyPendingResize, applyDoF, applyFrustumMask,
+    renderViewfinderFrame, blitViewfinderToCtx, blitViewfinderToMainCanvas,
     getResolveTex() { return resolveTex },
     getResolveFB() { return resolveFB },
     getSuperSampledSize(): [number, number] { return [ssW, ssH] },
