@@ -136,6 +136,7 @@ Flexbox-inspired auto-layout for containers:
 ### Animation Timeline
 
 - **Keyframe editing**: x, y, width, height, color, radius tracks
+- **Diamond keyframe buttons**: Per-property keyframe toggle (add/remove at playhead)
 - **Easing**: linear / ease / ease-in / ease-out / ease-in-out / spring (damped harmonic oscillator)
 - **Animation bundles**: Group multiple element clips into named bundles
 - **Preview & scrubbing**: Playhead drag, play/pause/stop controls
@@ -153,12 +154,22 @@ A cinematic camera system for creating animated camera sequences without traditi
 - **Single target** — one target object per scene that the camera always looks at
 - **Minimal concepts** — only two things to think about: "where the camera is" and "what it looks at"
 
+#### Multi-Camera System
+
+Director mode supports multiple cameras on a single timeline:
+
+- **Add / Delete**: Create multiple independent cameras, each with its own rail configuration
+- **Camera selection**: Click a camera's frustum icon to select it; selected camera drives the Viewfinder
+- **Selection priority system**: `lastInteraction` tracks whether the user last moved the camera or the playhead, resolving ambiguous state (e.g., which camera position to show)
+- **Camera time tracking**: `findCameraDerivedPose()` derives camera pose from clip position and playhead time
+
 #### Camera Object
 
 - Exists as a 3D scene object (separate from the viewport camera)
 - Always points at the **Target Object** (amber cross marker in 3D view)
 - Selected by clicking its frustum icon in the 3D viewport
 - Draggable via **ray-plane intersection** on the view-perpendicular plane
+- New cameras spawn at world origin with a default Z=18 distance
 
 #### Rail System
 
@@ -180,6 +191,19 @@ Each axis has a rail that defines the camera's range of movement:
 - Camera automatically constrained within extended rail range
 - Alt + drag → override constraint, move camera + rail together
 
+**Rail timing:**
+Each rail has an independent animation interval (`startTime` / `endTime`) and easing curve, allowing per-axis timing control without exposing keyframes:
+
+```typescript
+RailExtents {
+  neg: number        // negative extent
+  pos: number        // positive extent
+  startTime: number  // animation start (ms)
+  endTime: number    // animation end (ms)
+  easing?: EasingType
+}
+```
+
 #### Circular Rails
 
 - **X circular**: horizontal orbit in XZ plane, center on Y-axis at Z=0
@@ -187,24 +211,53 @@ Each axis has a rail that defines the camera's range of movement:
 - Radius = distance from camera to orbit center (implicit, no extra control)
 - Rail extent maps to arc length on the circle
 
-#### XYZ Axis Move Tunnels
+#### Rail Slider Controller
 
-Generalized from the element Z-tunnel system:
-- Color-coded: X=red, Y=green, Z=blue (3D conventions)
-- Hover highlights the tunnel face, shows directional arrow
-- Drag on tunnel face → camera moves along that axis
-- All drag handlers use **ray-based projection** (ray-plane / ray-axis intersection)
+When a rail is extended, a **slider widget** replaces the raw axis tunnel for that axis:
+
+- Three sliders (X / Y / Z) positioned around the camera object
+- Each slider maps to its rail's full extent range
+- Dragging the slider knob → camera slides along the rail
+- Non-extended axes still accept direct drag on the tunnel face
+
+#### Camera Clip Timeline (FCP Style)
+
+Director mode features a **Final Cut Pro-style clip timeline** for arranging camera sequences:
+
+- **CameraClip**: A discrete block on the timeline with `cameraId`, `timelineStart`, `duration`, and an embedded `cameraSetup` snapshot
+- **Clip editing**: Click to select, drag to move, drag edges to resize duration
+- **Magnetic snap**: Clip edges snap to adjacent clip boundaries with visual feedback
+- **Ripple editing**: Moving a clip pushes adjacent clips to prevent gaps
+- **Overlap prevention**: Clips on the same lane cannot overlap; repositioning enforces valid layout
+- **Compound clip editing**: Double-click a clip to enter detail mode and edit its internal rail timing
+
+#### Lane-Based Timeline (NLE Style)
+
+Clips are assigned to **lanes** (tracks) using a non-destructive NLE algorithm:
+
+- `resolveLane()` places each clip on the lowest-indexed lane with no overlap
+- Multiple cameras can exist simultaneously on different lanes
+- Lane count grows dynamically as clips are added
+
+#### Event Marker System
+
+**EventMarkers** schedule animation bundles at specific timeline positions:
+
+- Each marker references a named animation bundle and a trigger time
+- Evaluated during Director playback via `directorEventEvaluator`
+- Visible on the timeline as labeled pins
 
 #### Frustum Spotlight (Q key)
 
 - Hybrid frustum mask: surface pixels get crisp boundary, background gets volumetric cone
 - Warm amber face colors with per-face brightness levels
 - Entry-face detection via Liang-Barsky algorithm
+- Frustum geometry computed from a single source (`frustumGeometry.ts`) shared across rendering and interaction
 
 #### Viewfinder
 
-- Inspector panel showing the director camera's live view
-- Uses `directorCameraPos` / `directorTargetPos` directly
+- Inspector panel showing the selected director camera's live view
+- Displayed only when a camera is selected
 - Aspect ratio options: 16:9, 4:3, 1:1, 9:16, 2.35:1
 - Focal length slider: 10–200mm
 
@@ -212,13 +265,34 @@ Generalized from the element Z-tunnel system:
 
 - Single world-space object (amber cross + disc) visible only in Director mode
 - Camera always looks at it
-- Can be attached to a scene object for follow shots (planned)
+- **Draggable**: Drag the target marker to reposition it in world space
+- **Elevation angle constraint**: Tilt angle capped at `TARGET_DRAG_MAX_TILT_DEG`; angle label displayed during drag
+- **Locked mode** (`targetMode: 'locked'`): Target rotates with the camera, maintaining relative bearing — useful for circular orbits
+- **Fixed mode** (`targetMode: 'fixed'`): Target stays at its world position regardless of camera movement
+- **Element attachment**: Target can be attached to a scene element for follow shots
+
+#### Camera Framing (Z key)
+
+- Moves the selected element to the world origin and frames the director camera to it
+- Useful for quickly centering a composition on a specific object
+
+#### Camera Front Alignment
+
+- Aligns the director camera to face the +Z axis directly (orthographic front view equivalent)
+- Available as a button in the Director panel
+
+#### Video Export
+
+- Renders the Director timeline to **WebM** video via `videoExporter.ts`
+- Configurable: resolution, FPS, duration
+- Uses OffscreenCanvas for frame-by-frame WebGL capture
 
 #### Keyboard Shortcuts (Director Mode)
 
 | Key | Action |
 |-----|--------|
 | Q | Toggle frustum spotlight |
+| Z | Frame selected element to origin + camera |
 | Double-click rail handle | Toggle Linear ↔ Circular rail mode |
 | Alt + axis drag | Override rail constraint |
 
@@ -226,7 +300,16 @@ Generalized from the element Z-tunnel system:
 
 - **Markdown**: Structured UI spec with component tree, layout hints, animations
 - **YAML**: `.choan` project file (save / load)
+- **Video**: WebM recording of Director timeline playback
 - **Platform renderers**: Web (HTML/CSS Flexbox), iOS (SwiftUI), Android (Jetpack Compose) implementation hints
+
+### Project Storage
+
+Projects are persisted via **IndexedDB** (replaced the earlier localStorage approach):
+
+- Auto-save on change (debounced)
+- `ProjectRecord` structure stores full canvas + animation + director state
+- `persistence.ts` handles read/write lifecycle
 
 ### Keyboard Shortcuts
 
@@ -242,6 +325,7 @@ Generalized from the element Z-tunnel system:
 | Ctrl+C | Copy |
 | Ctrl+V | Paste |
 | Alt (hold) | Show distances / Enable sibling sync |
+| Z (Director mode) | Frame selected element to origin |
 
 ---
 
@@ -258,6 +342,7 @@ Generalized from the element Z-tunnel system:
 | Build | Vite 8 |
 | Test | Vitest |
 | Icons | Phosphor Icons |
+| Storage | IndexedDB (via `persistence.ts`) |
 
 ---
 
@@ -336,7 +421,12 @@ src/
 │   ├── overlay.ts          # UI overlay (selection handles, snap guides)
 │   ├── sdf.ts              # CPU-side SDF + BVH for hit testing
 │   ├── painters.ts         # Canvas 2D skin renderers → texture atlas
-│   └── timeline2d.ts       # Timeline canvas renderer
+│   ├── catmullRom.ts       # Catmull-Rom spline interpolation
+│   ├── timeline2d.ts       # 2D timeline canvas rendering entry point
+│   ├── timeline2dRenderer.ts   # Timeline draw loop + clip layout
+│   ├── timeline2dPrimitives.ts # Timeline primitives (clip rect, lane lines, etc.)
+│   ├── timeline2dTypes.ts  # Timeline rendering types
+│   └── videoExporter.ts    # WebM video export via OffscreenCanvas
 │
 ├── canvas/                 # React canvas layer
 │   ├── SDFCanvas.tsx       # Main canvas component
@@ -348,7 +438,10 @@ src/
 │   ├── FrameIndicator.tsx  # Frame boundary indicator
 │   ├── DragSelectBox.tsx   # Marquee selection overlay
 │   ├── DistanceLabels.tsx  # Alt-key distance labels
-│   └── SplitLabels.tsx     # Split mode count indicator
+│   ├── SplitLabels.tsx     # Split mode count indicator
+│   ├── ElevationAngleLabel.tsx # Camera target drag elevation angle label
+│   ├── RailTimeLabels.tsx  # Rail animation timing labels with leader lines
+│   └── PinOverlay.tsx      # Container child sizing mode pin toggle
 │
 ├── interaction/            # Input handling
 │   ├── usePointerHandlers.ts  # Pointer event router (select, drag, resize, draw, color picker, rail/axis drag)
@@ -361,6 +454,7 @@ src/
 │   ├── dragSelectHandlers.ts # Marquee selection logic
 │   ├── colorPickerHandlers.ts # On-canvas color picker
 │   ├── splitElement.ts       # Split element into N children
+│   ├── frameSelection.ts     # Z-key frame-to-origin + camera framing
 │   ├── hitTest.ts            # BVH-accelerated hit testing
 │   └── elementHelpers.ts     # Containment detection, reparenting
 │
@@ -373,15 +467,24 @@ src/
 │   ├── useAnimateLoop.ts   # RequestAnimationFrame loop
 │   ├── cameraPathOverlay.ts # Camera frustum, rail, target rendering
 │   ├── zTunnelOverlay.ts   # XYZ axis tunnels, ground grid, camera footprint
+│   ├── frustumGeometry.ts  # Frustum geometry (single source shared across rendering/interaction)
+│   ├── elevationLabel.ts   # Elevation angle label DOM updates
+│   ├── multiSelectTint.ts  # Multi-select color tint override
 │   ├── kfAnimator.ts       # Keyframe animator
 │   └── ghostPreview.ts     # Onion-skin preview
 │
 ├── animation/              # Animation system
 │   ├── types.ts            # Keyframe, AnimationClip, AnimationBundle
-│   ├── directorTypes.ts    # Rail system types, circular rail math utilities
+│   ├── directorTypes.ts    # Rail system types, CameraClip, EventMarker, RailExtents
 │   ├── directorCameraEvaluator.ts  # Catmull-Rom camera interpolation
 │   ├── directorEventEvaluator.ts   # Event marker evaluation
+│   ├── cameraTimeTrack.ts  # Clip-based camera pose derivation (findCameraDerivedPose)
+│   ├── cameraMarkEvaluator.ts # Camera mark interpolation along rails
 │   ├── cameraPresets.ts    # Camera presets (Orbit, Dolly, Crane, Pan, Fly-through)
+│   ├── keyframeEngine.ts   # Animation playback engine
+│   ├── addKeyframe.ts      # Add/remove keyframes at playhead
+│   ├── autoKeyframe.ts     # Auto-keyframe on property change
+│   ├── propagateDelta.ts   # Parent-child property delta propagation
 │   ├── animationEvaluator.ts
 │   ├── interpolate.ts
 │   └── buildLayerTree.ts
@@ -390,9 +493,11 @@ src/
 │   ├── PropertiesPanel.tsx    # Right panel (element, skin, geometry, triggers)
 │   ├── LayerPanel.tsx         # Layer tree with rename-all
 │   ├── TimelinePanel.tsx      # Animation timeline
-│   ├── DirectorTimelinePanel.tsx # Director mode timeline (camera tracks, events, export)
-│   ├── Viewfinder.tsx         # Director camera live preview
+│   ├── DirectorTimelinePanel.tsx # Director mode timeline (camera clips, event markers, lanes)
+│   ├── Viewfinder.tsx         # Director camera live preview (shown on camera selection)
 │   ├── TimelineSidebar.tsx    # Timeline sidebar (bundles, playback)
+│   ├── VideoExportDialog.tsx  # WebM video export settings dialog
+│   ├── SceneTabBar.tsx        # Scene tab navigation bar
 │   ├── ElementSection.tsx     # Label, type, frame
 │   ├── SkinSection.tsx        # Skin picker + options
 │   ├── GeometrySection.tsx    # Radius, line style, position, size
@@ -405,10 +510,11 @@ src/
 │   ├── useChoanStore.ts       # Unified facade store
 │   ├── useElementStore.ts     # Elements + selection + layout
 │   ├── useAnimationStore.ts   # Bundles, clips, keyframes
-│   ├── useDirectorStore.ts    # Director mode (camera pos/target, rails, axis hover, anchor)
+│   ├── useDirectorStore.ts    # Director mode (cameras[], clips[], rails, target, selection priority)
 │   ├── usePreviewStore.ts     # Timeline preview state
 │   ├── useUIStore.ts          # Tool, draw color, pending skin/frame
-│   └── useRenderSettings.ts   # Render settings (extrude, outline, toon)
+│   ├── useRenderSettings.ts   # Render settings (extrude, outline, toon)
+│   └── persistence.ts         # IndexedDB-based project save/load
 │
 ├── export/                 # Export logic
 │   ├── toMarkdown.ts          # UI spec markdown generation
@@ -422,7 +528,8 @@ src/
 │
 ├── components/ui/          # Radix-based UI components
 │   ├── Button.tsx, Input.tsx, Select.tsx, Slider.tsx,
-│   ├── Dialog.tsx, Tooltip.tsx, Section.tsx, PropRow.tsx, ...
+│   ├── Dialog.tsx, Tooltip.tsx, Section.tsx, PropRow.tsx,
+│   └── KeyframeButton.tsx     # Diamond keyframe toggle button
 │
 ├── coords/                 # Coordinate transforms (pixel ↔ world, ray-plane/axis intersection)
 ├── constants/              # Shared constants
@@ -450,9 +557,10 @@ npm run test     # Run tests
 2. **Apply skins** — Select an element, pick a skin from the Properties panel (Button, Switch, etc.)
 3. **Set up layout** — Use the context toolbar to set container layout (Row / Column / Grid), adjust gap and padding
 4. **Edit properties** — Properties panel for label, radius, color, triggers
-5. **Animate** — Timeline panel: create bundles with `+`, add keyframes, set easing
+5. **Animate** — Timeline panel: create bundles with `+`, add keyframes via diamond buttons, set easing
 6. **Bind triggers** — Triggers section: connect click/hover events to animation bundles
-7. **Export** — Toolbar Export button to copy Markdown or save `.choan` file
+7. **Director mode** — Add cameras, arrange clips on the timeline, set rail extents and timing per axis
+8. **Export** — Toolbar Export button to copy Markdown, save `.choan` file, or render WebM video
 
 ---
 
