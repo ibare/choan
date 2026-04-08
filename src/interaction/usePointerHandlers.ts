@@ -33,6 +33,11 @@ import {
   hitTestRailSlider, hitTestAlignMarker,
   type RailHandleHit,
 } from './cameraPathHandlers'
+import {
+  hitTestMotionPathHandle, worldXYToPathLocal,
+  type MotionPathHandleKind,
+} from './motionPathHandlers'
+import type { ElementMotionPath, LinePath, OrbitPath } from '../animation/motionPathTypes'
 import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
 
 const AXIS_IDX_MAP = { x: 0, y: 1, z: 2 } as const
@@ -161,6 +166,13 @@ export function usePointerHandlers({
   const isRotationDraggingRef = useRef(false)
   const rotationCenterScreenRef = useRef({ px: 0, py: 0 })
   const rotationOriginalRef = useRef(0)
+
+  // Motion path gizmo drag refs (sketch mode, while editing a bundle)
+  const isDraggingMotionPathRef = useRef(false)
+  const dragMotionPathBundleIdRef = useRef<string | null>(null)
+  const dragMotionPathClipIdRef = useRef<string | null>(null)
+  const dragMotionPathHandleRef = useRef<MotionPathHandleKind | null>(null)
+  const dragMotionPathOrigLocalRef = useRef<[number, number, number]>([0, 0, 0])
 
   const isDraggingRef = useRef(false)
   const dragStartPixelRef = useRef({ x: 0, y: 0 })
@@ -556,6 +568,43 @@ export function usePointerHandlers({
       return
     }
 
+    // ── Motion path gizmo drag (sketch mode — editing bundle + single selection) ──
+    {
+      const preview = usePreviewStore.getState()
+      const mpRenderer = rendererRef.current
+      if (preview.editingBundleId && mpRenderer) {
+        const { elements: mpEls, selectedIds: mpSelIds, animationBundles } = useChoanStore.getState()
+        if (mpSelIds.length === 1) {
+          const selEl = mpEls.find((el) => el.id === mpSelIds[0])
+          const bundle = animationBundles.find((b) => b.id === preview.editingBundleId)
+          const clip = selEl && bundle ? bundle.clips.find((c) => c.elementId === selEl.id) : undefined
+          if (selEl && bundle && clip?.motionPath) {
+            const mpRect = mpRenderer.canvas.getBoundingClientRect()
+            const mpDpr = window.devicePixelRatio || 1
+            const rs = useRenderSettings.getState()
+            const hit = hitTestMotionPathHandle(
+              e.clientX, e.clientY, mpRect, mpRenderer.overlay,
+              clip.motionPath, selEl, rs.extrudeDepth, mpDpr,
+            )
+            if (hit) {
+              const mp = clip.motionPath
+              const origLocal: [number, number, number] =
+                hit.kind === 'center' ? [...(mp as OrbitPath).center]
+                : hit.kind === 'p0'   ? [...(mp as LinePath).p0]
+                :                       [...(mp as LinePath).p1]
+              isDraggingMotionPathRef.current = true
+              dragMotionPathBundleIdRef.current = bundle.id
+              dragMotionPathClipIdRef.current = clip.id
+              dragMotionPathHandleRef.current = hit.kind
+              dragMotionPathOrigLocalRef.current = origLocal
+              ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+              return
+            }
+          }
+        }
+      }
+    }
+
     const { tool, selectedIds, elements: els, selectElement, toggleSelectElement, addElement, drawColor } = useChoanStore.getState()
 
     if (tool === 'select') {
@@ -855,6 +904,44 @@ export function usePointerHandlers({
         ? { position: newPos as [number, number, number] }
         : { target: newPos as [number, number, number] }
       useDirectorStore.getState().updateCameraKeyframe(dragCameraKfIdRef.current, patch)
+      return
+    }
+
+    // ── Motion path gizmo drag (XY plane at the handle's current world Z) ──
+    if (isDraggingMotionPathRef.current && rendererRef.current) {
+      const renderer = rendererRef.current
+      const rect = renderer.canvas.getBoundingClientRect()
+      const { w, h } = canvasSizeRef.current
+      const { elements: mpEls, animationBundles, updateClipInBundle } = useChoanStore.getState()
+      const bundle = animationBundles.find((b) => b.id === dragMotionPathBundleIdRef.current)
+      const clip = bundle?.clips.find((c) => c.id === dragMotionPathClipIdRef.current)
+      const selEl = mpEls.find((el) => clip && el.id === clip.elementId)
+      if (!bundle || !clip || !clip.motionPath || !selEl || !dragMotionPathHandleRef.current) return
+
+      const rayP = getCameraRayParams(renderer.camera)
+      const { ro, rd } = screenToRay(e.clientX, e.clientY, rect, rayP.ro, rayP.forward, rayP.right, rayP.up, rayP.fovScale, w, h)
+
+      // Drag on a Z-const plane at the handle's current world Z so XY stays in
+      // lockstep with the visible gizmo. Z of the handle is preserved.
+      const rs = useRenderSettings.getState()
+      const halfDepth = rs.extrudeDepth / 2
+      const origZ = dragMotionPathOrigLocalRef.current[2]
+      const planeZ = clip.motionPath.originMode === 'absolute'
+        ? origZ * rs.extrudeDepth + halfDepth
+        : selEl.z * rs.extrudeDepth + halfDepth + origZ * rs.extrudeDepth
+      const hitWorld = rayPlaneIntersect(ro, rd, [0, 0, 1], [0, 0, planeZ])
+      if (!hitWorld) return
+
+      const newLocal = worldXYToPathLocal(hitWorld[0], hitWorld[1], clip.motionPath, selEl, origZ)
+
+      const handleKind = dragMotionPathHandleRef.current
+      const patch: Partial<ElementMotionPath> = handleKind === 'center'
+        ? { center: newLocal }
+        : handleKind === 'p0'
+          ? { p0: newLocal }
+          : { p1: newLocal }
+      const nextPath = { ...clip.motionPath, ...patch } as ElementMotionPath
+      updateClipInBundle(bundle.id, clip.id, { motionPath: nextPath })
       return
     }
 
@@ -1215,6 +1302,16 @@ export function usePointerHandlers({
     // ── Axis drag cleanup ──
     if (isAxisDraggingRef.current) {
       isAxisDraggingRef.current = false
+      pushSnapshot()
+      return
+    }
+
+    // ── Motion path gizmo drag cleanup ──
+    if (isDraggingMotionPathRef.current) {
+      isDraggingMotionPathRef.current = false
+      dragMotionPathBundleIdRef.current = null
+      dragMotionPathClipIdRef.current = null
+      dragMotionPathHandleRef.current = null
       pushSnapshot()
       return
     }
