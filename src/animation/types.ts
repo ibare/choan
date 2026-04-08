@@ -1,5 +1,7 @@
 // Animation system type definitions
 
+import type { ElementMotionPath } from './motionPathTypes'
+
 export type AnimatableProperty = 'x' | 'y' | 'z' | 'width' | 'height' | 'color' | 'radius'
 
 // Per-keyframe granular easing (Keyframe.easing) and clip-level fallback (AnimationClip.easing).
@@ -23,6 +25,8 @@ export interface AnimationClip {
   duration: number        // ms, derived from max keyframe time
   easing: EasingType
   tracks: KeyframeTrack[]
+  /** Optional 3D motion path applied additively on top of x/y/z tracks. */
+  motionPath?: ElementMotionPath
 }
 
 export interface AnimationBundle {

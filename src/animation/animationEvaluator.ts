@@ -15,6 +15,7 @@ import type { PreviewState } from '../store/usePreviewStore'
 import { evaluateTrack } from './interpolate'
 import { resolveEasing } from './easing'
 import { propagateParentDelta } from './propagateDelta'
+import { evaluateMotionPath } from './motionPathEvaluator'
 import type { AnimatableProperty } from './types'
 
 export interface ActiveBundleInput {
@@ -72,8 +73,8 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
   //    physics (e.g. size transitions) keep working during editing.
   if (editingBundleId && previewState === 'stopped') {
     const bundle = animationBundles.find((b) => b.id === editingBundleId)
-    if (bundle && bundle.clips.some((c) => c.tracks.length > 0)) {
-      const overrides = collectBundleOverrides([{ bundle, localTime: playheadTime }])
+    if (bundle && bundle.clips.some((c) => c.tracks.length > 0 || c.motionPath)) {
+      const overrides = collectBundleOverrides(elements, [{ bundle, localTime: playheadTime }])
 
       propagateParentDelta(elements, overrides)
 
@@ -93,19 +94,56 @@ export function evaluateAnimation(input: AnimationEvalInput): ChoanElement[] {
   return layoutAnimator.tick(elements, springParams, manipulatedIds.size > 0 ? manipulatedIds : undefined)
 }
 
-/** Collect property overrides from multiple bundles. Last-write-wins for conflicts. */
-function collectBundleOverrides(bundles: ActiveBundleInput[]): Map<string, Partial<ChoanElement>> {
+/**
+ * Collect property overrides from multiple bundles. Last-write-wins for conflicts.
+ *
+ * For each clip, tracks are evaluated first into `patch`, then `motionPath`
+ * is applied on top: `relative` adds the motion path output to the base
+ * value (patch value if present, else the element's current value), while
+ * `absolute` replaces x/y/z entirely.
+ */
+function collectBundleOverrides(
+  elements: ChoanElement[],
+  bundles: ActiveBundleInput[],
+): Map<string, Partial<ChoanElement>> {
+  const elById = new Map(elements.map((el) => [el.id, el]))
   const overrides = new Map<string, Partial<ChoanElement>>()
   for (const { bundle, localTime } of bundles) {
     for (const clip of bundle.clips) {
-      if (clip.tracks.length === 0) continue
+      const hasTracks = clip.tracks.length > 0
+      const hasMotionPath = clip.motionPath != null
+      if (!hasTracks && !hasMotionPath) continue
+
       const easingFn = resolveEasing(clip.easing)
       const patch: Partial<ChoanElement> = {}
-      for (const track of clip.tracks) {
-        ;(patch as Record<string, number>)[track.property] = evaluateTrack(
-          track.keyframes, localTime, easingFn, track.property as AnimatableProperty,
-        )
+
+      if (hasTracks) {
+        for (const track of clip.tracks) {
+          ;(patch as Record<string, number>)[track.property] = evaluateTrack(
+            track.keyframes, localTime, easingFn, track.property as AnimatableProperty,
+          )
+        }
       }
+
+      if (hasMotionPath && clip.motionPath) {
+        const el = elById.get(clip.elementId)
+        if (el) {
+          const [mx, my, mz] = evaluateMotionPath(clip.motionPath, localTime, clip.duration)
+          if (clip.motionPath.originMode === 'absolute') {
+            patch.x = mx
+            patch.y = my
+            patch.z = mz
+          } else {
+            const baseX = patch.x !== undefined ? patch.x : el.x
+            const baseY = patch.y !== undefined ? patch.y : el.y
+            const baseZ = patch.z !== undefined ? patch.z : el.z
+            patch.x = baseX + mx
+            patch.y = baseY + my
+            patch.z = baseZ + mz
+          }
+        }
+      }
+
       overrides.set(clip.elementId, { ...overrides.get(clip.elementId), ...patch })
     }
   }
@@ -114,7 +152,7 @@ function collectBundleOverrides(bundles: ActiveBundleInput[]): Map<string, Parti
 
 /** Evaluate multiple bundles and apply overrides with parent-child propagation. */
 export function evaluateBundles(elements: ChoanElement[], bundles: ActiveBundleInput[]): ChoanElement[] {
-  const overrides = collectBundleOverrides(bundles)
+  const overrides = collectBundleOverrides(elements, bundles)
   if (overrides.size === 0) return elements
 
   propagateParentDelta(elements, overrides)
