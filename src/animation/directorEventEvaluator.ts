@@ -30,7 +30,6 @@ export function evaluateDirectorEvents(
       ...bundle.clips.map((c) => c.duration),
     )
     const effectiveDuration = marker.durationOverride ?? bundleDuration
-    const markerEnd = marker.time + effectiveDuration
 
     if (absoluteTime >= marker.time) {
       let localTime = Math.min(absoluteTime - marker.time, effectiveDuration)

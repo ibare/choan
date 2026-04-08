@@ -431,13 +431,13 @@ export default function ContextToolbar({ canvasSizeRef, rendererRef, isDraggingR
       const elem = els.find((e) => e.id === ids[0])
       if (!elem || !rendererRef.current?.overlay) { setPos(null); prevKeyRef.current = ''; return }
 
-      const { w, h } = canvasSizeRef.current
+      const { w } = canvasSizeRef.current
       const dpr = window.devicePixelRatio || 1
       const ov = rendererRef.current.overlay
       const ed = useRenderSettings.getState().extrudeDepth
       const elZ = elem.z * ed + ed / 2
       const project = (px: number, py: number) => {
-        const [wx, wy] = pixelToWorldCS(px, py, w, h)
+        const [wx, wy] = pixelToWorldCS(px, py)
         const s = ov.projectToScreen(wx, wy, elZ)
         return { x: s.px / dpr, y: s.py / dpr }
       }

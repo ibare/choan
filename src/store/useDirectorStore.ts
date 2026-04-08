@@ -7,9 +7,7 @@ import {
   createDefaultDirectorTimeline,
   createDefaultRails,
   createDefaultCamera,
-  createDefaultAxisMarks,
   createDefaultCameraClip,
-  findActiveClip,
   migrateDirectorTimeline,
   ensureAxisMarks,
   hasZeroCoverage,
@@ -22,7 +20,6 @@ import {
   type EventMarker,
   type DirectorRails,
   type DirectorCameraSetup,
-  type DirectorCamera,
   type TargetMode,
   type RailAxis,
   type RailDir,
@@ -266,7 +263,6 @@ export const useDirectorStore = create<DirectorStore>((set, get) => ({
   // ── Multi-camera CRUD ──
 
   addCamera: () => {
-    const s = get()
     // Save current camera before creating new one
     get().saveCameraSetup()
 

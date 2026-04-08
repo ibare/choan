@@ -68,13 +68,11 @@ const RAIL_OFFSET = 4.5  // must match cameraPathOverlay.ts RAIL_OFFSET
 /** Returns the 3D world positions of all rail handles for a given camera setup. */
 function getRailHandlePositions(
   cameraPos: [number, number, number],
-  targetPos: [number, number, number],
+  _targetPos: [number, number, number],
   rails: DirectorRails,
   railWorldAnchor: [number, number, number],
 ): Array<{ handleId: RailHandleId; wx: number; wy: number; wz: number }> {
   const [cx, cy, cz] = cameraPos
-  const [ax, ay, az] = railWorldAnchor
-  const [tx, , tz] = targetPos
   const o = RAIL_OFFSET
   // Extended rails use anchor, unextended use camera pos
   function base(axisIdx: number, ext: { neg: number; pos: number }): number {
@@ -232,39 +230,6 @@ export function hitTestRailHandle(
     }
   }
   return bestHit
-}
-
-/**
- * Compute the new rail extent after dragging a handle.
- * canvasX/canvasY: canvas-local pixels (0~w, 0~h).
- */
-export function computeRailHandleDrag(
-  canvasX: number,
-  canvasY: number,
-  cameraPos: [number, number, number],
-  targetPos: [number, number, number],
-  handle: RailHandleId,
-  origExtent: number,
-  origCanvasY: number,  // for dolly (Y-drag → Z extent)
-): number {
-  const [cx, cy, cz] = cameraPos
-  const [wx, wy] = pixelToWorld(canvasX, canvasY)
-
-  const o = RAIL_OFFSET
-  switch (handle.axis) {
-    case 'truck':
-      return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wx - cx - o : cx - o - wx)
-    case 'boom':
-      return Math.max(RAIL_MIN_STUB, handle.dir === 'pos' ? wy - cy - o : cy - o - wy)
-    case 'dolly': {
-      // Dolly (Z) — map vertical mouse delta to Z extent change
-      const [, origWy] = pixelToWorld(canvasX, origCanvasY)
-      const delta = (wy - origWy) * (handle.dir === 'neg' ? 1 : -1)
-      return Math.max(RAIL_MIN_STUB, origExtent + delta)
-    }
-    default:
-      return Math.max(RAIL_MIN_STUB, origExtent)
-  }
 }
 
 /**

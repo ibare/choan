@@ -29,9 +29,9 @@ import {
 } from '../animation/directorTypes'
 import {
   hitTestCameraKeyframe, computeCameraKeyframeDragPosition,
-  hitTestDirectorCameraBody, hitTestDirectorTarget, hitTestRailHandle, computeRailHandleDrag,
+  hitTestDirectorCameraBody, hitTestDirectorTarget, hitTestRailHandle,
   hitTestRailSlider, hitTestAlignMarker,
-  type RailHandleHit, type RailSliderHit,
+  type RailHandleHit,
 } from './cameraPathHandlers'
 import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
 
@@ -54,6 +54,7 @@ export interface InteractionRefs {
   drawElIdRef: MutableRefObject<string | null>
   snapLinesRef: MutableRefObject<SnapLine[]>
   tunnelHoverRef: MutableRefObject<AxisHover>
+  alignMarkerHoveredRef: MutableRefObject<boolean>
 }
 
 export interface UsePointerHandlersResult extends InteractionRefs {
@@ -1188,13 +1189,10 @@ export function usePointerHandlers({
       // Check if target was dropped on a scene element → attach
       const renderer = rendererRef.current
       if (renderer) {
-        const pixel = screenToPixel(e.clientX, e.clientY)
-        if (pixel) {
-          const { elements } = useChoanStore.getState()
-          const hitEl = raycastElement(pixel.x, pixel.y, elements)
-          if (hitEl) {
-            useDirectorStore.getState().setDirectorTargetAttachedTo(hitEl.id)
-          }
+        const { elements } = useChoanStore.getState()
+        const hitId = raycastElement(e.clientX, e.clientY, renderer, canvasSizeRef.current, elements)
+        if (hitId) {
+          useDirectorStore.getState().setDirectorTargetAttachedTo(hitId)
         }
       }
       return

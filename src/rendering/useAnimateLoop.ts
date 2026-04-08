@@ -25,10 +25,9 @@ import { useDirectorStore } from '../store/useDirectorStore'
 import { evaluateDirectorCamera } from '../animation/directorCameraEvaluator'
 import { evaluateDirectorEvents } from '../animation/directorEventEvaluator'
 import type { ActiveBundleInput } from '../animation/animationEvaluator'
-import { createDefaultDirectorTimeline, hasActiveRailTiming, type CameraMark, type AxisMarkChannel, type CameraClip } from '../animation/directorTypes'
+import { createDefaultDirectorTimeline, hasActiveRailTiming } from '../animation/directorTypes'
 import { findCameraDerivedPose } from '../animation/cameraTimeTrack'
-import { nanoid } from '../utils/nanoid'
-import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, drawAxisMarkPipes, type RailTimeLabel } from './cameraPathOverlay'
+import { drawCameraPathOverlay, drawCameraMarks, drawDirectorCameraSetup, type RailTimeLabel } from './cameraPathOverlay'
 import { buildViewProjMatrix } from '../engine/camera'
 import { drawZTunnelOverlay, drawRotationRing, drawGroundGrid, drawCameraFootprint, canShowZTunnel, drawCameraAxisHandles, type AxisHover } from './zTunnelOverlay'
 import { pixelToWorld } from '../coords/coordinateSystem'
@@ -375,7 +374,6 @@ export function useAnimateLoop({
         if (dirState.directorTargetAttachedTo) {
           const el = state.elements.find((e) => e.id === dirState.directorTargetAttachedTo)
           if (el) {
-            const { w: cw, h: ch } = canvasSizeRef.current
             const [wx, wy] = pixelToWorld(el.x + el.width / 2, el.y + el.height / 2)
             const rs2 = useRenderSettings.getState()
             const wz = el.z * rs2.extrudeDepth + rs2.extrudeDepth / 2

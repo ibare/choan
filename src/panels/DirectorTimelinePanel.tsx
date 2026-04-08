@@ -47,14 +47,6 @@ const AXIS_CHANNELS: AxisMarkChannel[] = ['truck', 'boom', 'dolly']
 const AXIS_COLORS: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55c055', dolly: '#5588dd' }
 const AXIS_LABELS: Record<AxisMarkChannel, string> = { truck: 'X Truck', boom: 'Y Boom', dolly: 'Z Dolly' }
 
-// 35mm full-frame sensor: width = 36mm
-const SENSOR_W = 36
-
-/** Convert focal length (mm) to vertical FOV (degrees). */
-function mmToFov(mm: number): number {
-  return 2 * Math.atan(SENSOR_W / (2 * mm)) * (180 / Math.PI)
-}
-
 interface DirectorTimelinePanelProps {
   onSwitchToBundle: (bundleId: string) => void
 }
@@ -64,17 +56,17 @@ export default function DirectorTimelinePanel({ onSwitchToBundle }: DirectorTime
   const { animationBundles } = useChoanStore()
   const {
     directorPlayheadTime, directorPlaying, focalLengthMm, frustumSpotlightOn, viewfinderAspect,
-    directorCameraPos, directorTargetPos, directorRails, selectedCameraId,
+    directorRails, selectedCameraId,
     setDirectorPlayheadTime, startPlaying, stopPlaying, setFocalLengthMm, toggleFrustumSpotlight, setViewfinderAspect,
     selectedCameraMarkId, setSelectedCameraMarkId,
-    addCameraMark, updateCameraMark, removeCameraMark,
+    updateCameraMark, removeCameraMark,
     addCameraKeyframe, removeCameraKeyframe, updateCameraKeyframe,
     addEventMarker, updateEventMarker, removeEventMarker,
     resetDirector,
     selectedAxisMarkId, selectedAxisMarkChannel,
-    setSelectedAxisMark, updateAxisMark, removeAxisMark, markActiveAxis, activeRailAxis,
-    detailClipId, selectedClipId, activeClipId,
-    addCameraClip, removeCameraClip, selectCameraClip, updateCameraClipsBatch,
+    setSelectedAxisMark, updateAxisMark, removeAxisMark, activeRailAxis,
+    detailClipId, selectedClipId,
+    addCameraClip, selectCameraClip, updateCameraClipsBatch,
     enterClipDetail, exitClipDetail,
     addCamera, removeCamera, selectCamera,
     directorTargetMode, toggleDirectorTargetMode,

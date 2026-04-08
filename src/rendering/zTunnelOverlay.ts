@@ -49,7 +49,7 @@ export function canShowZTunnel(phi: number, theta: number): boolean {
 }
 
 /** Compute shared tunnel geometry for an element. */
-function tunnelGeometry(element: ChoanElement, canvasW: number, canvasH: number, extrudeDepth: number) {
+function tunnelGeometry(element: ChoanElement, _canvasW: number, _canvasH: number, extrudeDepth: number) {
   const corners = [
     pixelToWorld(element.x, element.y),
     pixelToWorld(element.x + element.width, element.y),
@@ -70,7 +70,7 @@ export function drawZTunnelOverlay(
   extrudeDepth: number,
   hover: TunnelHover,
 ): void {
-  const { corners, elZ, elZMid, zMin, zMax } = tunnelGeometry(element, canvasW, canvasH, extrudeDepth)
+  const { corners, elZMid, zMin, zMax } = tunnelGeometry(element, canvasW, canvasH, extrudeDepth)
 
   // 4 Z-axis guide lines from corners
   const lineVerts: number[] = []
@@ -322,8 +322,8 @@ export function hitTestCameraAxisHandle(
 export function drawRotationRing(
   ov: OverlayRenderer,
   element: ChoanElement,
-  canvasW: number,
-  canvasH: number,
+  _canvasW: number,
+  _canvasH: number,
   extrudeDepth: number,
   dpr: number,
 ): void {
@@ -362,8 +362,8 @@ export function hitTestRotationRing(
   canvasPy: number,
   ov: OverlayRenderer,
   element: ChoanElement,
-  canvasW: number,
-  canvasH: number,
+  _canvasW: number,
+  _canvasH: number,
   extrudeDepth: number,
   tolerancePx: number,
 ): boolean {
@@ -374,11 +374,6 @@ export function hitTestRotationRing(
   const diagH = Math.abs(hh[1] - cx[1])
   const ringRadius = Math.sqrt(diagW * diagW + diagH * diagH) * 0.7
   const elZ = element.z * extrudeDepth + extrudeDepth / 2
-
-  // Sample ring at multiple points, check screen-space distance
-  const center = ov.projectToScreen(cx[0], cx[1], elZ)
-  const dx = canvasPx - center.px
-  const dy = canvasPy - center.py
 
   // Check a few ring sample points for more accurate hit test
   for (let i = 0; i < 16; i++) {

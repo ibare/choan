@@ -22,8 +22,6 @@ const TRIANGLE_SELECTED_COLOR: [number, number, number, number] = [1.0, 0.6, 0.1
 const CURRENT_POS_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]
 
 // Rail UX colors
-const RAIL_STUB_COLOR:   [number, number, number, number] = [0.9, 0.2, 0.2, 0.9]  // red — locked
-const RAIL_ACTIVE_COLOR: [number, number, number, number] = [0.2, 0.5, 1.0, 1.0]  // blue — active
 const TARGET_MARKER_COLOR:    [number, number, number, number] = [1.0, 0.7, 0.2, 1.0] // amber (free)
 const TARGET_ATTACHED_COLOR:  [number, number, number, number] = [0.2, 0.9, 0.4, 1.0] // green (attached)
 const HANDLE_COLOR: [number, number, number, number] = [1.0, 1.0, 1.0, 0.9]        // white handle
@@ -313,8 +311,8 @@ export function drawCameraMarks(
   ov: OverlayRenderer,
   marks: CameraMark[],
   rails: DirectorRails,
-  railWorldAnchor: [number, number, number],
-  cameraPos: [number, number, number],
+  _railWorldAnchor: [number, number, number],
+  _cameraPos: [number, number, number],
 ): void {
   if (marks.length < 2) return
   const path = sampleMarkPath(marks, rails, PIPE_PATH_SAMPLES)
@@ -412,7 +410,7 @@ const AXIS_HEX: Record<AxisMarkChannel, string> = { truck: '#e05555', boom: '#55
 /** Collect a time label for a rail endpoint. Shared by drawOneSide and drawArcSide. */
 function collectRailTimeLabel(
   labels: RailTimeLabel[],
-  ov: OverlayRenderer,
+  _ov: OverlayRenderer,
   tipScreen: { px: number; py: number },
   baseScreen: { px: number; py: number },
   channel: AxisMarkChannel,
@@ -444,7 +442,7 @@ function collectRailTimeLabel(
 function drawRailAxes(
   ov: OverlayRenderer,
   cameraPos: [number, number, number],
-  targetPos: [number, number, number],
+  _targetPos: [number, number, number],
   rails: DirectorRails,
   railWorldAnchor: [number, number, number],
   dpr: number,

@@ -20,7 +20,6 @@ interface RailTimeLabelsProps {
 
 const LEADER_LEN = 80   // px — leader line length
 const LABEL_PAD_X = 6
-const LABEL_PAD_Y = 2
 const MARGIN = 12        // px — viewport edge margin
 
 export default function RailTimeLabels({ labelsRef }: RailTimeLabelsProps) {

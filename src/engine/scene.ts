@@ -64,8 +64,8 @@ export function createSceneUBO(gl: WebGL2RenderingContext): SceneUBO {
   function update(
     gl: WebGL2RenderingContext,
     elements: ChoanElement[],
-    canvasW: number,
-    canvasH: number,
+    _canvasW: number,
+    _canvasH: number,
     extrudeDepthOverride?: number,
     texRects?: Map<string, [number, number, number, number]>,
     numRegular?: number,
